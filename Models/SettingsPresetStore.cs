@@ -89,6 +89,7 @@ public static class SettingsPresetStore
 
     private static void SaveJson(string path, object value)
     {
+        JobWriteAccess.Demand(path, "save settings preset");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(value, JsonOptions));
     }
@@ -104,9 +105,11 @@ public static class SettingsPresetStore
 
     public static void ClearJobOverride(OurPlanCoreJob job)
     {
+        string p = JobPath(job);
+        if (File.Exists(p))
+            JobWriteAccess.Demand(p, "clear job settings override");
         try
         {
-            string p = JobPath(job);
             if (File.Exists(p))
                 File.Delete(p);
         }
@@ -149,9 +152,11 @@ public static class SettingsPresetStore
 
     public static void ClearJobPageSortOverride(OurPlanCoreJob job)
     {
+        string p = JobPageSortPath(job);
+        if (File.Exists(p))
+            JobWriteAccess.Demand(p, "clear job page-sort override");
         try
         {
-            string p = JobPageSortPath(job);
             if (File.Exists(p))
                 File.Delete(p);
         }
@@ -195,9 +200,11 @@ public static class SettingsPresetStore
 
     public static bool ClearJobSheetMetadataOverride(OurPlanCoreJob job)
     {
+        string path = JobSheetMetadataPath(job);
+        if (File.Exists(path))
+            JobWriteAccess.Demand(path, "clear job sheet-metadata override");
         try
         {
-            string path = JobSheetMetadataPath(job);
             if (File.Exists(path))
                 File.Delete(path);
             return !File.Exists(path);

@@ -55,6 +55,10 @@ public partial class MainWindow
             PostStatusInfo("Open or create a job before tracing walls.");
             return;
         }
+        OurPlanCoreJob originJob = _currentJob;
+        string originPageFolder = area.PageFolder;
+        if (!EnsureExpectedJobWritable(originJob, "trace walls"))
+            return;
 
         if (area.Points.Count < 3)
         {
@@ -78,6 +82,12 @@ public partial class MainWindow
 
             OpenPageInActiveTab(areaPage);
             await Dispatcher.InvokeAsync(() => { });
+            if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+                return;
+        }
+        else if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+        {
+            return;
         }
 
         double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
@@ -91,12 +101,17 @@ public partial class MainWindow
         }
 
         var dialog = new WallTraceDialog(BuildWallTraceDefaultName(sourceItem, area)) { Owner = this };
-        if (dialog.ShowDialog() != true)
+        bool accepted = dialog.ShowDialog() == true;
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return;
+        if (!accepted)
             return;
 
         TxtStatus.Text = "Tracing walls: reading sheet vector/raster lines...";
         (IReadOnlyList<PdfGeometrySnapSegment> segments, string error, string source) =
             await _viewport.ReadWallTraceSegmentsForCurrentPageAsync();
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return;
         if (segments.Count == 0)
         {
             PostStatusInfo(string.IsNullOrWhiteSpace(error)
@@ -106,8 +121,12 @@ public partial class MainWindow
         }
 
         IReadOnlyList<SKRect> textRects = await _viewport.ReadPdfTextRectsForCurrentPageAsync();
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return;
         IReadOnlyList<WallCenterlineTracer.FillZone> wallFillZones =
             await _viewport.ReadPdfWallFillZonesForCurrentPageAsync();
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return;
 
         float minThicknessPt = (float)(dialog.MinThicknessInches * MetersPerInch / effectiveScale);
         float maxThicknessPt = (float)(dialog.MaxThicknessInches * MetersPerInch / effectiveScale);
@@ -132,7 +151,16 @@ public partial class MainWindow
             ? area.Holes.Select(h => (IReadOnlyList<SKPoint>)h).ToList()
             : null;
 
-        var traceResult = await TraceWallCenterlinesWithRasterFallbackAsync(segments, source, polygon, options, holes);
+        var traceResult = await TraceWallCenterlinesWithRasterFallbackAsync(
+            originJob,
+            originPageFolder,
+            segments,
+            source,
+            polygon,
+            options,
+            holes);
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return;
         List<SKPoint[]> polylines = traceResult.Polylines;
         source = traceResult.Source;
         string rasterFallbackError = traceResult.RasterFallbackError;
@@ -155,12 +183,21 @@ public partial class MainWindow
             TxtStatus.Text = rasterBlockStatus;
             return;
         }
-        if (!ConfirmRasterWallTraceResultIfNoisy(source, polylines, polygon, out string noisyCancelStatus))
+        bool noisyResultAccepted = ConfirmRasterWallTraceResultIfNoisy(
+            source,
+            polylines,
+            polygon,
+            out string noisyCancelStatus);
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return;
+        if (!noisyResultAccepted)
         {
             TxtStatus.Text = noisyCancelStatus;
             return;
         }
 
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return;
         string parentFolder = ResolveAreaLineGridParentFolder(sourceItem);
         TakeoffItem lineItem = CreateUniqueTakeoffItem(
             dialog.TakeoffName,
@@ -223,6 +260,8 @@ public partial class MainWindow
 
     private async Task<(List<SKPoint[]> Polylines, string Source, string RasterFallbackError, bool RasterFallbackTried)>
         TraceWallCenterlinesWithRasterFallbackAsync(
+            OurPlanCoreJob originJob,
+            string originPageFolder,
             IReadOnlyList<PdfGeometrySnapSegment> segments,
             string source,
             IReadOnlyList<SKPoint> polygon,
@@ -230,6 +269,8 @@ public partial class MainWindow
             IReadOnlyList<IReadOnlyList<SKPoint>>? holes)
     {
         List<SKPoint[]> polylines = await TraceWallCenterlinesAsync(segments, polygon, options, holes);
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return ([], source, "", false);
         if (polylines.Count > 0 ||
             string.Equals(source, "raster-image", StringComparison.OrdinalIgnoreCase))
         {
@@ -239,11 +280,27 @@ public partial class MainWindow
         TxtStatus.Text = "Tracing walls: PDF lines did not match; trying raster image...";
         (IReadOnlyList<PdfGeometrySnapSegment> rasterSegments, string rasterError) =
             await _viewport.ReadWallTraceRasterImageSegmentsForCurrentPageAsync();
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return ([], source, "", true);
         if (rasterSegments.Count == 0)
             return (polylines, source, rasterError, true);
 
         polylines = await TraceWallCenterlinesAsync(rasterSegments, polygon, options, holes);
+        if (!EnsureWallTraceOriginWritable(originJob, originPageFolder))
+            return ([], source, rasterError, true);
         return (polylines, "raster-image", rasterError, true);
+    }
+
+    private bool EnsureWallTraceOriginWritable(OurPlanCoreJob originJob, string originPageFolder)
+    {
+        if (!EnsureExpectedJobWritable(originJob, "continue wall tracing"))
+            return false;
+
+        if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, originPageFolder))
+            return true;
+
+        TxtStatus.Text = "Wall tracing stopped because the originating sheet changed.";
+        return false;
     }
 
     private void PostWallTraceNoPairsStatus(string source, bool rasterFallbackTried, string rasterFallbackError)

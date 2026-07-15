@@ -227,11 +227,7 @@ public partial class MainWindow
         SimilarCountDialog? dialog = null;
 
         bool IsReviewJobCurrent() =>
-            _currentJob != null &&
-            string.Equals(
-                NormalizePathForCompare(_currentJob.RootPath),
-                NormalizePathForCompare(reviewJob.RootPath),
-                StringComparison.OrdinalIgnoreCase);
+            IsExpectedJobWritable(reviewJob);
 
         SKPoint matchMarkerOffsetPdf = SimilarCountMarkerOffset(request);
 
@@ -1411,8 +1407,14 @@ public partial class MainWindow
         IReadOnlyList<SKPoint> centers,
         TakeoffItem? destinationItem,
         string newItemName,
-        out TakeoffItem item)
+        out TakeoffItem? item)
     {
+        if (!EnsureCurrentJobWritable("add similar-count measurements"))
+        {
+            item = destinationItem;
+            return 0;
+        }
+
         TakeoffItem resolvedItem = ResolveOrCreateSimilarCountItem(destinationItem, newItemName);
         item = resolvedItem;
 

@@ -330,6 +330,7 @@ public static class SmartMassingTakeoffAiPlanner
     private static string SaveMassingJson(OurPlanCoreJob job, string fileName, object value)
     {
         string dir = Path.Combine(job.AIContextRoot, "3d_massing", "ai_takeoff_sort");
+        JobWriteAccess.Demand(Path.Combine(dir, fileName), "save AI massing data");
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, fileName);
         IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(value, JsonOptions));

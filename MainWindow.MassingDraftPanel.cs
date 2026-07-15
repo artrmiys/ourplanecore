@@ -116,11 +116,11 @@ public partial class MainWindow
         if (_massingOpenDraftButton != null)
             _massingOpenDraftButton.IsEnabled = exists;
         if (_massingReviewRoofButton != null)
-            _massingReviewRoofButton.IsEnabled = exists && draft != null;
+            _massingReviewRoofButton.IsEnabled = ThreeDEditingAllowed && exists && draft != null;
         if (_massingReviewOpeningsButton != null)
-            _massingReviewOpeningsButton.IsEnabled = exists && draft != null && draft.Openings.Count > 0;
+            _massingReviewOpeningsButton.IsEnabled = ThreeDEditingAllowed && exists && draft != null && draft.Openings.Count > 0;
         if (_massingAcceptDraftButton != null)
-            _massingAcceptDraftButton.IsEnabled = exists && draft != null && draft.Footprints.Any(footprint => footprint.Points.Count >= 3);
+            _massingAcceptDraftButton.IsEnabled = ThreeDEditingAllowed && exists && draft != null && draft.Footprints.Any(footprint => footprint.Points.Count >= 3);
 
         _currentMassingDraft = draft;
         if (draft != null)

@@ -15,6 +15,8 @@ public partial class MainWindow
     {
         if (_currentJob == null)
             throw new InvalidOperationException("Open a job before deleting takeoffs.");
+        if (!EnsureCurrentJobWritable("delete takeoffs"))
+            throw new InvalidOperationException("Takeoff deletion is unavailable while the job is read-only.");
 
         // Land pending edits first so the trash copy holds the latest data and
         // no debounced autosave fires after the folders are gone.
@@ -40,6 +42,8 @@ public partial class MainWindow
                 string sourcePath = validEntries[i].SourcePath;
                 int orderIndex = OurPlanCoreJobStore.GetOrderIndex(sourcePath);
                 string trashPath = UniqueTakeoffUndoTrashPath(trashRoot, sourcePath, i);
+                JobWriteAccess.Demand(sourcePath, "move a takeoff to undo trash");
+                JobWriteAccess.Demand(trashPath, "create takeoff undo trash");
                 Directory.Move(sourcePath, trashPath);
                 moved.Add(new TakeoffDeleteUndoEntry(sourcePath, trashPath, orderIndex));
             }
@@ -74,6 +78,8 @@ public partial class MainWindow
             TxtStatus.Text = "Nothing to undo: no job is open.";
             return false;
         }
+        if (!EnsureCurrentJobWritable("undo a takeoff deletion"))
+            return true;
 
         // The restore reloads the takeoffs tree and replaces item instances;
         // flush pending edits now so they are not lost with the old objects.
@@ -126,8 +132,13 @@ public partial class MainWindow
             string targetPath = ResolveTakeoffUndoRestorePath(entry.OriginalPath);
             string? targetParent = Path.GetDirectoryName(targetPath);
             if (!string.IsNullOrWhiteSpace(targetParent))
+            {
+                JobWriteAccess.Demand(targetParent, "restore a deleted takeoff");
                 Directory.CreateDirectory(targetParent);
+            }
 
+            JobWriteAccess.Demand(entry.TrashPath, "restore a deleted takeoff");
+            JobWriteAccess.Demand(targetPath, "restore a deleted takeoff");
             Directory.Move(entry.TrashPath, targetPath);
             if (entry.OrderIndex != int.MaxValue)
                 OurPlanCoreJobStore.SetOrderIndex(targetPath, entry.OrderIndex);
@@ -175,6 +186,7 @@ public partial class MainWindow
         string stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmssfff", CultureInfo.InvariantCulture);
         string suffix = Guid.NewGuid().ToString("N")[..8];
         string root = Path.Combine(job.RootPath, ".undo", "takeoffs", $"{stamp}_{suffix}");
+        JobWriteAccess.Demand(root, "create takeoff undo trash");
         Directory.CreateDirectory(root);
         return root;
     }
@@ -203,7 +215,12 @@ public partial class MainWindow
 
             string? parent = Path.GetDirectoryName(entry.OriginalPath);
             if (!string.IsNullOrWhiteSpace(parent))
+            {
+                JobWriteAccess.Demand(parent, "roll back a takeoff delete");
                 Directory.CreateDirectory(parent);
+            }
+            JobWriteAccess.Demand(entry.TrashPath, "roll back a takeoff delete");
+            JobWriteAccess.Demand(entry.OriginalPath, "roll back a takeoff delete");
             Directory.Move(entry.TrashPath, entry.OriginalPath);
         }
     }

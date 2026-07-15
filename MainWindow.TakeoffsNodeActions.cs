@@ -11,6 +11,9 @@ public partial class MainWindow
 {
     private void RenameItem(TreeViewItem tvi, TakeoffItem item)
     {
+        if (!EnsureCurrentJobWritable("rename a takeoff item"))
+            return;
+
         string? name = ShowInputDialog("New name:", item.Name, "Rename Item");
         if (name == null || name == item.Name) return;
         try
@@ -46,6 +49,9 @@ public partial class MainWindow
 
     private void DeleteItem(TreeViewItem tvi, TakeoffItem item)
     {
+        if (!EnsureCurrentJobWritable("delete a takeoff item"))
+            return;
+
         var res = MessageBox.Show(
             $"Delete \"{item.Name}\" and all its measurements?",
             "Confirm delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
@@ -86,6 +92,9 @@ public partial class MainWindow
 
     private void EditTakeoffFolderProperties(TreeViewItem tvi, TakeoffFolderNode folder)
     {
+        if (!EnsureCurrentJobWritable("edit takeoff folder properties"))
+            return;
+
         if (_currentJob == null || !Directory.Exists(folder.FolderPath))
             return;
 
@@ -156,6 +165,9 @@ public partial class MainWindow
 
     private void RenameTakeoffFolder(TreeViewItem tvi, TakeoffFolderNode folder)
     {
+        if (!EnsureCurrentJobWritable("rename a takeoff folder"))
+            return;
+
         string? name = ShowInputDialog("New name:", "Rename Folder", folder.Name);
         if (name == null || name == folder.Name) return;
 
@@ -178,6 +190,9 @@ public partial class MainWindow
 
     private void DeleteTakeoffFolder(TreeViewItem tvi, TakeoffFolderNode folder)
     {
+        if (!EnsureCurrentJobWritable("delete a takeoff folder"))
+            return;
+
         var res = MessageBox.Show(
             $"Delete folder \"{folder.Name}\" and all child takeoffs?",
             "Confirm delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
@@ -222,6 +237,8 @@ public partial class MainWindow
     private void DeleteTakeoffNodes(TreeViewItem anchor)
     {
         if (_currentJob == null)
+            return;
+        if (!EnsureCurrentJobWritable("delete takeoff nodes"))
             return;
 
         var entries = GetSelectedTakeoffEntries(anchor);
@@ -275,6 +292,9 @@ public partial class MainWindow
 
     private void MoveTakeoffNode(string folderPath, int offset)
     {
+        if (!EnsureCurrentJobWritable("move a takeoff node"))
+            return;
+
         if (FindTakeoffTreeItemByFolder(folderPath) is { } item)
         {
             MoveTakeoffNodes(item, offset);
@@ -295,6 +315,9 @@ public partial class MainWindow
 
     private bool CanMoveTakeoffNodes(TreeViewItem anchor, int offset)
     {
+        if (!IsCurrentJobWritable)
+            return false;
+
         var paths = GetSelectedTakeoffEntries(anchor)
             .Select(entry => entry.SourcePath)
             .ToList();
@@ -303,6 +326,9 @@ public partial class MainWindow
 
     private void MoveTakeoffNodes(TreeViewItem anchor, int offset)
     {
+        if (!EnsureCurrentJobWritable("move takeoff nodes"))
+            return;
+
         var entries = GetSelectedTakeoffEntries(anchor);
         var paths = entries.Select(entry => entry.SourcePath).ToList();
         if (paths.Count == 0)
@@ -362,6 +388,8 @@ public partial class MainWindow
             PostStatusInfo("Open or create a job before sorting takeoffs.");
             return;
         }
+        if (!EnsureCurrentJobWritable("sort takeoffs"))
+            return;
 
         string folderPath = SelectedTakeoffScopeFolder();
         SortTakeoffChildren(folderPath, descending);
@@ -377,6 +405,8 @@ public partial class MainWindow
             PostStatusInfo("Open or create a job before sorting takeoffs.");
             return;
         }
+        if (!EnsureCurrentJobWritable("sort takeoffs"))
+            return;
 
         try
         {
@@ -406,6 +436,9 @@ public partial class MainWindow
 
     private void SortTakeoffChildren(string folderPath, bool descending)
     {
+        if (!EnsureCurrentJobWritable("sort takeoffs"))
+            return;
+
         try
         {
             OurPlanCoreJobStore.SortTakeoffChildren(folderPath, descending);

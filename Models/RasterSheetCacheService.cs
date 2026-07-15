@@ -61,6 +61,7 @@ public static class RasterSheetCacheService
     {
         if (!TryValidateCurrentPageFolder(page, out string pageError))
             return Failed(pageError);
+        JobWriteAccess.Demand(page.FolderPath, "build raster cache");
         if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
             return Failed($"Source PDF is missing: {page.PdfPath}");
         if (page.PdfPage < 0)
@@ -108,10 +109,13 @@ public static class RasterSheetCacheService
             return Failed(pageError);
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
+        JobWriteAccess.Demand(rasterDir, "create raster cache folder");
         Directory.CreateDirectory(rasterDir);
         string imagePath = Path.Combine(rasterDir, workingImageName);
         string tempPath = imagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        JobWriteAccess.Demand(tempPath, "write raster cache image");
         File.WriteAllBytes(tempPath, workingImageBytes);
+        JobWriteAccess.Demand(imagePath, "publish raster cache image");
         File.Move(tempPath, imagePath, overwrite: true);
 
         bool useAsPageOpenRaster = UseAsPageOpenRaster(CurrentRasterSheetSource(page));
@@ -208,6 +212,7 @@ public static class RasterSheetCacheService
             result = new RasterSheetBuildResult(false, null, "", pageError);
             return false;
         }
+        JobWriteAccess.Demand(page.FolderPath, "enable raster cache");
 
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
         if (!TryFindReusableReadableRaster(page, scale, out RasterSheetSource? source, out string imagePath, preferredFormat) ||
@@ -219,6 +224,7 @@ public static class RasterSheetCacheService
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         if (!HasReadySnapIndex(page.FolderPath, source))
         {
+            JobWriteAccess.Demand(rasterDir, "create raster cache folder");
             Directory.CreateDirectory(rasterDir);
             TryWriteSnapIndex(page, rasterDir, source, out string snapError);
             if (!string.IsNullOrWhiteSpace(snapError))
@@ -351,6 +357,7 @@ public static class RasterSheetCacheService
     {
         if (!TryValidateCurrentPageFolder(page, out string pageError))
             return Failed(pageError);
+        JobWriteAccess.Demand(page.FolderPath, "build image raster cache");
         if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
             return Failed($"Source PDF is missing: {page.PdfPath}");
         if (string.IsNullOrWhiteSpace(sourceImagePath) || !File.Exists(sourceImagePath))
@@ -387,10 +394,13 @@ public static class RasterSheetCacheService
             return Failed(pageError);
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
+        JobWriteAccess.Demand(rasterDir, "create image raster cache folder");
         Directory.CreateDirectory(rasterDir);
         string imagePath = Path.Combine(rasterDir, workingImageName);
         string tempPath = imagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        JobWriteAccess.Demand(tempPath, "write image raster cache");
         File.WriteAllBytes(tempPath, workingImageBytes);
+        JobWriteAccess.Demand(imagePath, "publish image raster cache");
         File.Move(tempPath, imagePath, overwrite: true);
 
         bool useAsPageOpenRaster = UseAsPageOpenRaster(CurrentRasterSheetSource(page));
@@ -435,6 +445,7 @@ public static class RasterSheetCacheService
     {
         if (!TryValidateCurrentPageFolder(page, out string pageError))
             return Failed(pageError);
+        JobWriteAccess.Demand(page.FolderPath, "build raster overview");
         if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
             return Failed($"Source PDF is missing: {page.PdfPath}");
 
@@ -460,6 +471,7 @@ public static class RasterSheetCacheService
             return Failed(pageError);
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
+        JobWriteAccess.Demand(rasterDir, "create raster overview folder");
         Directory.CreateDirectory(rasterDir);
         bool hasOverview = TryWriteSourceImageOverview(
             decoded,
@@ -509,6 +521,7 @@ public static class RasterSheetCacheService
         if (!changed)
             return true;
 
+        JobWriteAccess.Demand(page.FolderPath, "change raster cache state");
         source.Enabled = enabled;
         source.UseAsPageOpenRaster = useAsPageOpenRaster;
         OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
@@ -548,6 +561,7 @@ public static class RasterSheetCacheService
         if (!changed)
             return true;
 
+        JobWriteAccess.Demand(page.FolderPath, "change page-open raster state");
         source.UseAsPageOpenRaster = useAsPageOpenRaster;
         source.Enabled = nextEnabled;
         OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
@@ -562,6 +576,8 @@ public static class RasterSheetCacheService
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         if (!Directory.Exists(rasterDir))
             return new RasterSheetCacheCompactResult(true, 0, 0, "");
+
+        JobWriteAccess.Demand(rasterDir, "compact raster cache");
 
         RasterSheetSource? source = CurrentRasterSheetSource(page);
         int deleted = 0;
@@ -596,9 +612,14 @@ public static class RasterSheetCacheService
             {
                 var info = new FileInfo(fullPath);
                 long length = info.Exists ? info.Length : 0;
+                JobWriteAccess.Demand(fullPath, "delete unused raster cache file");
                 File.Delete(fullPath);
                 deleted++;
                 bytes += Math.Max(0, length);
+            }
+            catch (JobWriteDeniedException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -671,8 +692,13 @@ public static class RasterSheetCacheService
         if (string.Equals(Path.GetFullPath(imagePath), Path.GetFullPath(compactPath), StringComparison.OrdinalIgnoreCase))
             return false;
 
+        JobWriteAccess.Demand(compactPath, "compact raster image");
+        JobWriteAccess.Demand(Path.Combine(page.FolderPath, "source.json"), "update raster metadata");
+
         string tempPath = compactPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        JobWriteAccess.Demand(tempPath, "write compact raster image");
         File.WriteAllBytes(tempPath, webpBytes);
+        JobWriteAccess.Demand(compactPath, "publish compact raster image");
         File.Move(tempPath, compactPath, overwrite: true);
 
         RasterSheetSource compacted = source.Clone();
@@ -833,7 +859,14 @@ public static class RasterSheetCacheService
         try
         {
             if (Directory.Exists(rasterDir) && !Directory.EnumerateFileSystemEntries(rasterDir).Any())
+            {
+                JobWriteAccess.Demand(rasterDir, "delete empty raster cache");
                 Directory.Delete(rasterDir);
+            }
+        }
+        catch (JobWriteDeniedException)
+        {
+            throw;
         }
         catch
         {
@@ -1491,13 +1524,19 @@ public static class RasterSheetCacheService
 
             string imagePath = Path.Combine(rasterDir, OverviewImageName);
             string tempPath = imagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            JobWriteAccess.Demand(tempPath, "write raster overview");
             using (FileStream output = File.Create(tempPath))
                 data.SaveTo(output);
+            JobWriteAccess.Demand(imagePath, "publish raster overview");
             File.Move(tempPath, imagePath, overwrite: true);
 
             overviewImage = Path.GetRelativePath(pageFolder, imagePath);
             overviewRenderScale = widthPt > 0 ? overview.Width / widthPt : 0;
             return overviewRenderScale > 0;
+        }
+        catch (JobWriteDeniedException)
+        {
+            throw;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -1619,7 +1658,9 @@ public static class RasterSheetCacheService
         };
 
         string tempPath = snapPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        JobWriteAccess.Demand(tempPath, "write raster snap index");
         File.WriteAllText(tempPath, JsonSerializer.Serialize(file, OurPlanCoreJobStore.JsonOptions));
+        JobWriteAccess.Demand(snapPath, "publish raster snap index");
         File.Move(tempPath, snapPath, overwrite: true);
 
         source.SnapIndex = Path.GetRelativePath(page.FolderPath, snapPath);

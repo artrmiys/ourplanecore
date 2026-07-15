@@ -27,6 +27,8 @@ public partial class MainWindow
             TxtStatus.Text = "Batch Rename: select one or more pages first.";
             return;
         }
+        if (!EnsureCurrentJobWritable("batch rename pages"))
+            return;
 
         string currentNames = string.Join(Environment.NewLine, pages.Select(page => page.Name));
         string? raw = ShowMultilineInputDialog(
@@ -117,6 +119,8 @@ public partial class MainWindow
             TxtStatus.Text = "Level: page view reset to fit.";
             return;
         }
+        if (!EnsureCurrentJobWritable("rotate and level this page"))
+            return;
 
         ApplyPageLevelRotation(_currentPage, degrees);
     }
@@ -143,6 +147,8 @@ public partial class MainWindow
             TxtStatus.Text = "Crop New Page: open a job and page first.";
             return;
         }
+        if (!EnsureCurrentJobWritable("create a cropped page"))
+            return;
 
         SKRect crop = _viewport.GetVisiblePdfRect();
         if (crop.IsEmpty || crop.Width < 2 || crop.Height < 2)
@@ -205,6 +211,8 @@ public partial class MainWindow
             TxtStatus.Text = "Set Origin: open a page first.";
             return;
         }
+        if (!EnsureCurrentJobWritable("set the page origin"))
+            return;
 
         SKRect visible = _viewport.GetVisiblePdfRect();
         var origin = new PageOriginMarker(
@@ -222,6 +230,8 @@ public partial class MainWindow
             TxtStatus.Text = "Offset Origin: open a page first.";
             return;
         }
+        if (!EnsureCurrentJobWritable("offset the page origin"))
+            return;
 
         PageOriginMarker origin = LoadPageOrigin(_currentPage.FolderPath) ?? new PageOriginMarker(0, 0, "");
         string? raw = ShowInputDialog("Offset X,Y in PDF points:", "0, 0", "Offset Origin");
@@ -280,6 +290,8 @@ public partial class MainWindow
     {
         if (_currentJob == null || pages.Count == 0)
             return;
+        if (!EnsureCurrentJobWritable($"apply {label}"))
+            return;
 
         try
         {
@@ -316,6 +328,8 @@ public partial class MainWindow
     private void ApplyPageLevelRotation(PageInfo page, double degrees)
     {
         if (_currentJob == null)
+            return;
+        if (!EnsureCurrentJobWritable("rotate and level this page"))
             return;
 
         try
@@ -362,6 +376,7 @@ public partial class MainWindow
     {
         string root = _currentJob?.RootPath ?? Path.GetDirectoryName(page.FolderPath) ?? ".";
         string folder = Path.Combine(root, "sources", "page_tools");
+        JobWriteAccess.Demand(folder, "create a page-tool output folder");
         Directory.CreateDirectory(folder);
         string safeName = OurPlanCoreJobStore.SanitizeName(page.Name, 80);
         string fileName = $"{safeName}_{operation}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
@@ -380,6 +395,7 @@ public partial class MainWindow
 
     private void TransformPageOverlays(string pageFolder, Func<SKPoint, SKPoint> transform)
     {
+        JobWriteAccess.Demand(pageFolder, "transform page overlays");
         foreach (TakeoffItem item in _takeoffItems)
         {
             bool changed = false;

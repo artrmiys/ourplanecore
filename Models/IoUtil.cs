@@ -7,6 +7,8 @@ public static class IoUtil
 {
     public static void WriteAllTextAtomic(string path, string contents)
     {
+        string operation = $"write '{Path.GetFileName(path)}'";
+        JobWriteAccess.Demand(path, operation);
         string? directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
@@ -17,6 +19,7 @@ public static class IoUtil
         try
         {
             File.WriteAllText(tempPath, contents);
+            JobWriteAccess.Demand(path, operation);
             if (File.Exists(path))
             {
                 try

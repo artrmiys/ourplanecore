@@ -213,6 +213,7 @@ public static class ThreeDModelStore
     public static void Save(OurPlanCoreJob job, ThreeDWallModel model)
     {
         string path = ModelPath(job);
+        JobWriteAccess.Demand(path, "save 3D model");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.RootPath);
         model.UpdatedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(model, OurPlanCoreJobStore.JsonOptions));

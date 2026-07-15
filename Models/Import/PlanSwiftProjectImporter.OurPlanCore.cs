@@ -42,6 +42,7 @@ public static partial class PlanSwiftProjectImporter
 
     private static void CopyExistingJobDirectory(string sourceDir, string destinationDir)
     {
+        JobWriteAccess.Demand(destinationDir, "create a PlanSwift job copy");
         Directory.CreateDirectory(destinationDir);
 
         foreach (string file in Directory.EnumerateFiles(sourceDir))
@@ -50,6 +51,7 @@ public static partial class PlanSwiftProjectImporter
                 continue;
 
             string target = Path.Combine(destinationDir, Path.GetFileName(file));
+            JobWriteAccess.Demand(target, "copy a PlanSwift job file");
             File.Copy(file, target, overwrite: false);
         }
 

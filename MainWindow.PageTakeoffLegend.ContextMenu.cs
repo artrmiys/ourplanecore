@@ -28,6 +28,12 @@ public partial class MainWindow
             selectedCount > 1 ? $"Select {selectedCount} Linked Takeoffs" : "Select Linked Takeoff",
             true,
             () => SelectLinkedPageTakeoff(node)));
+        if (IsCurrentJobReadOnly)
+        {
+            menu.Items.Add(MakeMenuItem("Read-only: editing is disabled", false, () => { }));
+            return menu;
+        }
+
         menu.Items.Add(MakeMenuItem(
             "Rename Linked Takeoff...",
             selectedCount <= 1,

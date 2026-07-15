@@ -9,6 +9,9 @@ public partial class MainWindow
 
     private void StartThreeDRoofEaveGuideMode()
     {
+        if (!EnsureThreeDEditable("draw 3D roof eaves"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "3D Roof: open a job first.";
@@ -28,6 +31,9 @@ public partial class MainWindow
 
     private void OnThreeDRoofGuideAdded(string kind, IReadOnlyList<SKPoint> points)
     {
+        if (!EnsureCurrentJobWritable("add a 3D roof guide"))
+            return;
+
         if (ThreeDRoofGuideKinds.Normalize(kind) != ThreeDRoofGuideKinds.Eave)
         {
             TxtStatus.Text = "3D Roof: Draw Eave only creates slope-defining eave segments on the roof base.";

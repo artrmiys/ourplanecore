@@ -28,7 +28,18 @@ internal static class AutosaveLifecycleRegressionTests
     {
         string recovery = File.ReadAllText(RepoFile("MainWindow.JobRecovery.cs"));
         string lifecycle = File.ReadAllText(RepoFile("MainWindow.JobLifecycle.cs"));
-        int loadTarget = lifecycle.IndexOf("OurPlanCoreJob nextJob = OurPlanCoreJobStore.LoadJob(rootPath);", StringComparison.Ordinal);
+        string access = File.ReadAllText(RepoFile("MainWindow.JobAccess.cs"));
+        int acquire = access.IndexOf("leaseService.TryAcquire(jobRoot)", StringComparison.Ordinal);
+        int registerWritable = access.IndexOf(
+            "TryRegisterPendingAccess(jobRoot, JobAccessMode.Writable",
+            acquire,
+            StringComparison.Ordinal);
+        int installGate = access.IndexOf("JobWriteAccess.RegisterJob(jobRoot, mode)", StringComparison.Ordinal);
+        int prepareAccess = lifecycle.IndexOf("TryPrepareJobAccess(normalizedRoot, out pending)", StringComparison.Ordinal);
+        int loadTarget = lifecycle.IndexOf(
+            "OurPlanCoreJobStore.LoadJob(normalizedRoot, pending.Mode)",
+            prepareAccess,
+            StringComparison.Ordinal);
         int prepare = lifecycle.IndexOf("if (!PrepareCurrentJobForSwitch())", loadTarget, StringComparison.Ordinal);
         int assign = lifecycle.IndexOf("_currentJob = nextJob;", prepare, StringComparison.Ordinal);
 
@@ -37,7 +48,10 @@ internal static class AutosaveLifecycleRegressionTests
             recovery.Contains("if (!TryFlushTakeoffAutosaves(\"switch jobs\"))", StringComparison.Ordinal) &&
             recovery.Contains("return false;", StringComparison.Ordinal),
             "job-switch preparation must be cancellable on autosave failure");
-        AssertTrue(loadTarget >= 0 && prepare > loadTarget, "target job must be validated before closing the current job");
+        AssertTrue(acquire >= 0 && registerWritable > acquire, "write lease must be acquired before writable access is registered");
+        AssertTrue(installGate >= 0, "pending job access must install the typed write gate");
+        AssertTrue(prepareAccess >= 0 && loadTarget > prepareAccess, "lease and write gate must be prepared before target load");
+        AssertTrue(prepare > loadTarget, "target job must load under its access mode before closing the current job");
         AssertTrue(assign > prepare, "current job assignment must occur only after safe switch preparation");
     }
 

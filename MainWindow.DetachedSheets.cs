@@ -17,8 +17,9 @@ public partial class MainWindow
         viewport.PdfSnapEnabled = _viewport.PdfSnapEnabled;
         viewport.OrthoEnabled = _viewport.OrthoEnabled;
         viewport.BoxModeEnabled = _viewport.BoxModeEnabled;
+        viewport.IsReadOnlyMode = IsCurrentJobReadOnly;
         ApplyDetachedActiveTakeoff(viewport, _activeItem);
-        ApplyDetachedTool(window, _activeTool);
+        ApplyDetachedTool(window, IsCurrentJobReadOnly ? "select" : _activeTool);
 
         viewport.StatusChanged += message => TxtStatus.Text = $"{window.Page.Name}: {message}";
         viewport.ToolChanged += tool => ApplyDetachedTool(window, tool);
@@ -71,6 +72,12 @@ public partial class MainWindow
 
     private void OnDetachedMeasurementAdded(DetachedSheetWindow window, Measurement measurement, UnitMode unitMode)
     {
+        if (!IsCurrentJobWritable)
+        {
+            RejectDetachedWrite(window, unitMode);
+            return;
+        }
+
         if (!TryResolveDetachedTakeoffItem(window.Viewport, measurement, out TakeoffItem item))
         {
             window.Viewport.DeleteMeasurements([measurement]);
@@ -101,6 +108,12 @@ public partial class MainWindow
 
     private void OnDetachedMeasurementsRemoved(DetachedSheetWindow window, IReadOnlyList<Measurement> measurements, UnitMode unitMode)
     {
+        if (!IsCurrentJobWritable)
+        {
+            RejectDetachedWrite(window, unitMode);
+            return;
+        }
+
         if (measurements.Count == 0)
             return;
 
@@ -123,6 +136,12 @@ public partial class MainWindow
 
     private void OnDetachedMeasurementsChanged(DetachedSheetWindow window, IReadOnlyList<Measurement> measurements, UnitMode unitMode)
     {
+        if (!IsCurrentJobWritable)
+        {
+            RejectDetachedWrite(window, unitMode);
+            return;
+        }
+
         if (measurements.Count == 0)
             return;
 
@@ -224,6 +243,12 @@ public partial class MainWindow
 
     private void SaveDetachedPageAnnotations(DetachedSheetWindow window)
     {
+        if (!IsCurrentJobWritable)
+        {
+            TxtStatus.Text = $"{window.Page.Name}: read-only; markup changes were not saved.";
+            return;
+        }
+
         try
         {
             OurPlanCoreJobStore.SavePageAnnotations(
@@ -251,6 +276,12 @@ public partial class MainWindow
         SKPoint end,
         UnitMode unitMode)
     {
+        if (!IsCurrentJobWritable)
+        {
+            RejectDetachedWrite(window, unitMode);
+            return;
+        }
+
         TakeoffItem? item = FindTakeoffItemForMeasurement(area);
         if (item == null)
             return;
@@ -270,5 +301,15 @@ public partial class MainWindow
 
         JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(area, window.Viewport.ScaleMetersPerPt);
         TxtStatus.Text = $"{window.Page.Name}: joists generated for {item.Name}, direction {directionDegrees:0.#} deg, {JoistTakeoffCalculator.FormatDiagnostics(layout, unitMode)}.";
+    }
+
+    private void RejectDetachedWrite(DetachedSheetWindow window, UnitMode unitMode)
+    {
+        if (_currentJob != null)
+        {
+            LoadTakeoffsForJob();
+            window.RefreshTakeoffDisplay(_currentJob, _takeoffItems, _settings, unitMode);
+        }
+        TxtStatus.Text = $"{window.Page.Name}: this job is read-only.";
     }
 }

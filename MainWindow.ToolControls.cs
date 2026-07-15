@@ -70,6 +70,13 @@ public partial class MainWindow
 
     private void SetTool(string tool, bool forceNewTakeoff = false)
     {
+        if (IsCurrentJobReadOnly && tool is not ("pan" or "select"))
+        {
+            EnsureCurrentJobWritable($"use the {tool} tool");
+            SyncToolButtonsToActiveTool();
+            return;
+        }
+
         if (!IsToolAllowedByModules(tool))
         {
             TxtStatus.Text = $"Tool '{tool}' is disabled in Settings > Modules.";

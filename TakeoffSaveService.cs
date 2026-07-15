@@ -77,6 +77,7 @@ internal interface ITakeoffSaveService
     void MarkDirty(IEnumerable<TakeoffItem> items);
     TakeoffFlushResult Flush();
     int DiscardUnavailableItems();
+    int DiscardAllPending(string reason);
     void Stop();
 }
 
@@ -133,6 +134,11 @@ internal sealed class TakeoffSaveService : ITakeoffSaveService
         OurPlanCoreJob? currentJob = _currentJob();
         if (currentJob == null)
             return;
+        if (!JobWriteAccess.IsWriteAllowed(currentJob.RootPath))
+        {
+            _setStatus("Read-only: takeoff autosave was not queued.");
+            return;
+        }
 
         bool added = !_pending.ContainsKey(item);
         _pending[item] = NormalizeRoot(currentJob.RootPath);
@@ -148,6 +154,11 @@ internal sealed class TakeoffSaveService : ITakeoffSaveService
         OurPlanCoreJob? currentJob = _currentJob();
         if (currentJob == null)
             return;
+        if (!JobWriteAccess.IsWriteAllowed(currentJob.RootPath))
+        {
+            _setStatus("Read-only: takeoff autosave was not queued.");
+            return;
+        }
 
         int before = _pending.Count;
         foreach (TakeoffItem item in items)
@@ -265,6 +276,23 @@ internal sealed class TakeoffSaveService : ITakeoffSaveService
         NotifyStateChanged();
         AppLog.Warn($"User explicitly discarded {unavailable.Count} pending takeoff autosave item(s) whose folders were unavailable.");
         return unavailable.Count;
+    }
+
+    public int DiscardAllPending(string reason)
+    {
+        int discarded = _pending.Count;
+        if (discarded == 0)
+            return 0;
+
+        _pending.Clear();
+        _scheduler.Stop();
+        State = TakeoffSaveState.Clean;
+        LastError = null;
+        NotifyStateChanged();
+        AppLog.Warn(
+            $"User explicitly discarded {discarded} pending takeoff autosave item(s): " +
+            (string.IsNullOrWhiteSpace(reason) ? "write access unavailable" : reason.Trim()));
+        return discarded;
     }
 
     private TakeoffPersistOutcome TryPersist(TakeoffItem item, List<string> errors)

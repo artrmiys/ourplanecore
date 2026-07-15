@@ -140,6 +140,9 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.ThreeD, "Edit 3D walls"))
             return;
 
+        if (!EnsureThreeDEditable("edit 3D walls"))
+            return;
+
         if (_selectedThreeDWall == null)
             return;
 

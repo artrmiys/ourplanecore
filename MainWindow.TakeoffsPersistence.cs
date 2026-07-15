@@ -13,6 +13,9 @@ public partial class MainWindow
             TxtStatus.Text = "No job open - nothing to save.";
             return;
         }
+        if (!EnsureCurrentJobWritable("save changes"))
+            return;
+
         try
         {
             FlushTakeoffAutosaves();

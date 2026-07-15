@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using Microsoft.VisualBasic.FileIO;
@@ -11,6 +12,18 @@ namespace OurPlanCore;
 
 public partial class MainWindow
 {
+    private void RunPagesMutation(string operation, Action action)
+    {
+        if (EnsureCurrentJobWritable(operation))
+            action();
+    }
+
+    private async Task RunPagesMutationAsync(string operation, Func<Task> action)
+    {
+        if (EnsureCurrentJobWritable(operation))
+            await action();
+    }
+
     private void ClearCurrentPageIfAffected(string affectedPath)
     {
         RemovePageTabsForAffectedPath(affectedPath);
@@ -27,6 +40,7 @@ public partial class MainWindow
 
     private static void DeleteDirectoryToRecycle(string path)
     {
+        JobWriteAccess.Demand(path, "delete a Pages folder");
         FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
     }
 

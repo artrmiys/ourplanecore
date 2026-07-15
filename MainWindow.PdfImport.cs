@@ -45,6 +45,9 @@ public partial class MainWindow
             PostStatusInfo("Open or create a job before importing PDFs.");
             return;
         }
+        OurPlanCoreJob importJob = _currentJob;
+        if (!EnsureExpectedJobWritable(importJob, "import PDF pages"))
+            return;
 
         var dlg = new OpenFileDialog
         {
@@ -53,12 +56,14 @@ public partial class MainWindow
             Multiselect = true,
         };
         if (dlg.ShowDialog() != true) return;
+        if (!EnsureExpectedJobWritable(importJob, "import PDF pages"))
+            return;
 
         IReadOnlyList<string> pdfPaths = SelectedPdfPaths(dlg);
         if (pdfPaths.Count == 0)
             return;
 
-        await ImportPdfPathsAsync(pdfPaths, sender);
+        await ImportPdfPathsAsync(pdfPaths, sender, expectedJob: importJob);
     }
 
     private async Task ImportPdfFolderToCurrentJobAsync(object sender)
@@ -68,9 +73,14 @@ public partial class MainWindow
             PostStatusInfo("Open or create a job before importing a PDF folder.");
             return;
         }
+        OurPlanCoreJob importJob = _currentJob;
+        if (!EnsureExpectedJobWritable(importJob, "import a PDF folder"))
+            return;
 
         string? folder = SelectFolder("Select folder with PDF files", NewPdfImportInitialFolder());
         if (folder == null)
+            return;
+        if (!EnsureExpectedJobWritable(importJob, "import a PDF folder"))
             return;
 
         IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(folder);
@@ -80,14 +90,19 @@ public partial class MainWindow
             return;
         }
 
-        await ImportPdfPathsAsync(pdfPaths, sender, confirmPageNames: false);
+        await ImportPdfPathsAsync(pdfPaths, sender, confirmPageNames: false, expectedJob: importJob);
     }
 
     private async Task ImportPdfPathsAsync(
         IReadOnlyList<string> pdfPaths,
         object sender,
-        bool confirmPageNames = true)
+        bool confirmPageNames = true,
+        OurPlanCoreJob? expectedJob = null)
     {
+        expectedJob ??= _currentJob;
+        if (expectedJob == null || !EnsureExpectedJobWritable(expectedJob, "import PDF pages"))
+            return;
+
         IReadOnlyList<PdfImportPlan> plans = BuildPdfImportPlans(pdfPaths, out IReadOnlyList<string> skipped);
         if (plans.Count == 0)
         {
@@ -97,12 +112,16 @@ public partial class MainWindow
 
         if (confirmPageNames && !ConfirmPdfImportPageNames(plans, skipped))
             return;
+        if (!EnsureExpectedJobWritable(expectedJob, "import PDF pages"))
+            return;
 
         bool? buildRasterCache = ConfirmPdfImportRasterOption(plans.Sum(plan => plan.PageCount));
         if (!buildRasterCache.HasValue)
             return;
+        if (!EnsureExpectedJobWritable(expectedJob, "import PDF pages"))
+            return;
 
-        await ImportPdfPlansAsync(plans, skipped, sender, buildRasterCache.Value);
+        await ImportPdfPlansAsync(plans, skipped, sender, buildRasterCache.Value, expectedJob);
     }
 
     private string? NewPdfImportInitialFolder()
@@ -187,9 +206,17 @@ public partial class MainWindow
         IReadOnlyList<PdfImportPlan> plans,
         IReadOnlyList<string> skipped,
         object sender,
-        bool buildRasterCache)
+        bool buildRasterCache,
+        OurPlanCoreJob importJob)
     {
+        if (!EnsureExpectedJobWritable(importJob, "import PDF pages"))
+            return;
         string destFolder = GetSelectedImportFolder();
+        if (!OurPlanCoreJobStore.IsSameOrDescendant(importJob.PagesRoot, destFolder))
+        {
+            PostStatusWarning("PDF import cancelled because the destination no longer belongs to the originating job.");
+            return;
+        }
         Button? importButton = sender as Button;
         int totalPages = plans.Sum(plan => plan.PageCount);
         var createdPages = new List<PageInfo>();
@@ -204,10 +231,14 @@ public partial class MainWindow
             using (ShowBusyOverlay($"Importing {plans.Count} PDF file(s), {totalPages} page(s)..."))
             {
                 await WaitForBusyOverlayRenderAsync();
+                if (!EnsureExpectedJobWritable(importJob, "import PDF pages"))
+                    return;
                 bool hadUserPageExpansion = _expandedPageTreePaths.Count > 0;
 
                 for (int index = 0; index < plans.Count; index++)
                 {
+                    if (!EnsureExpectedJobWritable(importJob, "continue PDF import"))
+                        return;
                     PdfImportPlan plan = plans[index];
                     string pdfName = Path.GetFileName(plan.PdfPath);
                     var progress = new Progress<string>(msg =>
@@ -221,7 +252,7 @@ public partial class MainWindow
                     Dictionary<int, IReadOnlyList<PdfLayerInfo>> pdfLayerCache = [];
 
                     IReadOnlyList<PageInfo> created = OurPlanCoreJobStore.ImportPdf(
-                        _currentJob!,
+                        importJob,
                         plan.PdfPath,
                         plan.PageNames,
                         destFolder,
@@ -234,6 +265,8 @@ public partial class MainWindow
                             PageInfo page = created[pageIndex];
                             ((IProgress<string>)progress).Report($"building {ImportedPdfRasterDpi}dpi raster {pageIndex + 1}/{created.Count}...");
                             RasterSheetBuildResult raster = await Task.Run(() => BuildAndWarmImportedRaster(page));
+                            if (!EnsureExpectedJobWritable(importJob, "continue PDF raster import"))
+                                return;
                             if (raster.Ok)
                                 rasterOk++;
                             else
@@ -246,6 +279,8 @@ public partial class MainWindow
                     BusyOverlayText.Text = $"Imported {pdfName} ({created.Count} page(s)).";
                 }
 
+                if (!EnsureExpectedJobWritable(importJob, "finish PDF import"))
+                    return;
                 ReloadPagesTree();
                 if (createdPages.Count > 0)
                     SelectPageByFolder(createdPages[0].FolderPath);
@@ -262,7 +297,11 @@ public partial class MainWindow
 
             if (createdPages.Count > 0)
             {
+                if (!EnsureExpectedJobWritable(importJob, "apply imported PDF metadata"))
+                    return;
                 await TryApplySheetMetadataAfterPdfImportAsync(createdPages);
+                if (!EnsureExpectedJobWritable(importJob, "finish imported PDF metadata"))
+                    return;
                 // Re-arm the job warmup so freshly imported pages get preview +
                 // raster warmup without reopening the job.
                 InvalidatePagePreviewPrefetchCache();

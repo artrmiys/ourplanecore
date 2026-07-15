@@ -11,6 +11,9 @@ public partial class MainWindow
 {
     private void BtnNewPageFolder_Click(object sender, RoutedEventArgs e)
     {
+        if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("add a page folder"))
+            return;
+
         if (_currentJob == null)
         {
             PostStatusInfo("Open or create a job before adding a page folder.");
@@ -24,6 +27,9 @@ public partial class MainWindow
 
     private void BtnNewBlankPage_Click(object sender, RoutedEventArgs e)
     {
+        if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("add a blank sheet"))
+            return;
+
         if (_currentJob == null)
         {
             PostStatusInfo("Open or create a job before adding a blank sheet.");
@@ -37,6 +43,9 @@ public partial class MainWindow
 
     private void NewPageFolder(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("add a page folder"))
+            return;
+
         string? targetFolder = PageFolderCreationTarget(item);
         if (targetFolder == null)
             return;
@@ -46,6 +55,9 @@ public partial class MainWindow
 
     private void NewBlankPage(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("add a blank sheet"))
+            return;
+
         if (_currentJob == null)
             return;
 
@@ -78,6 +90,9 @@ public partial class MainWindow
 
     private void CreatePageFolder(string parentFolder)
     {
+        if (!EnsureCurrentJobWritable("add a page folder"))
+            return;
+
         if (!IsPathInsidePagesRoot(parentFolder))
             return;
 
@@ -98,6 +113,9 @@ public partial class MainWindow
 
     private void CreateBlankPage(string parentFolder)
     {
+        if (!EnsureCurrentJobWritable("add a blank sheet"))
+            return;
+
         if (_currentJob == null || !IsPathInsidePagesRoot(parentFolder))
             return;
 
@@ -121,6 +139,9 @@ public partial class MainWindow
 
     private void RenamePagesNode(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("rename a page or folder"))
+            return;
+
         if (IsRootPagesNode(item)) return;
         string? path = GetPagesNodePath(item);
         if (path == null || !IsPathInsidePagesRoot(path, allowRoot: false)) return;
@@ -147,6 +168,9 @@ public partial class MainWindow
 
     private void DeletePagesNode(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("delete pages or folders"))
+            return;
+
         var entries = GetSelectedPageEntries(item);
         if (entries.Count == 0) return;
 
@@ -207,6 +231,9 @@ public partial class MainWindow
 
     private void CopyCutPagesNode(TreeViewItem item, PagesClipboardMode mode)
     {
+        if (mode == PagesClipboardMode.Cut && !EnsureCurrentJobWritable("cut pages or folders"))
+            return;
+
         var entries = GetSelectedPageEntries(item);
         if (entries.Count == 0) return;
 
@@ -219,6 +246,9 @@ public partial class MainWindow
 
     private void PasteIntoSelectedTarget(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("paste pages or folders"))
+            return;
+
         string? targetFolder = GetPasteTargetFolder(item);
         if (targetFolder == null) return;
         PasteIntoFolder(targetFolder);
@@ -226,6 +256,9 @@ public partial class MainWindow
 
     private void PasteIntoFolder(string targetFolder)
     {
+        if (!EnsureCurrentJobWritable("paste pages or folders"))
+            return;
+
         if (_pagesClipboard == null || !CanPasteInto(targetFolder)) return;
 
         RunDrop(_pagesClipboard, targetFolder, _pagesClipboard.Mode);
@@ -233,6 +266,13 @@ public partial class MainWindow
 
     private void RunDrop(PagesClipboard payload, string targetFolder, PagesClipboardMode mode)
     {
+        if (!EnsureCurrentJobWritable(mode == PagesClipboardMode.Cut
+                ? "move pages or folders"
+                : "paste pages or folders"))
+        {
+            return;
+        }
+
         bool wasCut = mode == PagesClipboardMode.Cut;
 
         try
@@ -283,6 +323,9 @@ public partial class MainWindow
 
     private void DuplicatePageNode(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("duplicate a page"))
+            return;
+
         if (item.Tag is not PageInfo page || !IsPathInsidePagesRoot(page.FolderPath, allowRoot: false))
             return;
 
@@ -313,6 +356,9 @@ public partial class MainWindow
 
     private void MovePagesNodes(TreeViewItem item, int offset)
     {
+        if (!EnsureCurrentJobWritable("reorder pages or folders"))
+            return;
+
         if (IsRootPagesNode(item)) return;
         string? path = GetPagesNodePath(item);
         if (path == null || !IsPathInsidePagesRoot(path, allowRoot: false)) return;
@@ -344,6 +390,9 @@ public partial class MainWindow
 
     private void SortFolderChildren(TreeViewItem item, bool descending)
     {
+        if (!EnsureCurrentJobWritable("sort pages or folders"))
+            return;
+
         if (item.Tag is not PageFolderNode folder || !IsPathInsidePagesRoot(folder.FolderPath))
             return;
 
@@ -361,6 +410,9 @@ public partial class MainWindow
 
     private void MovePageToFolder(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("move a page to another folder"))
+            return;
+
         if (item.Tag is not PageInfo page || _currentJob == null)
             return;
 
@@ -393,12 +445,14 @@ public partial class MainWindow
 
     private bool CanPasteInto(string? targetFolder)
     {
-        return _pagesClipboard != null && CanDropInto(_pagesClipboard, targetFolder, _pagesClipboard.Mode);
+        return !IsCurrentJobReadOnly &&
+               _pagesClipboard != null &&
+               CanDropInto(_pagesClipboard, targetFolder, _pagesClipboard.Mode);
     }
 
     private bool CanDropInto(PagesClipboard payload, string? targetFolder, PagesClipboardMode mode)
     {
-        if (_currentJob == null || string.IsNullOrWhiteSpace(targetFolder))
+        if (IsCurrentJobReadOnly || _currentJob == null || string.IsNullOrWhiteSpace(targetFolder))
             return false;
         if (payload.Entries.Count == 0 || !Directory.Exists(targetFolder))
             return false;

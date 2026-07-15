@@ -244,6 +244,9 @@ public partial class MainWindow
 
     private void OnSheetOverlayTransformChanged(SheetOverlayTransformChange change)
     {
+        if (!EnsureCurrentJobWritable("change the sheet overlay"))
+            return;
+
         if (_currentPage == null || string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder))
             return;
 

@@ -95,8 +95,9 @@ public static partial class SmartContextStore
         if (string.IsNullOrWhiteSpace(marker.Id))
             throw new InvalidOperationException("AI marker id is required.");
 
-        marker.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
         string path = AiMarkerPath(job, marker.Id);
+        JobWriteAccess.Demand(path, "save AI marker");
+        marker.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ContextRoot(job.RootPath));
         try
         {
@@ -116,6 +117,8 @@ public static partial class SmartContextStore
         string path = AiMarkerPath(job, markerId);
         if (!File.Exists(path))
             return false;
+
+        JobWriteAccess.Demand(path, "delete AI marker");
 
         try
         {
@@ -255,6 +258,8 @@ public static partial class SmartContextStore
         string path = AiMarkerSetPath(job, markerSetId);
         if (!File.Exists(path))
             return false;
+
+        JobWriteAccess.Demand(path, "delete AI marker set");
 
         try
         {

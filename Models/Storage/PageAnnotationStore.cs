@@ -48,6 +48,7 @@ internal static class PageAnnotationStore
 
     public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations)
     {
+        JobWriteAccess.Demand(PageAnnotationsJsonPath(pageFolder), "save page annotations");
         Directory.CreateDirectory(pageFolder);
         var dtos = annotations.Select(annotation =>
         {

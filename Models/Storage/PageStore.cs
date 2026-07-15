@@ -16,8 +16,10 @@ internal static class PageStore
         string destinationFolder,
         IReadOnlyDictionary<int, IReadOnlyList<PdfLayerInfo>>? pdfLayerCache = null)
     {
+        JobWriteAccess.Demand(destinationFolder, "import PDF pages");
         string sourcesDir = JobLayout.EnsureFolder(job.RootPath, "sources");
         string pdfDest = OurPlanCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
+        JobWriteAccess.Demand(pdfDest, "copy source PDF");
         if (!File.Exists(pdfDest))
             File.Copy(pdfSourcePath, pdfDest);
 
@@ -61,8 +63,10 @@ internal static class PageStore
         int pdfPage = 0,
         double scaleMetersPerPt = 0)
     {
+        JobWriteAccess.Demand(destinationFolder, "create PDF page");
         string sourcesDir = JobLayout.EnsureFolder(job.RootPath, "sources");
         string pdfDest = OurPlanCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
+        JobWriteAccess.Demand(pdfDest, "copy source PDF");
         if (!File.Exists(pdfDest))
             File.Copy(pdfSourcePath, pdfDest);
 
@@ -91,12 +95,14 @@ internal static class PageStore
         float widthPt = BlankPagePdfService.DefaultWidthPt,
         float heightPt = BlankPagePdfService.DefaultHeightPt)
     {
+        JobWriteAccess.Demand(destinationFolder, "create blank page");
         string cleanName = string.IsNullOrWhiteSpace(displayName)
             ? "Blank Sheet"
             : displayName.Trim();
         string sourcesDir = JobLayout.EnsureFolder(job.RootPath, "sources");
         string pdfFileName = $"{OurPlanCoreJobStore.SanitizeName(cleanName, 80)}.blank.pdf";
         string pdfDest = OurPlanCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, pdfFileName));
+        JobWriteAccess.Demand(pdfDest, "create blank page PDF");
         BlankPagePdfService.WriteBlankPdf(pdfDest, widthPt, heightPt);
 
         string pageFolder = OurPlanCoreJobStore.UniqueDirectoryPath(Path.Combine(destinationFolder, OurPlanCoreJobStore.SanitizeName(cleanName, 120)));
@@ -153,8 +159,14 @@ internal static class PageStore
     public static PageInfo? TryReadPage(string pageFolder)
     {
         SourceInfo? src = ReadSource(pageFolder);
-        if (src == null && !PageSourceRepair.TryRepairFromMetadata(pageFolder, out src))
-            return null;
+        if (src == null)
+        {
+            if (!JobWriteAccess.IsWriteAllowed(pageFolder) ||
+                !PageSourceRepair.TryRepairFromMetadata(pageFolder, out src))
+            {
+                return null;
+            }
+        }
 
         string pdfPath = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
         return new PageInfo
@@ -512,6 +524,7 @@ internal static class PageStore
 
     public static void WriteSourcePdfMetadata(string pageFolder, PdfSheetMetadata metadata)
     {
+        JobWriteAccess.Demand(SourcePdfMetadataPath(pageFolder), "save PDF metadata");
         Directory.CreateDirectory(pageFolder);
         try
         {
@@ -548,6 +561,7 @@ internal static class PageStore
 
     public static void RewritePageSources(string newRoot, IReadOnlyList<PageSourceSnapshot> snapshots)
     {
+        JobWriteAccess.Demand(newRoot, "rewrite page sources");
         foreach (var snap in snapshots)
         {
             string targetFolder = snap.RelativeFolder == "."
@@ -619,6 +633,8 @@ internal static class PageStore
         if (normalizedMoves.Count == 0 || !Directory.Exists(pagesRoot))
             return 0;
 
+        JobWriteAccess.Demand(pagesRoot, "rebase page overlay references");
+
         int changed = 0;
         foreach (string dir in OurPlanCoreJobStore.EnumerateSelfAndDescendants(pagesRoot))
         {
@@ -681,6 +697,10 @@ internal static class PageStore
         RasterSheetSource? rasterSheet = null,
         IReadOnlyList<string>? hiddenMeasurements = null)
     {
+        string sourcePath = Path.Combine(pageFolder, "source.json");
+        string layersPath = PageLayersJsonPath(pageFolder);
+        JobWriteAccess.Demand(sourcePath, "save page source");
+        JobWriteAccess.Demand(layersPath, "save page layer manifest");
         var src = new SourceInfo
         {
             Pdf = Path.GetRelativePath(pageFolder, pdfAbsPath),
@@ -708,7 +728,7 @@ internal static class PageStore
         try
         {
             IoUtil.WriteAllTextAtomic(
-                Path.Combine(pageFolder, "source.json"),
+                sourcePath,
                 JsonSerializer.Serialize(src, OurPlanCoreJobStore.JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -724,7 +744,10 @@ internal static class PageStore
         if (src.PdfLayers.Count == 0)
         {
             if (File.Exists(path))
+            {
+                JobWriteAccess.Demand(path, "delete page layer manifest");
                 File.Delete(path);
+            }
             return;
         }
 

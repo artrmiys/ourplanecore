@@ -26,6 +26,9 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.ThreeD, "Generate 3D roof"))
             return;
 
+        if (!EnsureThreeDEditable("generate the 3D roof"))
+            return;
+
         if (!TryApplyPendingThreeDRoofEdgePropertiesFromPanel(showStatus: false))
             return;
 
@@ -41,6 +44,9 @@ public partial class MainWindow
     private void Btn3dClearRoof_Click(object sender, RoutedEventArgs e)
     {
         if (!RequireModule(ModuleId.ThreeD, "Clear 3D roof"))
+            return;
+
+        if (!EnsureThreeDEditable("clear the 3D roof"))
             return;
 
         ClearThreeDRoof();
@@ -66,15 +72,15 @@ public partial class MainWindow
             roofMenu.Items.Add(new Separator());
         }
 
-        roofMenu.Items.Add(MakeMenuItem("Create Roof Base from Areas", _currentJob != null, () =>
+        roofMenu.Items.Add(MakeMenuItem("Create Roof Base from Areas", IsCurrentJobWritable, () =>
             BuildRoofFromRfAreas(TakeoffsTree.SelectedItem as TreeViewItem, switchTo3DTab: true)));
         roofMenu.Items.Add(MakeMenuItem(
             _threeDRoofEdgeSelectModeEnabled ? "Roof Edge Select Off" : "Roof Edge Select",
-            _currentJob != null && _threeDRoofGuides.Count > 0,
+            IsCurrentJobWritable && _threeDRoofGuides.Count > 0,
             ToggleThreeDRoofEdgeSelectMode));
         roofMenu.Items.Add(MakeMenuItem(
             "Clear Roof Base",
-            HasGeneratedRoofBase() || _threeDRoofGuides.Count > 0 || _threeDRoofPlanes.Count > 0 || _threeDRoofIssues.Count > 0,
+            IsCurrentJobWritable && (HasGeneratedRoofBase() || _threeDRoofGuides.Count > 0 || _threeDRoofPlanes.Count > 0 || _threeDRoofIssues.Count > 0),
             ClearThreeDRoof));
         menu.Items.Add(roofMenu);
         _ = request;
@@ -87,6 +93,9 @@ public partial class MainWindow
         {
             return;
         }
+
+        if (!_threeDRoofEdgeSelectModeEnabled && !EnsureThreeDEditable("edit 3D roof edges"))
+            return;
 
         SetThreeDRoofEdgeSelectMode(!_threeDRoofEdgeSelectModeEnabled);
     }
@@ -142,9 +151,9 @@ public partial class MainWindow
             ToggleThreeDRoofGuideSelection(guide.Id)));
         roofMenu.Items.Add(MakeMenuItem("Clear Edge Selection", selectedCount > 0, ClearThreeDRoofGuideSelection));
         roofMenu.Items.Add(new Separator());
-        roofMenu.Items.Add(MakeMenuItem($"Set {targetLabel} as Eave + Pitch {PitchLabel(ResolveThreeDRoofPitchRisePerFoot())}", selectedCount > 0, () =>
+        roofMenu.Items.Add(MakeMenuItem($"Set {targetLabel} as Eave + Pitch {PitchLabel(ResolveThreeDRoofPitchRisePerFoot())}", IsCurrentJobWritable && selectedCount > 0, () =>
             SetSelectedThreeDRoofGuideKind(ThreeDRoofGuideKinds.Eave, applyPitch: true)));
-        roofMenu.Items.Add(MakeMenuItem($"Set {targetLabel} as Rake", selectedCount > 0, () =>
+        roofMenu.Items.Add(MakeMenuItem($"Set {targetLabel} as Rake", IsCurrentJobWritable && selectedCount > 0, () =>
             SetSelectedThreeDRoofGuideKind(ThreeDRoofGuideKinds.Rake, applyPitch: false)));
     }
 }

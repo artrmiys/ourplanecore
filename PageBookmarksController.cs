@@ -27,6 +27,7 @@ internal sealed class PageBookmarksController
     private readonly RowDefinition _dockRow;
     private readonly Action<string> _setStatus;
     private readonly Func<OurPlanCoreJob?> _currentJob;
+    private readonly Func<bool> _canWriteCurrentJob;
     private readonly Func<PageInfo?> _currentPage;
     private readonly PdfViewport _viewport;
     private readonly Action<PageInfo, PdfViewport.ViewState> _openBookmarkView;
@@ -34,6 +35,7 @@ internal sealed class PageBookmarksController
 
     private ListView? _bookmarkList;
     private TextBlock? _bookmarkStatusText;
+    private Button? _bookmarkAddButton;
     private Button? _bookmarkOpenButton;
     private Button? _bookmarkImageButton;
     private Button? _bookmarkRenameButton;
@@ -58,6 +60,7 @@ internal sealed class PageBookmarksController
         RowDefinition dockRow,
         Action<string> setStatus,
         Func<OurPlanCoreJob?> currentJob,
+        Func<bool> canWriteCurrentJob,
         Func<PageInfo?> currentPage,
         PdfViewport viewport,
         Action<PageInfo, PdfViewport.ViewState> openBookmarkView)
@@ -72,6 +75,7 @@ internal sealed class PageBookmarksController
         _dockRow = dockRow;
         _setStatus = setStatus;
         _currentJob = currentJob;
+        _canWriteCurrentJob = canWriteCurrentJob;
         _currentPage = currentPage;
         _viewport = viewport;
         _openBookmarkView = openBookmarkView;
@@ -103,7 +107,8 @@ internal sealed class PageBookmarksController
         _bookmarkList.KeyDown += BookmarkList_KeyDown;
 
         var toolbar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        toolbar.Children.Add(BookmarkButton("Add", BtnBookmarkAdd_Click, "Save the current page view or visible crop image as a bookmark"));
+        _bookmarkAddButton = BookmarkButton("Add", BtnBookmarkAdd_Click, "Save the current page view or visible crop image as a bookmark");
+        toolbar.Children.Add(_bookmarkAddButton);
         _bookmarkOpenButton = BookmarkButton("Open", BtnBookmarkOpen_Click, "Open the selected bookmark view");
         _bookmarkImageButton = BookmarkButton("Image", BtnBookmarkImage_Click, "Open the selected bookmark crop image");
         _bookmarkRenameButton = BookmarkButton("Rename", BtnBookmarkRename_Click, "Rename the selected bookmark");
@@ -162,6 +167,12 @@ internal sealed class PageBookmarksController
             _pageBookmarks.AddRange(OurPlanCoreJobStore.LoadPageBookmarks(job));
 
         RefreshBookmarkList();
+    }
+
+    public void ApplyJobAccessState()
+    {
+        UpdateBookmarkStatus();
+        UpdateBookmarkButtons();
     }
 
     public void AddFromShortcut()
@@ -356,16 +367,24 @@ internal sealed class PageBookmarksController
             _syncingBookmarkSelection = false;
         }
 
-        if (_bookmarkStatusText != null)
-        {
-            _bookmarkStatusText.Text = _currentJob() == null
-                ? "Open a job to use bookmarks."
-                : rows.Count == 0
-                    ? "No bookmarks."
-                    : $"{rows.Count.ToString(CultureInfo.InvariantCulture)} bookmark(s).";
-        }
-
+        UpdateBookmarkStatus();
         UpdateBookmarkButtons();
+    }
+
+    private void UpdateBookmarkStatus()
+    {
+        if (_bookmarkStatusText == null)
+            return;
+
+        OurPlanCoreJob? job = _currentJob();
+        string text = job == null
+            ? "Open a job to use bookmarks."
+            : _pageBookmarks.Count == 0
+                ? "No bookmarks."
+                : $"{_pageBookmarks.Count.ToString(CultureInfo.InvariantCulture)} bookmark(s).";
+        if (job != null && !_canWriteCurrentJob())
+            text += " Read-only: open/view only.";
+        _bookmarkStatusText.Text = text;
     }
 
     private static string BookmarkPageName(PageBookmark bookmark)
@@ -392,15 +411,18 @@ internal sealed class PageBookmarksController
     {
         PageBookmark? selection = SelectedBookmark();
         bool hasSelection = selection != null;
+        bool canWrite = _moduleEnabled && _currentJob() != null && _canWriteCurrentJob();
+        if (_bookmarkAddButton != null)
+            _bookmarkAddButton.IsEnabled = canWrite;
         if (_bookmarkOpenButton != null)
             _bookmarkOpenButton.IsEnabled = hasSelection;
         if (_bookmarkImageButton != null)
             _bookmarkImageButton.IsEnabled = IsCropImageBookmark(selection) &&
                 !string.IsNullOrWhiteSpace(selection?.CropImagePath);
         if (_bookmarkRenameButton != null)
-            _bookmarkRenameButton.IsEnabled = hasSelection;
+            _bookmarkRenameButton.IsEnabled = canWrite && hasSelection;
         if (_bookmarkDeleteButton != null)
-            _bookmarkDeleteButton.IsEnabled = hasSelection;
+            _bookmarkDeleteButton.IsEnabled = canWrite && hasSelection;
     }
 
     private PageBookmark? SelectedBookmark() =>
@@ -443,6 +465,8 @@ internal sealed class PageBookmarksController
             _setStatus("Open a page before adding a bookmark.");
             return;
         }
+        if (!EnsureCanModifyBookmarks(job, "add a bookmark"))
+            return;
 
         string defaultName = $"{page.Name} view";
         string name = UniqueBookmarkName(defaultName);
@@ -462,6 +486,8 @@ internal sealed class PageBookmarksController
             name = dialog.BookmarkName;
             saveMode = dialog.SaveMode;
         }
+        if (!EnsureCanModifyBookmarks(job, "add a bookmark"))
+            return;
 
         PdfViewport.ViewState view = _viewport.CaptureViewState();
         string now = DateTime.UtcNow.ToString("O");
@@ -518,12 +544,17 @@ internal sealed class PageBookmarksController
         PageBookmark? bookmark = SelectedBookmark();
         if (bookmark == null)
             return;
+        OurPlanCoreJob? job = _currentJob();
+        if (job == null || !EnsureCanModifyBookmarks(job, "rename a bookmark"))
+            return;
 
         var dialog = new PageBookmarkDialog("Rename Bookmark", bookmark.Name)
         {
             Owner = _owner,
         };
         if (dialog.ShowDialog() != true)
+            return;
+        if (!EnsureCanModifyBookmarks(job, "rename a bookmark"))
             return;
 
         bookmark.Name = dialog.BookmarkName;
@@ -573,6 +604,9 @@ internal sealed class PageBookmarksController
         PageBookmark? bookmark = SelectedBookmark();
         if (bookmark == null)
             return;
+        OurPlanCoreJob? job = _currentJob();
+        if (job == null || !EnsureCanModifyBookmarks(job, "delete a bookmark"))
+            return;
 
         MessageBoxResult result = MessageBox.Show(
             _owner,
@@ -582,8 +616,14 @@ internal sealed class PageBookmarksController
             MessageBoxImage.Question);
         if (result != MessageBoxResult.Yes)
             return;
+        if (!EnsureCanModifyBookmarks(job, "delete a bookmark"))
+            return;
 
-        TryDeleteBookmarkCropImage(bookmark);
+        if (!TryDeleteBookmarkCropImage(bookmark, out string deleteError))
+        {
+            _setStatus($"Could not delete bookmark: {deleteError}");
+            return;
+        }
         _pageBookmarks.Remove(bookmark);
         SavePageBookmarks();
         RefreshBookmarkList();
@@ -611,8 +651,17 @@ internal sealed class PageBookmarksController
         }
 
         string outputPath = BookmarkCropImagePath(job, page, bookmarkName, bookmarkId);
-        if (!_viewport.TrySaveCropRect(requestedRect, outputPath, out cropRect, out error))
+        try
+        {
+            JobWriteAccess.Demand(outputPath, "save a bookmark crop image");
+            if (!_viewport.TrySaveCropRect(requestedRect, outputPath, out cropRect, out error))
+                return false;
+        }
+        catch (JobWriteDeniedException ex)
+        {
+            error = ex.Message;
             return false;
+        }
 
         cropImagePath = outputPath;
         return true;
@@ -648,24 +697,36 @@ internal sealed class PageBookmarksController
         }
     }
 
-    private void TryDeleteBookmarkCropImage(PageBookmark bookmark)
+    private bool TryDeleteBookmarkCropImage(PageBookmark bookmark, out string error)
     {
+        error = "";
         if (!IsCropImageBookmark(bookmark))
-            return;
+            return true;
 
         OurPlanCoreJob? job = _currentJob();
         string path = BookmarkCropImageFullPath(bookmark);
         if (job == null || string.IsNullOrWhiteSpace(path) || !OurPlanCoreJobStore.IsSameOrDescendant(job.RootPath, path))
-            return;
+            return true;
 
         try
         {
             if (File.Exists(path))
+            {
+                JobWriteAccess.Demand(path, "delete a bookmark crop image");
                 File.Delete(path);
+            }
+            return true;
+        }
+        catch (JobWriteDeniedException ex)
+        {
+            error = ex.Message;
+            return false;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             AppLog.Warn(ex, $"Failed to delete bookmark crop image {path}");
+            error = ex.Message;
+            return false;
         }
     }
 
@@ -716,6 +777,28 @@ internal sealed class PageBookmarksController
     private void SavePageBookmarks(OurPlanCoreJob job)
     {
         OurPlanCoreJobStore.SavePageBookmarks(job, _pageBookmarks);
+    }
+
+    private bool EnsureCanModifyBookmarks(OurPlanCoreJob job, string operation)
+    {
+        if (!_canWriteCurrentJob())
+        {
+            _setStatus($"'{job.Name}' is open read-only. You cannot {operation}.");
+            ApplyJobAccessState();
+            return false;
+        }
+
+        try
+        {
+            JobWriteAccess.Demand(PageBookmarkStore.PageBookmarksJsonPath(job), operation);
+            return true;
+        }
+        catch (JobWriteDeniedException ex)
+        {
+            _setStatus(ex.Message);
+            ApplyJobAccessState();
+            return false;
+        }
     }
 
     private string UniqueBookmarkName(string baseName)

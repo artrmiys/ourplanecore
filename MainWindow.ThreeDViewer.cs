@@ -144,6 +144,8 @@ public partial class MainWindow
         _threeDViewerMouseMoved = false;
         if (TryBeginThreeDRoofGizmoDrag(ThreeDViewerViewport, point, ThreeDViewerCamera, _threeDViewerDistance))
             _threeDViewerMouseDownPoint = null;
+        else if (_threeDRoofMoveModeEnabled && ThreeDEditingAllowed)
+            BeginThreeDRoofPlacementDragSnapshot();
         CaptureThreeDInput(sender);
     }
 
@@ -156,8 +158,19 @@ public partial class MainWindow
         }
         else if (_threeDRoofMoveModeEnabled)
         {
-            if (_threeDViewerMouseMoved)
+            if (_threeDViewerMouseMoved && EnsureThreeDEditable("move the 3D roof"))
+            {
                 SaveCurrentThreeDModel();
+                CompleteThreeDRoofPlacementDragSnapshot();
+            }
+            else if (_threeDViewerMouseMoved)
+            {
+                RestoreThreeDRoofPlacementDragSnapshot();
+            }
+            else
+            {
+                CompleteThreeDRoofPlacementDragSnapshot();
+            }
         }
         else if (!_threeDViewerMouseMoved && _threeDViewerMouseDownPoint != null)
         {
@@ -195,6 +208,12 @@ public partial class MainWindow
 
         if (_threeDRoofMoveModeEnabled)
         {
+            if (!ThreeDEditingAllowed)
+            {
+                RestoreThreeDRoofPlacementDragSnapshot();
+                _threeDRoofMoveModeEnabled = false;
+                return;
+            }
             NudgeThreeDRoofOffsetFromDrag(ThreeDViewerCamera, delta, _threeDViewerDistance);
             return;
         }
@@ -351,6 +370,10 @@ public partial class MainWindow
         {
             _threeDSideViewerMouseDownPoint = null;
         }
+        else if (_threeDRoofMoveModeEnabled && ThreeDEditingAllowed)
+        {
+            BeginThreeDRoofPlacementDragSnapshot();
+        }
         CaptureThreeDInput(sender);
     }
 
@@ -366,8 +389,19 @@ public partial class MainWindow
         }
         else if (_threeDRoofMoveModeEnabled)
         {
-            if (_threeDSideViewerMouseMoved)
+            if (_threeDSideViewerMouseMoved && EnsureThreeDEditable("move the 3D roof"))
+            {
                 SaveCurrentThreeDModel();
+                CompleteThreeDRoofPlacementDragSnapshot();
+            }
+            else if (_threeDSideViewerMouseMoved)
+            {
+                RestoreThreeDRoofPlacementDragSnapshot();
+            }
+            else
+            {
+                CompleteThreeDRoofPlacementDragSnapshot();
+            }
         }
         else if (!_threeDSideViewerMouseMoved && _threeDSideViewerMouseDownPoint != null)
         {
@@ -410,6 +444,12 @@ public partial class MainWindow
 
         if (_threeDRoofMoveModeEnabled && _threeDSideCamera != null)
         {
+            if (!ThreeDEditingAllowed)
+            {
+                RestoreThreeDRoofPlacementDragSnapshot();
+                _threeDRoofMoveModeEnabled = false;
+                return;
+            }
             NudgeThreeDRoofOffsetFromDrag(_threeDSideCamera, delta, _threeDSideViewerDistance);
             return;
         }

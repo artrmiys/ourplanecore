@@ -17,6 +17,9 @@ public static class OurPlanCoreJobStore
     public static OurPlanCoreJob LoadJob(string rootPath) =>
         JobLayout.LoadJob(rootPath);
 
+    public static OurPlanCoreJob LoadJob(string rootPath, JobAccessMode accessMode) =>
+        JobLayout.LoadJob(rootPath, accessMode);
+
     public static string EnsureFolder(string parentFolder, string name) =>
         JobLayout.EnsureFolder(parentFolder, name);
 

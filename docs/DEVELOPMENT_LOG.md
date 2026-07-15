@@ -1,5 +1,26 @@
 ﻿# Development Log
 
+## 2026-07-15 Enforced Exclusive Job Lease
+
+- Replaced the notification-only recovery lock with a versioned exclusive job
+  lease containing machine, process, process start, instance ID, generation,
+  acquisition time, heartbeat, and app version. Legacy v1 locks remain
+  readable for safe migration.
+- Added an operator conflict flow with `Open Read-Only`, `Retry`, `Take Over`,
+  and `Cancel`. Takeover is available only for a lease proven stale; active
+  local and remote owners remain protected.
+- Enforced read-only and closed-session access at the persistence boundary as
+  well as in the UI. Pages, takeoffs, measurements, imports, overlays,
+  bookmarks, autosave/recovery, AI continuations, and 3D/massing mutations all
+  fail closed when ownership is absent or lost.
+- Bound long-running async work to its originating job and rechecked both job
+  identity and writable access after dialogs and awaits, preventing late work
+  from writing into a newly opened job.
+- Added deterministic lease, two-instance, stale-local, active-remote,
+  takeover/CAS, heartbeat-loss, read-only integration, async identity, import,
+  bookmarks, and 3D regression coverage. Verification passed: build
+  `0 warnings / 0 errors`, full regression suite `544/544`.
+
 ## 2026-07-15 Reliable Takeoff Autosave
 
 - Rebuilt `TakeoffSaveService` around explicit `Clean`, `Dirty`, `Saving`, and

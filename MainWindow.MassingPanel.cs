@@ -29,6 +29,7 @@ public partial class MainWindow
             ToolTip = "Build AI_Context/3d_massing/model.json from current AI markers",
         };
         build.Click += BtnBuildMassingDraft_Click;
+        RegisterThreeDMutationControl(build);
         buttons.Children.Add(build);
 
         var buildFromWalls = new Button
@@ -39,6 +40,7 @@ public partial class MainWindow
             ToolTip = "Build 3D draft from Walls/Areas/Sqft level Line/Area measurements",
         };
         buildFromWalls.Click += (_, _) => BuildMassingDraftFromWallTakeoffs();
+        RegisterThreeDMutationControl(buildFromWalls);
         buttons.Children.Add(buildFromWalls);
 
         var aiSort = new Button
@@ -49,6 +51,7 @@ public partial class MainWindow
             ToolTip = "Send takeoff metadata to OpenAI for structured role/level sorting, then build the 3D draft deterministically",
         };
         aiSort.Click += async (_, _) => await BuildMassingDraftFromAiSortedTakeoffsAsync();
+        RegisterThreeDMutationControl(aiSort);
         buttons.Children.Add(aiSort);
 
         var open3DWindow = new Button
@@ -69,6 +72,7 @@ public partial class MainWindow
             ToolTip = "Queue reviewable AI roof marker candidates from the active sheet",
         };
         detectRoof.Click += BtnDetectRoof_Click;
+        RegisterThreeDMutationControl(detectRoof);
         buttons.Children.Add(detectRoof);
 
         _massingReviewRoofButton = new Button
@@ -80,6 +84,7 @@ public partial class MainWindow
             ToolTip = "Review and save roof type, pitch, notes, and guide points before accepting roof geometry",
         };
         _massingReviewRoofButton.Click += BtnReviewRoof_Click;
+        RegisterThreeDMutationControl(_massingReviewRoofButton);
         buttons.Children.Add(_massingReviewRoofButton);
 
         _massingReviewOpeningsButton = new Button
@@ -91,6 +96,7 @@ public partial class MainWindow
             ToolTip = "Review projected door/window/opening markers before accepting the 3D draft",
         };
         _massingReviewOpeningsButton.Click += BtnReviewOpenings_Click;
+        RegisterThreeDMutationControl(_massingReviewOpeningsButton);
         buttons.Children.Add(_massingReviewOpeningsButton);
 
         _massingAcceptDraftButton = new Button
@@ -102,6 +108,7 @@ public partial class MainWindow
             ToolTip = "Mark the current 3D massing draft as reviewed project context",
         };
         _massingAcceptDraftButton.Click += BtnAcceptMassingDraft_Click;
+        RegisterThreeDMutationControl(_massingAcceptDraftButton);
         buttons.Children.Add(_massingAcceptDraftButton);
 
         _massingOpenDraftButton = new Button

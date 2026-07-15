@@ -84,6 +84,9 @@ public partial class MainWindow
 
     private void AcceptMassingDraft()
     {
+        if (!EnsureThreeDEditable("accept the 3D massing draft"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before accepting a 3D draft.";
@@ -143,6 +146,9 @@ public partial class MainWindow
 
     private void ReviewMassingRoof()
     {
+        if (!EnsureThreeDEditable("review 3D massing roof geometry"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before reviewing roof geometry.";
@@ -197,6 +203,9 @@ public partial class MainWindow
 
     private void ReviewMassingOpenings()
     {
+        if (!EnsureThreeDEditable("review 3D massing openings"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before reviewing opening projections.";

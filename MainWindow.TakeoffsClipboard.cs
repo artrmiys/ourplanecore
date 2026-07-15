@@ -33,18 +33,21 @@ public partial class MainWindow
         {
             if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Up)
             {
-                MoveTakeoffSections(sectionNode, -1);
+                if (EnsureCurrentJobWritable("move takeoff sections"))
+                    MoveTakeoffSections(sectionNode, -1);
                 e.Handled = true;
             }
             else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Down)
             {
-                MoveTakeoffSections(sectionNode, 1);
+                if (EnsureCurrentJobWritable("move takeoff sections"))
+                    MoveTakeoffSections(sectionNode, 1);
                 e.Handled = true;
             }
             else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.F2 &&
                      SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true).Count <= 1)
             {
-                RenameSection(sectionNode.Item, sectionNode.Measurement);
+                if (EnsureCurrentJobWritable("rename a takeoff section"))
+                    RenameSection(sectionNode.Item, sectionNode.Measurement);
                 e.Handled = true;
             }
             else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Enter)
@@ -97,6 +100,9 @@ public partial class MainWindow
 
     private bool TryDeleteTakeoffsKeyboardSelection()
     {
+        if (!EnsureCurrentJobWritable("delete takeoffs"))
+            return true;
+
         if (_takeoffSectionMultiSelection.Count > 0 &&
             TryDeleteSelectedTakeoffSectionsFromKeyboard())
         {
@@ -189,6 +195,9 @@ public partial class MainWindow
 
     private void CopyCutTakeoffNode(TreeViewItem item, TakeoffsClipboardMode mode)
     {
+        if (mode == TakeoffsClipboardMode.Cut && !EnsureCurrentJobWritable("cut takeoff nodes"))
+            return;
+
         var entries = GetSelectedTakeoffEntries(item);
         if (entries.Count == 0) return;
 
@@ -201,6 +210,9 @@ public partial class MainWindow
 
     private void PasteIntoSelectedTakeoffTarget(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("paste takeoff nodes"))
+            return;
+
         string? targetFolder = GetTakeoffPasteTargetFolder(item);
         if (targetFolder != null)
             PasteTakeoffsIntoFolder(targetFolder);
@@ -208,6 +220,9 @@ public partial class MainWindow
 
     private void PasteTakeoffsIntoFolder(string targetFolder)
     {
+        if (!EnsureCurrentJobWritable("paste takeoff nodes"))
+            return;
+
         if (_takeoffsClipboard == null || !CanDropTakeoffsInto(_takeoffsClipboard, targetFolder, _takeoffsClipboard.Mode))
             return;
 
@@ -216,6 +231,9 @@ public partial class MainWindow
 
     private void DuplicateTakeoffNode(TreeViewItem item)
     {
+        if (!EnsureCurrentJobWritable("duplicate takeoff nodes"))
+            return;
+
         var entries = GetSelectedTakeoffEntries(item);
         if (entries.Count == 0) return;
 
@@ -260,6 +278,13 @@ public partial class MainWindow
         TakeoffsClipboardMode mode,
         TakeoffDropTimings? timings = null)
     {
+        if (!EnsureCurrentJobWritable(mode == TakeoffsClipboardMode.Cut
+                ? "move takeoff nodes"
+                : "paste takeoff nodes"))
+        {
+            return;
+        }
+
         bool wasCut = mode == TakeoffsClipboardMode.Cut;
         try
         {
@@ -340,7 +365,7 @@ public partial class MainWindow
 
     private bool CanDropTakeoffsInto(TakeoffsClipboard payload, string? targetFolder, TakeoffsClipboardMode mode)
     {
-        if (_currentJob == null || string.IsNullOrWhiteSpace(targetFolder) || payload.Entries.Count == 0)
+        if (!IsCurrentJobWritable || _currentJob == null || string.IsNullOrWhiteSpace(targetFolder) || payload.Entries.Count == 0)
             return false;
         if (!Directory.Exists(targetFolder))
             return false;

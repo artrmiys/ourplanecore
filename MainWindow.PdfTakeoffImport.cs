@@ -51,6 +51,7 @@ public partial class MainWindow
         public int TakeoffItemsImported { get; set; }
         public int MeasurementsImported { get; set; }
         public string FirstImportedPageFolder { get; set; } = "";
+        public OurPlanCoreJob? TargetJob { get; set; }
         public List<string> Messages { get; } = [];
     }
 
@@ -70,15 +71,24 @@ public partial class MainWindow
 
     private async Task ImportPdfTakeoffsFromFolderAsync(object sender)
     {
+        OurPlanCoreJob? dialogOriginJob = _currentJob;
         PdfTakeoffImportOptions? options = ShowPdfTakeoffImportDialog();
         if (options == null)
             return;
 
-        if (options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob && _currentJob == null)
+        if (options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob && dialogOriginJob == null)
         {
             PostStatusInfo("Open or create a job before importing PDF takeoffs into the current job.");
             return;
         }
+        if (options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob &&
+            !EnsureExpectedJobWritable(dialogOriginJob!, "import PDF takeoffs into this job"))
+        {
+            return;
+        }
+        OurPlanCoreJob? expectedTargetJob = options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob
+            ? dialogOriginJob
+            : null;
 
         IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(options.SourceFolder);
         if (pdfPaths.Count == 0)
@@ -93,13 +103,20 @@ public partial class MainWindow
 
         try
         {
-            PdfTakeoffImportRunResult result = await ScanAndImportPdfTakeoffsAsync(options, pdfPaths);
+            PdfTakeoffImportRunResult result = await ScanAndImportPdfTakeoffsAsync(options, pdfPaths, expectedTargetJob);
+            if (result.TargetJob != null &&
+                !EnsureExpectedJobWritable(result.TargetJob, "finish the PDF takeoff import"))
+            {
+                return;
+            }
             if (result.Cancelled || !result.HadSupportedAnnotations)
             {
                 TxtStatus.Text = result.HadSupportedAnnotations
                     ? "PDF takeoff import cancelled before writing job files."
                     : "No supported PDF takeoff annotations were found.";
                 ShowPdfTakeoffImportResult(result);
+                if (result.TargetJob != null)
+                    EnsureExpectedJobWritable(result.TargetJob, "finish the PDF takeoff import dialog");
                 return;
             }
 
@@ -113,6 +130,8 @@ public partial class MainWindow
                 $"{result.RulersImported} ruler(s), {result.TakeoffItemsImported} takeoff item(s), " +
                 $"{result.MeasurementsImported} measurement(s). Report: {result.ReportPath}";
             ShowPdfTakeoffImportResult(result);
+            if (result.TargetJob != null)
+                EnsureExpectedJobWritable(result.TargetJob, "finish the PDF takeoff import dialog");
         }
         finally
         {
@@ -144,7 +163,8 @@ public partial class MainWindow
 
     private async Task<PdfTakeoffImportRunResult> ScanAndImportPdfTakeoffsAsync(
         PdfTakeoffImportOptions options,
-        IReadOnlyList<string> pdfPaths)
+        IReadOnlyList<string> pdfPaths,
+        OurPlanCoreJob? expectedTargetJob)
     {
         var (pagesFolderPreview, takeoffsFolderPreview) = PreviewPdfTakeoffImportDestinations(options);
         var run = new PdfTakeoffImportRunResult
@@ -153,49 +173,119 @@ public partial class MainWindow
             PagesFolder = pagesFolderPreview,
             TakeoffsFolder = takeoffsFolderPreview,
             PdfsScanned = pdfPaths.Count,
+            TargetJob = expectedTargetJob,
         };
-        PdfTakeoffImportScanResult scan = await ScanPdfTakeoffSourcesAsync(run, pdfPaths, options);
+        PdfTakeoffImportScanResult scan = await ScanPdfTakeoffSourcesAsync(
+            run,
+            pdfPaths,
+            options,
+            expectedTargetJob);
+        if (!EnsurePdfTakeoffImportTargetWritable(
+                expectedTargetJob,
+                scan.Run,
+                "continue the PDF takeoff import after scanning"))
+        {
+            return scan.Run;
+        }
 
         if (scan.Sources.Count == 0)
             return scan.Run;
 
         scan.Run.HadSupportedAnnotations = true;
-        if (!ConfirmPdfTakeoffImport(scan.Run, scan.Sources, options))
+        bool confirmed = ConfirmPdfTakeoffImport(scan.Run, scan.Sources, options);
+        if (!EnsurePdfTakeoffImportTargetWritable(
+                expectedTargetJob,
+                scan.Run,
+                "continue the PDF takeoff import after confirmation"))
+        {
+            return scan.Run;
+        }
+        if (!confirmed)
         {
             scan.Run.Cancelled = true;
             scan.Run.Messages.Add("Import cancelled after preview; no job files were written.");
             return scan.Run;
         }
 
-        var prepared = await PreparePdfTakeoffImportSourcesAsync(scan.Sources, options, scan.Run);
+        var prepared = await PreparePdfTakeoffImportSourcesAsync(
+            scan.Sources,
+            options,
+            scan.Run,
+            expectedTargetJob);
         try
         {
-            EnsurePdfTakeoffImportTargetJob(options);
+            if (scan.Run.Cancelled ||
+                !EnsurePdfTakeoffImportTargetWritable(
+                    expectedTargetJob,
+                    scan.Run,
+                    "continue the PDF takeoff import after preparing PDFs"))
+            {
+                return scan.Run;
+            }
+
+            OurPlanCoreJob targetJob = EnsurePdfTakeoffImportTargetJob(options, expectedTargetJob);
+            scan.Run.TargetJob = targetJob;
+            if (!EnsurePdfTakeoffImportTargetWritable(
+                    targetJob,
+                    scan.Run,
+                    "start writing the PDF takeoff import"))
+            {
+                return scan.Run;
+            }
+
             string pageParent = options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob
                 ? GetSelectedImportFolder()
-                : _currentJob!.PagesRoot;
+                : targetJob.PagesRoot;
             string takeoffParent = options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob
                 ? CurrentTakeoffParentFolder()
-                : _currentJob!.TakeoffsRoot;
-            string pagesFolder = EnsurePdfTakeoffImportBucket(pageParent, _currentJob!.PagesRoot);
-            string takeoffsFolder = EnsurePdfTakeoffImportBucket(takeoffParent, _currentJob.TakeoffsRoot);
+                : targetJob.TakeoffsRoot;
+            if (!EnsurePdfTakeoffImportTargetWritable(
+                    targetJob,
+                    scan.Run,
+                    "create PDF takeoff import folders"))
+            {
+                return scan.Run;
+            }
+            string pagesFolder = EnsurePdfTakeoffImportBucket(pageParent, targetJob.PagesRoot);
+            string takeoffsFolder = EnsurePdfTakeoffImportBucket(takeoffParent, targetJob.TakeoffsRoot);
             scan.Run.PagesFolder = pagesFolder;
             scan.Run.TakeoffsFolder = takeoffsFolder;
 
             using (ShowBusyOverlay($"Importing PDF takeoffs from {prepared.Sources.Count} PDF file(s)..."))
             {
                 await WaitForBusyOverlayRenderAsync();
+                if (!EnsurePdfTakeoffImportTargetWritable(
+                        targetJob,
+                        scan.Run,
+                        "continue writing the PDF takeoff import"))
+                {
+                    return scan.Run;
+                }
                 for (int index = 0; index < prepared.Sources.Count; index++)
                 {
                     PdfTakeoffImportSource source = prepared.Sources[index];
                     string pdfName = Path.GetFileName(source.PdfPath);
                     BusyOverlayText.Text = $"Importing PDF takeoffs {index + 1}/{prepared.Sources.Count}: {pdfName}";
                     TxtStatus.Text = BusyOverlayText.Text;
-                    ImportPdfTakeoffSource(source, pagesFolder, takeoffsFolder, options, scan.Run);
+                    if (!EnsurePdfTakeoffImportTargetWritable(
+                            targetJob,
+                            scan.Run,
+                            "import PDF takeoffs into the target job"))
+                    {
+                        return scan.Run;
+                    }
+                    ImportPdfTakeoffSource(targetJob, source, pagesFolder, takeoffsFolder, options, scan.Run);
                 }
             }
 
-            scan.Run.ReportPath = WritePdfTakeoffImportReport(scan.Run, prepared.Sources);
+            if (!EnsurePdfTakeoffImportTargetWritable(
+                    targetJob,
+                    scan.Run,
+                    "write the PDF takeoff import report"))
+            {
+                return scan.Run;
+            }
+            scan.Run.ReportPath = WritePdfTakeoffImportReport(targetJob, scan.Run, prepared.Sources);
             return scan.Run;
         }
         finally
@@ -207,13 +297,21 @@ public partial class MainWindow
     private async Task<PdfTakeoffImportScanResult> ScanPdfTakeoffSourcesAsync(
         PdfTakeoffImportRunResult run,
         IReadOnlyList<string> pdfPaths,
-        PdfTakeoffImportOptions options)
+        PdfTakeoffImportOptions options,
+        OurPlanCoreJob? expectedTargetJob)
     {
         var scanResult = new PdfTakeoffImportScanResult { Run = run };
         bool multiPdf = pdfPaths.Count > 1;
         using (ShowBusyOverlay($"Scanning {pdfPaths.Count} PDF file(s) for takeoff annotations..."))
         {
             await WaitForBusyOverlayRenderAsync();
+            if (!EnsurePdfTakeoffImportTargetWritable(
+                    expectedTargetJob,
+                    run,
+                    "continue scanning PDF takeoffs"))
+            {
+                return scanResult;
+            }
             for (int index = 0; index < pdfPaths.Count; index++)
             {
                 string pdfPath = pdfPaths[index];
@@ -222,6 +320,13 @@ public partial class MainWindow
                 TxtStatus.Text = BusyOverlayText.Text;
 
                 var read = await PdfTakeoffAnnotationImportService.TryReadAsync(pdfPath);
+                if (!EnsurePdfTakeoffImportTargetWritable(
+                        expectedTargetJob,
+                        run,
+                        "continue scanning PDF takeoffs"))
+                {
+                    return scanResult;
+                }
                 if (!read.Ok)
                 {
                     run.Messages.Add($"{pdfName}: scan failed - {read.Error}");
@@ -259,7 +364,8 @@ public partial class MainWindow
     private async Task<(List<PdfTakeoffImportSource> Sources, string TempRoot)> PreparePdfTakeoffImportSourcesAsync(
         IReadOnlyList<PdfTakeoffImportSource> sources,
         PdfTakeoffImportOptions options,
-        PdfTakeoffImportRunResult run)
+        PdfTakeoffImportRunResult run,
+        OurPlanCoreJob? expectedTargetJob)
     {
         if (!options.RemoveSupportedPdfAnnotations)
             return (sources.ToList(), "");
@@ -270,6 +376,13 @@ public partial class MainWindow
         using (ShowBusyOverlay($"Creating clean PDF copies for {sources.Count} PDF file(s)..."))
         {
             await WaitForBusyOverlayRenderAsync();
+            if (!EnsurePdfTakeoffImportTargetWritable(
+                    expectedTargetJob,
+                    run,
+                    "continue preparing PDF takeoff files"))
+            {
+                return (prepared, tempRoot);
+            }
             for (int index = 0; index < sources.Count; index++)
             {
                 PdfTakeoffImportSource source = sources[index];
@@ -280,6 +393,13 @@ public partial class MainWindow
                 TxtStatus.Text = BusyOverlayText.Text;
 
                 var clean = await PdfTakeoffAnnotationImportService.TryCreateCleanCopyAsync(source.PdfPath, cleanPath);
+                if (!EnsurePdfTakeoffImportTargetWritable(
+                        expectedTargetJob,
+                        run,
+                        "continue preparing PDF takeoff files"))
+                {
+                    return (prepared, tempRoot);
+                }
                 if (!clean.Ok)
                     throw new InvalidOperationException($"{pdfName}: clean PDF copy failed - {clean.Error}");
 
@@ -291,10 +411,13 @@ public partial class MainWindow
         return (prepared, tempRoot);
     }
 
-    private void EnsurePdfTakeoffImportTargetJob(PdfTakeoffImportOptions options)
+    private OurPlanCoreJob EnsurePdfTakeoffImportTargetJob(
+        PdfTakeoffImportOptions options,
+        OurPlanCoreJob? expectedTargetJob)
     {
         if (options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob)
-            return;
+            return expectedTargetJob ??
+                throw new InvalidOperationException("The PDF takeoff target job is no longer available.");
 
         string parent = string.IsNullOrWhiteSpace(options.JobsRootPath)
             ? SampleJobService.DefaultJobsRoot
@@ -309,6 +432,23 @@ public partial class MainWindow
         OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, jobName);
         if (!OpenJob(job.RootPath))
             throw new InvalidOperationException("The new PDF takeoff job could not be opened because the current job has unsaved changes.");
+
+        if (_currentJob == null || !SameJobPath(_currentJob.RootPath, job.RootPath))
+            throw new InvalidOperationException("The new PDF takeoff job was created but is no longer the active target job.");
+        return _currentJob;
+    }
+
+    private bool EnsurePdfTakeoffImportTargetWritable(
+        OurPlanCoreJob? targetJob,
+        PdfTakeoffImportRunResult run,
+        string operation)
+    {
+        if (targetJob == null || EnsureExpectedJobWritable(targetJob, operation))
+            return true;
+
+        run.Cancelled = true;
+        run.Messages.Add("Import stopped because the target job changed or became read-only.");
+        return false;
     }
 
     private (string PagesFolder, string TakeoffsFolder) PreviewPdfTakeoffImportDestinations(PdfTakeoffImportOptions options)
@@ -469,6 +609,7 @@ public partial class MainWindow
             .Select(group => $"- {PdfTakeoffImportItemName(group.Key.Type, group.Key.Color)}: {group.Count()}");
 
     private void ImportPdfTakeoffSource(
+        OurPlanCoreJob targetJob,
         PdfTakeoffImportSource source,
         string pagesFolder,
         string takeoffsFolder,
@@ -478,7 +619,7 @@ public partial class MainWindow
         string pdfDisplayName = Path.GetFileNameWithoutExtension(source.PdfPath);
         string importPdfPath = string.IsNullOrWhiteSpace(source.ImportPdfPath) ? source.PdfPath : source.ImportPdfPath;
         IReadOnlyList<PageInfo> importedPages = OurPlanCoreJobStore.ImportPdf(
-            _currentJob!,
+            targetJob,
             importPdfPath,
             source.PageNames,
             pagesFolder);
@@ -520,7 +661,7 @@ public partial class MainWindow
         {
             string itemName = PdfTakeoffImportItemName(group.Key.Type, group.Key.Color);
             TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(
-                _currentJob!,
+                targetJob,
                 pdfTakeoffFolder,
                 itemName,
                 group.Key.Color,
@@ -664,9 +805,13 @@ public partial class MainWindow
         }
     }
 
-    private string WritePdfTakeoffImportReport(PdfTakeoffImportRunResult run, IReadOnlyList<PdfTakeoffImportSource> sources)
+    private static string WritePdfTakeoffImportReport(
+        OurPlanCoreJob targetJob,
+        PdfTakeoffImportRunResult run,
+        IReadOnlyList<PdfTakeoffImportSource> sources)
     {
-        string reportRoot = Path.Combine(_currentJob!.RootPath, "import_reports");
+        string reportRoot = Path.Combine(targetJob.RootPath, "import_reports");
+        JobWriteAccess.Demand(reportRoot, "write a PDF takeoff import report");
         Directory.CreateDirectory(reportRoot);
         string reportPath = Path.Combine(reportRoot, $"pdf_takeoff_import_{DateTime.Now:yyyyMMdd_HHmmss}.md");
         var lines = new List<string>
@@ -724,6 +869,7 @@ public partial class MainWindow
         }
 
         lines.Add("");
+        JobWriteAccess.Demand(reportPath, "write a PDF takeoff import report");
         File.WriteAllText(reportPath, string.Join(Environment.NewLine, lines), Encoding.UTF8);
         return reportPath;
     }

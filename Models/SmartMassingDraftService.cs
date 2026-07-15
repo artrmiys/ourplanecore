@@ -54,16 +54,18 @@ public static partial class SmartMassingDraftService
 
     public static void SaveDraft(OurPlanCoreJob job, SmartMassingDraft draft)
     {
-        RefreshDerivedGeometry(draft);
         string path = ModelPath(job);
+        JobWriteAccess.Demand(path, "save 3D massing draft");
+        RefreshDerivedGeometry(draft);
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
         IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(draft, JsonOptions));
     }
 
     public static string SaveSnapshot(OurPlanCoreJob job, SmartMassingDraft draft)
     {
-        RefreshDerivedGeometry(draft);
         string root = SnapshotsRoot(job);
+        JobWriteAccess.Demand(root, "save 3D massing snapshot");
+        RefreshDerivedGeometry(draft);
         Directory.CreateDirectory(root);
         string stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
         string id = SafeFilePart(string.IsNullOrWhiteSpace(draft.Id) ? "massing" : draft.Id);

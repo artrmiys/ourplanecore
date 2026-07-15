@@ -16,6 +16,9 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.ThreeD, "Create 3D roof takeoff"))
             return;
 
+        if (!EnsureThreeDEditable("create a 3D roof takeoff"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "3D Roof Takeoff: open a job first.";

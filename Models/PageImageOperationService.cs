@@ -37,7 +37,9 @@ internal static class PageImageOperationService
         string outputPdfPath,
         SKRect? cropRectPt = null)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPdfPath) ?? ".");
+        string outputDirectory = Path.GetDirectoryName(outputPdfPath) ?? ".";
+        JobWriteAccess.Demand(outputDirectory, "create page image output folder");
+        Directory.CreateDirectory(outputDirectory);
         using RenderedPage rendered = RenderPage(page);
         using SKBitmap bitmap = CreateOperationBitmap(rendered.Bitmap, rendered.WidthPt, rendered.HeightPt, operation, cropRectPt, out float widthPt, out float heightPt);
         WriteBitmapPdf(bitmap, widthPt, heightPt, outputPdfPath);
@@ -46,11 +48,14 @@ internal static class PageImageOperationService
 
     public static PageImageOperationResult RenderPageToPng(PageInfo page, string outputPngPath, SKRect? cropRectPt = null)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath) ?? ".");
+        string outputDirectory = Path.GetDirectoryName(outputPngPath) ?? ".";
+        JobWriteAccess.Demand(outputDirectory, "create page image output folder");
+        Directory.CreateDirectory(outputDirectory);
         using RenderedPage rendered = RenderPage(page);
         using SKBitmap bitmap = CreateOperationBitmap(rendered.Bitmap, rendered.WidthPt, rendered.HeightPt, PageImageOperation.Crop, cropRectPt, out float widthPt, out float heightPt);
         using SKImage image = SKImage.FromBitmap(bitmap);
         using SKData data = image.Encode(SKEncodedImageFormat.Png, 95);
+        JobWriteAccess.Demand(outputPngPath, "write page image PNG");
         using FileStream stream = File.Create(outputPngPath);
         data.SaveTo(stream);
         return new PageImageOperationResult(outputPngPath, rendered.WidthPt, rendered.HeightPt, widthPt, heightPt);
@@ -61,7 +66,9 @@ internal static class PageImageOperationService
         double clockwiseDegrees,
         string outputPdfPath)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPdfPath) ?? ".");
+        string outputDirectory = Path.GetDirectoryName(outputPdfPath) ?? ".";
+        JobWriteAccess.Demand(outputDirectory, "create page image output folder");
+        Directory.CreateDirectory(outputDirectory);
         using RenderedPage rendered = RenderPage(page);
         using SKBitmap bitmap = CreateRotationBitmap(
             rendered.Bitmap,
@@ -256,6 +263,7 @@ internal static class PageImageOperationService
 
     private static void WriteBitmapPdf(SKBitmap bitmap, float widthPt, float heightPt, string outputPdfPath)
     {
+        JobWriteAccess.Demand(outputPdfPath, "write page image PDF");
         using FileStream stream = File.Create(outputPdfPath);
         using SKDocument document = SKDocument.CreatePdf(
             stream,

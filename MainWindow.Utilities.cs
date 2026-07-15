@@ -74,7 +74,7 @@ public partial class MainWindow
 
     private void SaveCurrentPageScale()
     {
-        if (_currentPage == null)
+        if (_currentPage == null || !IsCurrentJobWritable)
             return;
 
         _currentPage.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;

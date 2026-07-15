@@ -40,8 +40,9 @@ public static partial class SmartContextStore
 
     public static void SaveAiActionDraft(OurPlanCoreJob job, SmartAiActionDraft draft)
     {
-        draft.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
         string path = AiActionDraftPath(job, draft.RequestId);
+        JobWriteAccess.Demand(path, "save AI action draft");
+        draft.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ContextRoot(job.RootPath));
         try
         {
@@ -69,9 +70,10 @@ public static partial class SmartContextStore
 
     public static void SaveAiRequest(OurPlanCoreJob job, SmartAiRequest request)
     {
+        string path = Path.Combine(ContextRoot(job.RootPath), "requests", $"{request.Id}.json");
+        JobWriteAccess.Demand(path, "save AI request");
         request.ContextCropPaths = NormalizeRelativePathList(request.ContextCropPaths);
         request.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
-        string path = Path.Combine(ContextRoot(job.RootPath), "requests", $"{request.Id}.json");
         try
         {
             IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(request, JsonOptions));
@@ -93,6 +95,8 @@ public static partial class SmartContextStore
         string providerResponseId = "",
         string rawResponsePath = "")
     {
+        string preflightRoot = ContextRoot(job.RootPath);
+        JobWriteAccess.Demand(preflightRoot, "save AI response");
         SmartProjectContext context = EnsureProjectContext(job.RootPath, job.Name);
         string now = DateTime.UtcNow.ToString("O");
         var response = LoadAiResponse(job, request.Id) ?? new SmartAiResponse
@@ -118,6 +122,11 @@ public static partial class SmartContextStore
 
         string contextRoot = ContextRoot(job.RootPath);
         string requestPath = Path.Combine(contextRoot, "requests", $"{request.Id}.json");
+        string responsePath = Path.Combine(contextRoot, "responses", $"{response.Id}.json");
+        string projectMarkdownPath = Path.Combine(contextRoot, "project.md");
+        JobWriteAccess.Demand(requestPath, "save AI request status");
+        JobWriteAccess.Demand(responsePath, "save AI response");
+        JobWriteAccess.Demand(projectMarkdownPath, "append AI response notes");
         try
         {
             IoUtil.WriteAllTextAtomic(
@@ -129,7 +138,6 @@ public static partial class SmartContextStore
             throw new InvalidOperationException($"Failed to save '{Path.GetFileName(requestPath)}': {ex.Message}", ex);
         }
 
-        string responsePath = Path.Combine(contextRoot, "responses", $"{response.Id}.json");
         try
         {
             IoUtil.WriteAllTextAtomic(
@@ -141,7 +149,7 @@ public static partial class SmartContextStore
             throw new InvalidOperationException($"Failed to save '{Path.GetFileName(responsePath)}': {ex.Message}", ex);
         }
         File.AppendAllText(
-            Path.Combine(contextRoot, "project.md"),
+            projectMarkdownPath,
             BuildMarkdownResponse(request, response));
 
         return response;

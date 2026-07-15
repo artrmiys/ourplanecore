@@ -16,6 +16,9 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.ThreeD, "Build 3D roof base"))
             return;
 
+        if (!EnsureThreeDEditable("build the 3D roof base"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "3D Roof Base: open a job first.";
@@ -60,6 +63,9 @@ public partial class MainWindow
     private void BuildAutoThreeDRoof(TreeViewItem? anchor, bool switchTo3DTab)
     {
         if (!RequireModule(ModuleId.ThreeD, "Auto-build 3D roof"))
+            return;
+
+        if (!EnsureThreeDEditable("auto-build the 3D roof"))
             return;
 
         if (_currentJob == null)

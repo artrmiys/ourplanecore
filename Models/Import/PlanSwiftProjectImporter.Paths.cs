@@ -98,6 +98,7 @@ public static partial class PlanSwiftProjectImporter
         if (string.IsNullOrWhiteSpace(options.DestinationParentPath))
             throw new ArgumentException("Destination parent path is required.", nameof(options));
 
+        JobWriteAccess.Demand(options.DestinationParentPath, "create a PlanSwift import destination");
         Directory.CreateDirectory(options.DestinationParentPath);
     }
 
@@ -106,7 +107,10 @@ public static partial class PlanSwiftProjectImporter
         try
         {
             if (Directory.Exists(path))
+            {
+                JobWriteAccess.Demand(path, "remove an incomplete PlanSwift import");
                 Directory.Delete(path, recursive: true);
+            }
         }
         catch
         {

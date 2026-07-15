@@ -215,8 +215,9 @@ public partial class MainWindow
     {
         if (_currentJob == null)
             return;
+        OurPlanCoreJob markerJob = _currentJob;
 
-        SmartAiMarker? marker = SmartContextStore.LoadAiMarker(_currentJob, item.Observation.Id);
+        SmartAiMarker? marker = SmartContextStore.LoadAiMarker(markerJob, item.Observation.Id);
         if (marker == null)
         {
             TxtStatus.Text = "AI marker JSON is missing.";
@@ -237,6 +238,7 @@ public partial class MainWindow
 
         PageInfo? page = ResolveMarkerPage(marker);
         string nearbyContextDetails = BuildFindSimilarNearbyContext(
+            markerJob,
             marker,
             page,
             out string nearbyCropPath,
@@ -259,13 +261,13 @@ public partial class MainWindow
             prompt;
 
         SmartObservation observation = SmartContextStore.AddObservation(
-            _currentJob,
+            markerJob,
             page,
             "find_similar_marker_request",
             details);
 
         SmartContextStore.AddAiRequest(
-            _currentJob,
+            markerJob,
             page,
             observation,
             "find_similar_marker_request",
@@ -310,6 +312,7 @@ public partial class MainWindow
     }
 
     private string BuildFindSimilarNearbyContext(
+        OurPlanCoreJob markerJob,
         SmartAiMarker marker,
         PageInfo? page,
         out string nearbyCropPath,
@@ -323,6 +326,7 @@ public partial class MainWindow
 
         SKRect requested = FindSimilarNearbyCropRect(marker);
         if (!TrySavePageCrop(
+                markerJob,
                 page,
                 requested,
                 "find_similar_nearby",

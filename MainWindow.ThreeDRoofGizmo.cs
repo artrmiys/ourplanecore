@@ -22,6 +22,11 @@ public partial class MainWindow
     private Point? _threeDRoofGizmoDragStart;
     private PerspectiveCamera? _threeDRoofGizmoDragCamera;
     private double _threeDRoofGizmoDragDistance;
+    private bool _threeDRoofPlacementDragSnapshotActive;
+    private string _threeDRoofPlacementDragGroupId = "";
+    private double _threeDRoofPlacementDragStartX;
+    private double _threeDRoofPlacementDragStartY;
+    private double _threeDRoofPlacementDragStartZ;
 
     private bool IsThreeDRoofGizmoDragging => _threeDRoofDragAxis != ThreeDRoofMoveAxis.None;
 
@@ -55,9 +60,10 @@ public partial class MainWindow
         }
 
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
-        if (placement == null)
+        if (placement == null || !ThreeDEditingAllowed)
             return false;
 
+        BeginThreeDRoofPlacementDragSnapshot();
         _threeDRoofDragAxis = axis;
         _threeDRoofGizmoDragStart = point;
         _threeDRoofGizmoDragCamera = camera;
@@ -76,6 +82,13 @@ public partial class MainWindow
             return;
         }
 
+        if (!ThreeDEditingAllowed)
+        {
+            RestoreThreeDRoofPlacementDragSnapshot();
+            EndThreeDRoofGizmoDrag(save: false);
+            return;
+        }
+
         Vector delta = current - _threeDRoofGizmoDragStart.Value;
         _threeDRoofGizmoDragStart = current;
         NudgeThreeDRoofOffsetOnAxis(_threeDRoofDragAxis, _threeDRoofGizmoDragCamera, delta, _threeDRoofGizmoDragDistance);
@@ -87,10 +100,15 @@ public partial class MainWindow
             return;
 
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
-        if (save && placement != null)
+        if (save && placement != null && EnsureThreeDEditable("move the 3D roof"))
         {
             SaveCurrentThreeDModel();
+            CompleteThreeDRoofPlacementDragSnapshot();
             LogThreeD($"Roof gizmo moved: {placement.Label}, X {placement.OffsetXFeet:0.##} ft, Y {placement.OffsetYFeet:0.##} ft, Z {placement.OffsetZFeet:0.##} ft.");
+        }
+        else
+        {
+            RestoreThreeDRoofPlacementDragSnapshot();
         }
 
         _threeDRoofDragAxis = ThreeDRoofMoveAxis.None;
@@ -101,6 +119,47 @@ public partial class MainWindow
         UpdateThreeDRoofMoveControls();
     }
 
+    private void BeginThreeDRoofPlacementDragSnapshot()
+    {
+        if (_threeDRoofPlacementDragSnapshotActive || !ThreeDEditingAllowed)
+            return;
+
+        ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
+        if (placement == null)
+            return;
+
+        _threeDRoofPlacementDragSnapshotActive = true;
+        _threeDRoofPlacementDragGroupId = placement.RoofGroupId;
+        _threeDRoofPlacementDragStartX = placement.OffsetXFeet;
+        _threeDRoofPlacementDragStartY = placement.OffsetYFeet;
+        _threeDRoofPlacementDragStartZ = placement.OffsetZFeet;
+    }
+
+    private void CompleteThreeDRoofPlacementDragSnapshot()
+    {
+        _threeDRoofPlacementDragSnapshotActive = false;
+        _threeDRoofPlacementDragGroupId = "";
+    }
+
+    private void RestoreThreeDRoofPlacementDragSnapshot()
+    {
+        if (!_threeDRoofPlacementDragSnapshotActive)
+            return;
+
+        ThreeDRoofPlacement? placement = _threeDRoofPlacements.FirstOrDefault(candidate =>
+            SameRoofGroup(candidate.RoofGroupId, _threeDRoofPlacementDragGroupId));
+        if (placement != null)
+        {
+            placement.OffsetXFeet = _threeDRoofPlacementDragStartX;
+            placement.OffsetYFeet = _threeDRoofPlacementDragStartY;
+            placement.OffsetZFeet = _threeDRoofPlacementDragStartZ;
+        }
+
+        CompleteThreeDRoofPlacementDragSnapshot();
+        if (placement != null)
+            RenderThreeDWallModel(fitCamera: false);
+    }
+
     private void NudgeThreeDRoofOffsetOnAxis(
         ThreeDRoofMoveAxis axis,
         PerspectiveCamera camera,
@@ -108,7 +167,7 @@ public partial class MainWindow
         double distance)
     {
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
-        if (placement == null)
+        if (placement == null || !ThreeDEditingAllowed)
             return;
 
         double pixels = ProjectScreenDeltaToWorldAxis(camera, axis, delta);

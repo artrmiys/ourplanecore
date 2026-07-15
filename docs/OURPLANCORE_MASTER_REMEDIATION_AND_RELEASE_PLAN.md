@@ -257,13 +257,19 @@ Reliable autosave completion evidence (2026-07-15):
 
 Owners: `JobRecoveryService`, `MainWindow.JobRecovery`, persistence gate.
 
-- [ ] Replace notification-only lock behavior with an instance lease containing
+- [x] Replace notification-only lock behavior with an instance lease containing
       machine, process, instance ID, start time, heartbeat, and app version.
-- [ ] Present `Open Read-Only`, `Retry`, `Take Over`, and `Cancel` choices.
-- [ ] Enforce read-only state at the persistence boundary, not only in buttons.
-- [ ] Treat remote-machine locks as active unless lease expiry proves otherwise.
-- [ ] Stop heartbeat and release only the current instance's lease.
-- [ ] Add two-instance, stale-local, active-remote, takeover, and crash tests.
+- [x] Present `Open Read-Only`, `Retry`, `Take Over`, and `Cancel` choices.
+- [x] Enforce read-only state at the persistence boundary, not only in buttons.
+- [x] Treat remote-machine locks as active unless lease expiry proves otherwise.
+- [x] Stop heartbeat and release only the current instance's lease.
+- [x] Add two-instance, stale-local, active-remote, takeover, and crash tests.
+
+Completed 2026-07-15. The v2 lease is fail-closed across storage services,
+autosave, import, AI continuations, bookmarks, overlays, and 3D/massing edits.
+Active local and remote owners cannot be taken over; only a proven stale lease
+can be replaced with compare-and-exchange ownership checks. Verification:
+build `0 warnings / 0 errors`, full regression suite `544/544`.
 
 ### 5.3 Tri-state data loading
 

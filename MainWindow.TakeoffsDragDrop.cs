@@ -19,6 +19,12 @@ public partial class MainWindow
         if (UpdateTakeoffsTreeMarqueeSelection(e))
             return;
 
+        if (!IsCurrentJobWritable)
+        {
+            ResetTakeoffsDragState();
+            return;
+        }
+
         if (_takeoffsDragStart == null)
             return;
 
@@ -79,6 +85,12 @@ public partial class MainWindow
 
     private void DoTakeoffsDragDrop(object payload, DragDropEffects effects)
     {
+        if (!IsCurrentJobWritable)
+        {
+            ResetTakeoffsDragState();
+            return;
+        }
+
         try
         {
             DragDrop.DoDragDrop(TakeoffsTree, payload, effects);
@@ -102,6 +114,15 @@ public partial class MainWindow
     private void TakeoffsTree_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = DragDropEffects.None;
+        if (!IsCurrentJobWritable)
+        {
+            ClearTakeoffSectionDropCue();
+            ClearTakeoffPositionDropCue();
+            ClearTakeoffFolderDropCue();
+            e.Handled = true;
+            return;
+        }
+
         TreeViewItem? rawTargetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
         bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
         if (e.Data.GetData(typeof(TakeoffSectionDrag)) is TakeoffSectionDrag sectionDrag)
@@ -155,6 +176,15 @@ public partial class MainWindow
 
     private void TakeoffsTree_Drop(object sender, DragEventArgs e)
     {
+        if (!EnsureCurrentJobWritable("drop takeoff nodes or sections"))
+        {
+            ClearTakeoffSectionDropCue();
+            ClearTakeoffPositionDropCue();
+            ClearTakeoffFolderDropCue();
+            e.Handled = true;
+            return;
+        }
+
         TreeViewItem? rawTargetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
         bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
         if (e.Data.GetData(typeof(TakeoffSectionDrag)) is TakeoffSectionDrag sectionDrag)
@@ -225,7 +255,7 @@ public partial class MainWindow
 
     private bool CanDropTakeoffsToRootBottom(TakeoffsClipboard payload)
     {
-        if (_currentJob == null || payload.Entries.Count == 0 || !Directory.Exists(_currentJob.TakeoffsRoot))
+        if (!IsCurrentJobWritable || _currentJob == null || payload.Entries.Count == 0 || !Directory.Exists(_currentJob.TakeoffsRoot))
             return false;
 
         foreach (TakeoffsClipboardEntry entry in payload.Entries)
@@ -255,6 +285,9 @@ public partial class MainWindow
 
     private void DropTakeoffsToRootBottom(TakeoffsClipboard payload)
     {
+        if (!EnsureCurrentJobWritable("move takeoff nodes"))
+            return;
+
         if (_currentJob == null)
             return;
 
@@ -333,7 +366,7 @@ public partial class MainWindow
         canDrop = false;
         status = "";
 
-        if (copy || _currentJob == null || payload.Entries.Count == 0 || targetItem == null)
+        if (!IsCurrentJobWritable || copy || _currentJob == null || payload.Entries.Count == 0 || targetItem == null)
             return false;
 
         string? targetPath = GetTakeoffNodePath(targetItem);
@@ -372,7 +405,7 @@ public partial class MainWindow
 
     private bool CanDropTakeoffsToPosition(TakeoffsClipboard payload, string targetPath, bool after)
     {
-        if (_currentJob == null || payload.Entries.Count == 0 || string.IsNullOrWhiteSpace(targetPath))
+        if (!IsCurrentJobWritable || _currentJob == null || payload.Entries.Count == 0 || string.IsNullOrWhiteSpace(targetPath))
             return false;
 
         string targetParent = Path.GetDirectoryName(targetPath) ?? "";
@@ -506,6 +539,9 @@ public partial class MainWindow
 
     private void DropTakeoffPosition(TakeoffsClipboard payload, TreeViewItem targetItem, bool after)
     {
+        if (!EnsureCurrentJobWritable("reorder takeoff nodes"))
+            return;
+
         string? targetPath = GetTakeoffNodePath(targetItem);
         if (string.IsNullOrWhiteSpace(targetPath))
             return;
@@ -583,7 +619,7 @@ public partial class MainWindow
 
     private bool CanDropTakeoffSections(TakeoffSectionDrag payload, TreeViewItem? targetItem, bool copy)
     {
-        if (payload.Nodes.Count == 0 || GetTakeoffSectionDropTarget(targetItem) is not { } target)
+        if (!IsCurrentJobWritable || payload.Nodes.Count == 0 || GetTakeoffSectionDropTarget(targetItem) is not { } target)
             return false;
 
         string targetType = OurPlanCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
@@ -670,6 +706,9 @@ public partial class MainWindow
 
     private void DropTakeoffSections(TakeoffSectionDrag payload, TreeViewItem targetItem, bool copy)
     {
+        if (!EnsureCurrentJobWritable(copy ? "copy takeoff sections" : "move takeoff sections"))
+            return;
+
         if (!CanDropTakeoffSections(payload, targetItem, copy) ||
             GetTakeoffSectionDropTarget(targetItem) is not { } target)
         {

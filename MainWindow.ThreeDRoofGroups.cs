@@ -327,9 +327,9 @@ public partial class MainWindow
         _threeDRoofMoveText.SetResourceReference(Control.ForegroundProperty, "SecondaryForegroundBrush");
         stack.Children.Add(_threeDRoofMoveText);
 
-        _threeDRoofMoveXSlider = RoofMoveSlider("Move roof on X, feet");
-        _threeDRoofMoveYSlider = RoofMoveSlider("Move roof up/down, feet");
-        _threeDRoofMoveZSlider = RoofMoveSlider("Move roof on Z, feet");
+        _threeDRoofMoveXSlider = RegisterThreeDMutationControl(RoofMoveSlider("Move roof on X, feet"));
+        _threeDRoofMoveYSlider = RegisterThreeDMutationControl(RoofMoveSlider("Move roof up/down, feet"));
+        _threeDRoofMoveZSlider = RegisterThreeDMutationControl(RoofMoveSlider("Move roof on Z, feet"));
         stack.Children.Add(RoofMoveRow("X", _threeDRoofMoveXSlider));
         stack.Children.Add(RoofMoveRow("Y", _threeDRoofMoveYSlider));
         stack.Children.Add(RoofMoveRow("Z", _threeDRoofMoveZSlider));
@@ -366,6 +366,8 @@ public partial class MainWindow
             Style = TryFindResource("RibbonSlider") as Style,
         };
         slider.ValueChanged += ThreeDRoofMoveSlider_ValueChanged;
+        slider.PreviewMouseDown += (_, _) => BeginThreeDRoofPlacementDragSnapshot();
+        slider.PreviewKeyDown += (_, _) => BeginThreeDRoofPlacementDragSnapshot();
         slider.PreviewMouseUp += ThreeDRoofMoveSlider_Commit;
         slider.KeyUp += ThreeDRoofMoveSlider_Commit;
         return slider;
@@ -459,11 +461,12 @@ public partial class MainWindow
         _updatingThreeDRoofMoveUi = true;
         try
         {
-            _threeDRoofMoveXSlider.IsEnabled = hasRoof;
-            _threeDRoofMoveYSlider.IsEnabled = hasRoof;
-            _threeDRoofMoveZSlider.IsEnabled = hasRoof;
+            bool canMove = hasRoof && ThreeDEditingAllowed;
+            _threeDRoofMoveXSlider.IsEnabled = canMove;
+            _threeDRoofMoveYSlider.IsEnabled = canMove;
+            _threeDRoofMoveZSlider.IsEnabled = canMove;
             if (_threeDRoofDeleteButton != null)
-                _threeDRoofDeleteButton.IsEnabled = hasRoof;
+                _threeDRoofDeleteButton.IsEnabled = canMove;
             _threeDRoofMoveXSlider.Value = hasRoof ? placement!.OffsetXFeet : 0;
             _threeDRoofMoveYSlider.Value = hasRoof ? placement!.OffsetYFeet : 0;
             _threeDRoofMoveZSlider.Value = hasRoof ? placement!.OffsetZFeet : 0;
@@ -481,6 +484,13 @@ public partial class MainWindow
     {
         if (!IsModuleEnabled(ModuleId.ThreeD) || _updatingThreeDRoofMoveUi)
             return;
+
+        if (!ThreeDEditingAllowed)
+        {
+            RestoreThreeDRoofPlacementDragSnapshot();
+            UpdateThreeDRoofMoveControls();
+            return;
+        }
 
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
         if (placement == null ||
@@ -503,11 +513,19 @@ public partial class MainWindow
         if (!IsModuleEnabled(ModuleId.ThreeD))
             return;
 
+        if (!EnsureThreeDEditable("move the 3D roof"))
+        {
+            RestoreThreeDRoofPlacementDragSnapshot();
+            UpdateThreeDRoofMoveControls();
+            return;
+        }
+
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
         if (placement == null)
             return;
 
         SaveCurrentThreeDModel();
+        CompleteThreeDRoofPlacementDragSnapshot();
         LogThreeD($"Roof moved: {placement.Label}, X {placement.OffsetXFeet:0.##} ft, Y {placement.OffsetYFeet:0.##} ft, Z {placement.OffsetZFeet:0.##} ft.");
     }
 
@@ -554,6 +572,9 @@ public partial class MainWindow
     private void DeleteActiveThreeDRoof()
     {
         if (!RequireModule(ModuleId.ThreeD, "Delete 3D roof"))
+            return;
+
+        if (!EnsureThreeDEditable("delete the 3D roof"))
             return;
 
         string groupId = ActiveThreeDRoofGroupId();

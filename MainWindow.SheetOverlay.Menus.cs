@@ -16,6 +16,13 @@ public partial class MainWindow
         bool candidateIsCurrent = hasCurrentPage && SameFolder(_currentPage!.FolderPath, candidatePage.FolderPath);
 
         var menu = new MenuItem { Header = "Sheet Overlay" };
+        if (IsCurrentJobReadOnly)
+        {
+            menu.Items.Add(MakeMenuItem("Open This Sheet", true, () => OpenPageInActiveTab(candidatePage)));
+            menu.Items.Add(MakeMenuItem("Read-only: overlay editing is disabled", false, () => { }));
+            return menu;
+        }
+
         menu.Items.Add(MakeMenuItem("Use This Sheet as Current Overlay", canSetOverlay, () => SetCurrentSheetOverlay(candidatePage)));
         menu.Items.Add(MakeMenuItem(
             "Auto Select + Fit This Sheet",
@@ -47,6 +54,14 @@ public partial class MainWindow
     {
         var menu = new ContextMenu();
         bool isCurrent = _currentPage != null && SameFolder(_currentPage.FolderPath, node.Page.FolderPath);
+        if (IsCurrentJobReadOnly)
+        {
+            if (!isCurrent)
+                menu.Items.Add(MakeMenuItem("Open Sheet", true, () => OpenPageInActiveTab(node.Page)));
+            menu.Items.Add(MakeMenuItem("Read-only: overlay editing is disabled", false, () => { }));
+            return menu;
+        }
+
         menu.Items.Add(MakeMenuItem(
             node.Page.OverlayVisible ? "Hide Overlay" : "Show Overlay",
             true,
@@ -68,6 +83,8 @@ public partial class MainWindow
     private bool AddCurrentSheetOverlayAdjustmentMenuItems(ContextMenu menu)
     {
         if (_currentPage == null)
+            return false;
+        if (IsCurrentJobReadOnly)
             return false;
 
         PageInfo currentPage = _currentPage;
@@ -92,6 +109,13 @@ public partial class MainWindow
     {
         bool hasOverlay = !string.IsNullOrWhiteSpace(page.OverlayPageFolder);
         var menu = new MenuItem { Header = header, IsEnabled = hasOverlay };
+        if (IsCurrentJobReadOnly)
+        {
+            menu.Items.Add(MakeMenuItem("Open Overlay Sheet", hasOverlay, () => OpenSheetOverlaySource(page)));
+            menu.Items.Add(MakeMenuItem("Read-only: overlay editing is disabled", false, () => { }));
+            return menu;
+        }
+
         menu.Items.Add(MakeMenuItem("Auto Fit", hasOverlay, () => AutoFitSheetOverlay(page)));
         menu.Items.Add(MakeMenuItem(
             "Auto Select + Replace Overlay",

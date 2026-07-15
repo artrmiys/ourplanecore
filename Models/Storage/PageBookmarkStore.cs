@@ -37,6 +37,7 @@ internal static class PageBookmarkStore
 
     public static void SavePageBookmarks(OurPlanCoreJob job, IEnumerable<PageBookmark> bookmarks)
     {
+        JobWriteAccess.Demand(PageBookmarksJsonPath(job), "save page bookmarks");
         var dtos = bookmarks
             .Where(bookmark => !string.IsNullOrWhiteSpace(bookmark.PageFolder))
             .Select(bookmark => ToDto(job, bookmark))

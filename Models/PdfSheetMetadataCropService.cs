@@ -100,13 +100,14 @@ public static class PdfSheetMetadataCropService
 
     public static void SaveTemplate(OurPlanCoreJob job, PdfSheetMetadataCropTemplate template)
     {
+        string path = TemplatePath(job);
+        JobWriteAccess.Demand(path, "save sheet-metadata crop template");
         string now = DateTime.UtcNow.ToString("O");
         template.SchemaVersion = 1;
         if (string.IsNullOrWhiteSpace(template.CreatedAtUtc))
             template.CreatedAtUtc = now;
         template.UpdatedAtUtc = now;
 
-        string path = TemplatePath(job);
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
         try
         {
@@ -250,6 +251,7 @@ public static class PdfSheetMetadataCropService
         }
 
         string? directory = Path.GetDirectoryName(outputPath);
+        JobWriteAccess.Demand(outputPath, "save sheet-metadata crop");
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
 

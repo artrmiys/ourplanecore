@@ -20,6 +20,9 @@ public partial class MainWindow
 
     private void OnBeamMeasurementCompleted(BeamMeasurementRequest request)
     {
+        if (!EnsureCurrentJobWritable("create a Beam takeoff"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
         {
             TxtStatus.Text = "Beam ruler was placed, but no job/page is open for the Count item.";
@@ -89,6 +92,9 @@ public partial class MainWindow
 
     private void OnOpeningMeasurementCompleted(OpeningMeasurementRequest request)
     {
+        if (!EnsureCurrentJobWritable("create an Openings takeoff"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
         {
             TxtStatus.Text = "Opening dimensions were placed, but no job/page is open for the Count item.";

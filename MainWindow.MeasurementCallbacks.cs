@@ -8,6 +8,9 @@ public partial class MainWindow
 {
     private void OnMeasurementAdded(Measurement m)
     {
+        if (RejectReadOnlyViewportMutation("add measurements"))
+            return;
+
         if (!TryResolveTakeoffItemForMeasurement(m, out TakeoffItem item))
         {
             _viewport.DeleteMeasurements([m]);
@@ -38,6 +41,9 @@ public partial class MainWindow
 
     private void OnMeasurementsAdded(IReadOnlyList<Measurement> measurements)
     {
+        if (RejectReadOnlyViewportMutation("add measurements"))
+            return;
+
         if (measurements.Count == 0)
             return;
 
@@ -134,6 +140,9 @@ public partial class MainWindow
 
     private void OnMeasurementRemoved(Measurement m)
     {
+        if (RejectReadOnlyViewportMutation("delete measurements"))
+            return;
+
         foreach (var item in _takeoffItems)
         {
             if (item.Measurements.Remove(m))
@@ -152,6 +161,9 @@ public partial class MainWindow
 
     private void OnMeasurementsRemoved(IReadOnlyList<Measurement> measurements)
     {
+        if (RejectReadOnlyViewportMutation("delete measurements"))
+            return;
+
         if (measurements.Count == 0)
             return;
 
@@ -190,6 +202,9 @@ public partial class MainWindow
 
     private void OnMeasurementChanged(Measurement m)
     {
+        if (RejectReadOnlyViewportMutation("edit measurements"))
+            return;
+
         foreach (var item in _takeoffItems)
         {
             if (!item.Measurements.Contains(m)) continue;
@@ -219,6 +234,9 @@ public partial class MainWindow
 
     private void OnMeasurementsChanged(IReadOnlyList<Measurement> measurements)
     {
+        if (RejectReadOnlyViewportMutation("edit measurements"))
+            return;
+
         if (measurements.Count == 0)
             return;
 
@@ -266,6 +284,9 @@ public partial class MainWindow
 
     private void OnPageAnnotationChanged(PageAnnotation annotation)
     {
+        if (RejectReadOnlyViewportMutation("edit markups", reloadAnnotations: true))
+            return;
+
         SaveCurrentPageAnnotations();
     }
 
@@ -274,7 +295,7 @@ public partial class MainWindow
 
     private void SaveCurrentPageAnnotations()
     {
-        if (_currentPage == null || !_currentPageAnnotationsLoaded)
+        if (_currentPage == null || !_currentPageAnnotationsLoaded || !IsCurrentJobWritable)
             return;
 
         try
@@ -287,5 +308,24 @@ public partial class MainWindow
         {
             TxtStatus.Text = $"Annotation save skipped: {ex.Message}";
         }
+    }
+
+    private bool RejectReadOnlyViewportMutation(string operation, bool reloadAnnotations = false)
+    {
+        if (!IsCurrentJobReadOnly)
+            return false;
+
+        if (reloadAnnotations && _currentPage != null)
+        {
+            _viewport.SetPageAnnotations(
+                OurPlanCoreJobStore.LoadPageAnnotations(_currentPage.FolderPath));
+        }
+        else
+        {
+            LoadTakeoffsForJob();
+        }
+
+        TxtStatus.Text = $"Read-only: cannot {operation}.";
+        return true;
     }
 }

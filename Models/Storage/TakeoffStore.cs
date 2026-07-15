@@ -33,6 +33,7 @@ internal static class TakeoffStore
         string targetParent = OurPlanCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
             ? parentFolder
             : job.TakeoffsRoot;
+        JobWriteAccess.Demand(targetParent, "create takeoff item");
         string folder = OurPlanCoreJobStore.CreateFolderAllowDuplicateName(targetParent, name);
         OurPlanCoreJobStore.SetProperty(folder, "SmartNodeKind", "item");
         OurPlanCoreJobStore.SetProperty(folder, "Color", color);
@@ -104,6 +105,9 @@ internal static class TakeoffStore
     {
         if (string.IsNullOrWhiteSpace(item.FolderPath) || !Directory.Exists(item.FolderPath))
             return;
+
+        JobWriteAccess.Demand(Path.Combine(item.FolderPath, "Data.xml"), "save takeoff metadata");
+        JobWriteAccess.Demand(MeasurementsJsonPath(item.FolderPath), "save takeoff measurements");
 
         OurPlanCoreJobStore.UpdateItemName(item.FolderPath, item.Name);
         item.CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
@@ -251,6 +255,7 @@ internal static class TakeoffStore
 
     public static void SaveMeasurements(string takeoffFolder, IEnumerable<Measurement> measurements)
     {
+        JobWriteAccess.Demand(MeasurementsJsonPath(takeoffFolder), "save takeoff measurements");
         Directory.CreateDirectory(takeoffFolder);
         var dtos = measurements.Select(measurement => ToDto(measurement, takeoffFolder)).ToList();
 

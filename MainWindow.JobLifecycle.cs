@@ -164,11 +164,83 @@ public partial class MainWindow
 
     private bool OpenJob(string rootPath, string? initialPageFolder = null)
     {
-        OurPlanCoreJob nextJob = OurPlanCoreJobStore.LoadJob(rootPath);
-        if (!PrepareCurrentJobForSwitch())
+        string normalizedRoot;
+        try
+        {
+            normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        }
+        catch (Exception ex)
+        {
+            ShowJobOpenError("The selected job path is invalid.", ex.Message);
             return false;
+        }
+
+        bool reloadCurrent = _currentJob != null && SameJobPath(_currentJob.RootPath, normalizedRoot);
+        PendingJobAccess? pending = null;
+        JobAccessSessionToken previousToken = default;
+        JobLeaseService? previousLease = null;
+        OurPlanCoreJob nextJob;
+
+        if (reloadCurrent)
+        {
+            if (!PrepareCurrentJobForSwitch())
+                return false;
+            try
+            {
+                JobAccessMode reloadMode = IsCurrentJobWritable
+                    ? JobAccessMode.Writable
+                    : JobAccessMode.ReadOnly;
+                nextJob = OurPlanCoreJobStore.LoadJob(normalizedRoot, reloadMode);
+            }
+            catch (Exception ex)
+            {
+                ShowJobOpenError("The current job could not be reloaded.", ex.Message);
+                return false;
+            }
+        }
+        else
+        {
+            if (!TryPrepareJobAccess(normalizedRoot, out pending) || pending == null)
+                return false;
+            try
+            {
+                nextJob = OurPlanCoreJobStore.LoadJob(normalizedRoot, pending.Mode);
+            }
+            catch (Exception ex)
+            {
+                pending.Dispose();
+                ShowJobOpenError("The selected job could not be loaded.", ex.Message);
+                return false;
+            }
+
+            if (!ConfirmPendingJobAccess(pending))
+                return false;
+
+            if (!PrepareCurrentJobForSwitch())
+            {
+                pending.Dispose();
+                return false;
+            }
+            if (!ConfirmPendingJobAccess(pending))
+                return false;
+
+            previousToken = _currentJobAccessToken;
+            previousLease = _currentJobLeaseService;
+        }
+
+        if (pending != null && !TryAdoptJobAccess(pending))
+        {
+            pending.Dispose();
+            ShowJobOpenError(
+                "Write ownership was lost before the job switch completed.",
+                "The previous job remains open. Retry, or open the target read-only.");
+            return false;
+        }
 
         _currentJob = nextJob;
+        ApplyCurrentJobAccessToUi();
+        try
+        {
         ApplyFolderTemplateProviders();
         _currentPage = null;
         _currentPdfPath = "";
@@ -199,7 +271,7 @@ public partial class MainWindow
         _viewport.ClearPage();
         ApplyRulerVisibilityToViewport();
         RefreshJobHeaderLabels();
-        Title = $"OurPlanCore {AppVersion.Display} — {_currentJob.Name}";
+        Title = CurrentJobWindowTitle();
         ReloadPagesTree(_currentJob.PagesRoot);
         LoadPageBookmarksForJob();
         LoadTakeoffsForJob();
@@ -215,36 +287,52 @@ public partial class MainWindow
         if (!IsTruthyEnvironment(TakeoffsMoveSmokeEnv) &&
             ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
             SelectPageByFolder(pageToOpen);
-        QueueOpenedJobRecovery();
         QueueSheetLegendAutoSortSweep();
         ReportCorruptJsonFiles();
         ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
         RefreshJobHeaderLabels();
         UpdateNoJobOverlay();   // a job is now open — hide the empty-state Start card
         TxtStatus.Text = BuildMeasurementRepairStatus($"Loaded job: {_currentJob.Name}");
-        if (IsModuleEnabled(ModuleId.Ai))
+        if (IsCurrentJobWritable && IsModuleEnabled(ModuleId.Ai))
             LoadObservationsInbox();
         if (IsModuleEnabled(ModuleId.ThreeD))
             RefreshMassingDraftPanel();
-        if (IsModuleEnabled(ModuleId.Ai))
+        if (IsCurrentJobWritable && IsModuleEnabled(ModuleId.Ai))
         {
             string aiMaintenanceRoot = _currentJob.RootPath;
             _ = System.Threading.Tasks.Task.Run(() =>
             {
-                int reset = SmartContextStore.ResetStuckRunningRequests(aiMaintenanceRoot);
-                if (reset > 0)
-                    AppLog.Info($"AI context maintenance: reset {reset} stuck 'running' request(s) to failed so they can be retried.");
-                (int archived, int failed) = SmartContextStore.ArchiveStaleRequestFiles(aiMaintenanceRoot);
-                if (archived > 0 || failed > 0)
-                    AppLog.Info($"AI context maintenance: archived {archived} stale request/response file(s), {failed} failed.");
-                int prunedCrops = SmartContextStore.PruneOrphanCrops(aiMaintenanceRoot);
-                if (prunedCrops > 0)
-                    AppLog.Info($"AI context maintenance: pruned {prunedCrops} orphaned crop image(s).");
+                try
+                {
+                    int reset = SmartContextStore.ResetStuckRunningRequests(aiMaintenanceRoot);
+                    if (reset > 0)
+                        AppLog.Info($"AI context maintenance: reset {reset} stuck 'running' request(s) to failed so they can be retried.");
+                    (int archived, int failed) = SmartContextStore.ArchiveStaleRequestFiles(aiMaintenanceRoot);
+                    if (archived > 0 || failed > 0)
+                        AppLog.Info($"AI context maintenance: archived {archived} stale request/response file(s), {failed} failed.");
+                    int prunedCrops = SmartContextStore.PruneOrphanCrops(aiMaintenanceRoot);
+                    if (prunedCrops > 0)
+                        AppLog.Info($"AI context maintenance: pruned {prunedCrops} orphaned crop image(s).");
+                }
+                catch (JobWriteDeniedException ex)
+                {
+                    AppLog.Info($"AI context maintenance stopped after write access changed: {ex.Message}");
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, "AI context maintenance failed.");
+                }
             });
         }
         Dispatcher.BeginInvoke(
             new Action(CollapseProjectTreeDisplays),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
+        }
+        finally
+        {
+            if (!reloadCurrent)
+                ReleaseJobAccess(previousToken, previousLease, "switch jobs");
+        }
         return true;
     }
 
@@ -284,8 +372,10 @@ public partial class MainWindow
         if (_currentJob == null)
             return;
 
-        TxtStatusJob.Text = _currentJob.Name;
-        TxtJobName.Text = _currentJob.Name;
+        string displayName = CurrentJobDisplayName();
+        TxtStatusJob.Text = displayName;
+        TxtJobName.Text = displayName;
+        Title = CurrentJobWindowTitle();
         UpdateStatusBarSegments();
         TxtStatusPage.Text = _currentPage?.Name ?? "—";
     }
@@ -430,7 +520,11 @@ public partial class MainWindow
 
         try
         {
-            _lastMeasurementPageFolderRepairCount = RepairMeasurementPageFolderReferences();
+            _lastMeasurementPageFolderRepairCount = IsCurrentJobWritable
+                ? RepairMeasurementPageFolderReferences()
+                : 0;
+            if (!IsCurrentJobWritable)
+                _lastMeasurementPageFolderUnresolvedCount = 0;
             RestoreExpandedTreeState(TakeoffsTree, _expandedTakeoffTreePaths, GetTakeoffNodePath);
 
             _viewport.SetMeasurements(_takeoffItems.SelectMany(i => i.Measurements));

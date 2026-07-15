@@ -76,30 +76,55 @@ public partial class MainWindow
             PostStatusInfo("Open or create a job before importing PlanSwift into the current job.");
             return;
         }
+        if (!EnsureCurrentJobWritable("import PlanSwift data into this job"))
+            return;
 
-        string currentJobPath = _currentJob.RootPath;
+        OurPlanCoreJob importJob = _currentJob;
+        string currentJobPath = importJob.RootPath;
         var dialog = new PlanSwiftImportDialog(
             currentJobPath,
             importIntoCurrentJob: true,
-            currentJobName: _currentJob.Name)
+            currentJobName: importJob.Name)
         {
             Owner = this,
         };
         if (dialog.ShowDialog() != true)
             return;
+        if (!EnsureExpectedJobWritable(importJob, "import PlanSwift data into this job", showDialog: true))
+            return;
 
         PlanSwiftImportOptions options = dialog.ImportOptions;
+        if (!SameJobPath(options.DestinationJobPath, currentJobPath))
+        {
+            PostStatusInfo("PlanSwift import cancelled because its destination no longer matches the current job.");
+            return;
+        }
         if (!TryFlushTakeoffAutosaves("import PlanSwift data into the current job"))
+            return;
+        if (!EnsureExpectedJobWritable(importJob, "import PlanSwift data into this job"))
             return;
 
         PlanSwiftImportResult result;
         using (ShowBusyOverlay("Importing PlanSwift job into current job..."))
         {
             await WaitForBusyOverlayRenderAsync();
+            if (!EnsureExpectedJobWritable(importJob, "import PlanSwift data into this job"))
+                return;
             TxtStatus.Text = "Importing PlanSwift job into the current job. The source folder is read-only.";
-            result = await Task.Run(() => PlanSwiftProjectImporter.Import(options));
+            try
+            {
+                JobWriteAccess.Demand(currentJobPath, "import PlanSwift data into this job");
+                result = await Task.Run(() => PlanSwiftProjectImporter.Import(options));
+            }
+            catch (JobWriteDeniedException ex)
+            {
+                TxtStatus.Text = $"PlanSwift import stopped because write access changed: {ex.Message}";
+                return;
+            }
         }
 
+        if (!EnsureExpectedJobWritable(importJob, "reload the PlanSwift import result"))
+            return;
         if (!OpenJob(currentJobPath))
         {
             TxtStatus.Text = "PlanSwift import completed, but the current job could not be reloaded safely.";

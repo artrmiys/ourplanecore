@@ -381,9 +381,10 @@ public partial class MainWindow
     {
         if (_currentJob == null)
             return;
+        OurPlanCoreJob reviewJob = _currentJob;
 
-        SmartAiRequest? request = SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id);
-        var existingMarkers = SmartContextStore.LoadAiMarkers(_currentJob).ToList();
+        SmartAiRequest? request = SmartContextStore.LoadAiRequest(reviewJob, item.Observation.Id);
+        var existingMarkers = SmartContextStore.LoadAiMarkers(reviewJob).ToList();
         var createdIds = new List<string>();
         var appliedIndices = new List<int>();
         PageInfo? lastPage = null;
@@ -411,6 +412,7 @@ public partial class MainWindow
                 string cropPath = request?.CropPath ?? "";
                 SKRect cropRect = CandidateCropRect(points);
                 if (TrySavePageCrop(
+                        reviewJob,
                         page,
                         cropRect,
                         "roof_marker_candidate",
@@ -446,13 +448,13 @@ public partial class MainWindow
                         point);
 
                     SmartObservation observation = SmartContextStore.AddObservation(
-                        _currentJob,
+                        reviewJob,
                         page,
                         "ai_marker",
                         details);
 
                     SmartAiMarker marker = SmartContextStore.SaveAiMarker(
-                        _currentJob,
+                        reviewJob,
                         page,
                         observation,
                         markerType,
@@ -477,7 +479,7 @@ public partial class MainWindow
             if (createdIds.Count == 0)
             {
                 draft.Status = "reviewed_no_actions";
-                SmartContextStore.SaveAiActionDraft(_currentJob, draft);
+                SmartContextStore.SaveAiActionDraft(reviewJob, draft);
                 LoadObservationsInbox();
                 TxtStatus.Text = skippedDuplicates > 0
                     ? $"Auto Roof review saved; {skippedDuplicates} duplicate marker candidate(s) were skipped."
@@ -491,7 +493,7 @@ public partial class MainWindow
                 .Distinct()
                 .OrderBy(index => index)
                 .ToList();
-            SmartContextStore.SaveAiActionDraft(_currentJob, draft);
+            SmartContextStore.SaveAiActionDraft(reviewJob, draft);
 
             _viewport.ClearAiActionDraftPreview();
             if (lastPage != null)

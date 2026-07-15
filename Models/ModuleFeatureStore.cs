@@ -51,6 +51,8 @@ public static class ModuleFeatureStore
     public static void ClearJobOverride(OurPlanCoreJob job)
     {
         string path = GetJobConfigPath(job);
+        if (File.Exists(path))
+            JobWriteAccess.Demand(path, "clear job module settings");
         try
         {
             if (File.Exists(path))
@@ -97,6 +99,7 @@ public static class ModuleFeatureStore
     private static void Save(string path, ModuleFeatureConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
+        JobWriteAccess.Demand(path, "save module settings");
         ModuleFeatureConfig writable = ModuleFeatureConfig.UpgradeForCurrentSchema(config);
         IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(writable, JsonOptions));
     }

@@ -71,6 +71,12 @@ public sealed partial class PdfViewport
         {
             var pdf = ScreenToPdf((float)pos.X, (float)pos.Y);
             _lastPointerPdf = pdf;
+            if (HandleReadOnlyLeftMouseDown(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (HandleAiCropNoteMouseDown(pdf))
             {
                 e.Handled = true;
@@ -710,6 +716,9 @@ public sealed partial class PdfViewport
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (HandleReadOnlyKeyDown(e))
+            return;
+
         if (HandleThreeDRoofKey(e))
             return;
 

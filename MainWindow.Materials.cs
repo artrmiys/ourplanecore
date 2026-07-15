@@ -87,6 +87,8 @@ public partial class MainWindow
             PostStatusInfo("Open or create a job before extracting materials.");
             return;
         }
+        if (!EnsureCurrentJobWritable("extract materials for this job"))
+            return;
 
         IReadOnlyList<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
         IReadOnlyList<string> pdfs = MaterialExtractionService.UniqueSourcePdfs(pages);
@@ -104,7 +106,8 @@ public partial class MainWindow
         try
         {
             MaterialExtractionRunResult run = await MaterialExtractionService.ExtractAsync(job, pdfs, cts.Token);
-            if (!IsModuleEnabled(ModuleId.Materials))
+            if (!IsModuleEnabled(ModuleId.Materials) ||
+                !EnsureExpectedJobWritable(job, "apply material extraction results"))
                 return;
             ApplyMaterialsResult(run.Result);
             TxtStatus.Text = $"Materials: {run.Result.Rows.Count} row(s), {run.Result.Schedules.Count} schedule(s).";
@@ -130,6 +133,8 @@ public partial class MainWindow
             PostStatusInfo("Open or create a job before creating a materials report.");
             return;
         }
+        if (!EnsureCurrentJobWritable("create a materials report"))
+            return;
 
         IReadOnlyList<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
         if (MaterialExtractionService.UniqueSourcePdfs(pages).Count == 0)
@@ -148,6 +153,8 @@ public partial class MainWindow
     {
         if (!IsModuleEnabled(ModuleId.Materials) || _currentJob == null || sourcePages.Count == 0)
             return;
+        if (!EnsureCurrentJobWritable("create a materials report"))
+            return;
 
         OurPlanCoreJob job = _currentJob;
         using CancellationTokenSource cts = StartMaterialsWork();
@@ -165,11 +172,15 @@ public partial class MainWindow
                 ? await AnalyzeAndApplySheetMetadataAsync(sourcePages, "Materials")
                 : new MaterialReportSheetMetadataSummary(0, 0, 0, 0);
             cts.Token.ThrowIfCancellationRequested();
+            if (!EnsureExpectedJobWritable(job, "create a materials report"))
+                return;
 
-            string destinationFolder = OurPlanCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. reports");
+            string destinationFolder = OurPlanCoreJobStore.EnsureFolder(job.PagesRoot, "00. reports");
             using (ShowBusyOverlay("Extracting materials and creating report sheet..."))
             {
                 await WaitForBusyOverlayRenderAsync();
+                if (!EnsureExpectedJobWritable(job, "create a materials report"))
+                    return;
                 BusyOverlayText.Text = "Materials: reading source PDFs, schedules, and OCR pages...";
                 TxtStatus.Text = "Materials: creating report sheet.";
                 MaterialReportPageResult result = await MaterialReportPageService.CreateReportPagesAsync(
@@ -257,6 +268,8 @@ public partial class MainWindow
 
         SaveCurrentPageScale();
         OurPlanCoreJob job = _currentJob;
+        if (!EnsureExpectedJobWritable(job, "analyze and apply sheet metadata"))
+            return new MaterialReportSheetMetadataSummary(0, 0, 0, sourcePages.Count);
         SheetMetadataImportPolicy policy = SheetMetadataRulesService.Active.ImportPolicy;
         bool persistDuringAnalysis = policy == SheetMetadataImportPolicy.LegacyAutoApply;
         TxtStatus.Text = $"{statusPrefix}: auto naming/scaling source sheets.";
@@ -265,6 +278,8 @@ public partial class MainWindow
         using (ShowBusyOverlay($"{statusPrefix}: analyzing {sourcePages.Count} sheet(s)..."))
         {
             await WaitForBusyOverlayRenderAsync();
+            if (!EnsureExpectedJobWritable(job, "analyze and apply sheet metadata"))
+                return new MaterialReportSheetMetadataSummary(0, 0, 0, sourcePages.Count);
             results = await Task.Run(() =>
             {
                 var analyzed = new List<PdfMetadataPageResult>();
@@ -282,6 +297,8 @@ public partial class MainWindow
                 return analyzed;
             });
         }
+        if (!EnsureExpectedJobWritable(job, "apply sheet metadata results"))
+            return new MaterialReportSheetMetadataSummary(results.Count, 0, 0, results.Count);
 
         if (policy == SheetMetadataImportPolicy.AnalyzeOnly)
         {
@@ -324,6 +341,8 @@ public partial class MainWindow
                     0,
                     results.Count(result => !result.Ok));
             }
+            if (!EnsureExpectedJobWritable(job, "apply reviewed sheet metadata", showDialog: true))
+                return new MaterialReportSheetMetadataSummary(results.Count, 0, 0, results.Count);
 
             rows = dialog.Rows.ToList();
         }

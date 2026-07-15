@@ -41,7 +41,7 @@ public partial class MainWindow
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 3, 4),
         });
-        _threeDRoofPitchBox = new TextBox
+        _threeDRoofPitchBox = RegisterThreeDMutationControl(new TextBox
         {
             Text = "6/12",
             Width = 56,
@@ -49,7 +49,7 @@ public partial class MainWindow
             FontSize = 11,
             Margin = new Thickness(0, 0, 4, 4),
             ToolTip = "Default pitch for Auto Roof and new slope edges, for example 6/12, 4, or 0.333",
-        };
+        });
         _threeDRoofPitchBox.KeyDown += (_, e) =>
         {
             if (KeyboardShortcutKeys.EffectiveKey(e) != Key.Enter)
@@ -62,7 +62,7 @@ public partial class MainWindow
         toolbar.Children.Add(ThreeDSideButton("Generate Roof", "Build ridge/hip/valley from the saved per-edge roof pitches", GenerateThreeDRoofFromUi));
         toolbar.Children.Add(ThreeDSideButton("Move Roof", "Toggle move mode, then drag in the 3D viewer to slide the roof over the walls when they were drawn from different sheets", ToggleThreeDRoofMoveMode));
         toolbar.Children.Add(ThreeDSideButton("Reset Pos", "Move the roof back to its generated position", ResetThreeDRoofOffset));
-        toolbar.Children.Add(ThreeDSideButton("Roof Qty", "Show roof takeoff quantities: sloped/plan area, ridge, hip, valley and eave lengths", ShowThreeDRoofQuantities));
+        toolbar.Children.Add(ThreeDSideButton("Roof Qty", "Show roof takeoff quantities: sloped/plan area, ridge, hip, valley and eave lengths", ShowThreeDRoofQuantities, mutates: false));
         toolbar.Children.Add(ThreeDSideButton("Roof Takeoff", "Create reviewable takeoff items (eave/ridge/hip/valley lines + plan area) from the generated roof", CreateRoofTakeoffFromGenerated));
         panel.Children.Add(toolbar);
 
@@ -153,8 +153,8 @@ public partial class MainWindow
         editor.Children.Add(_threeDEditSelectionText);
 
         var inputs = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 4) };
-        _threeDHeightBox = ThreeDEditBox("Height ft");
-        _threeDThicknessBox = ThreeDEditBox("Width in");
+        _threeDHeightBox = RegisterThreeDMutationControl(ThreeDEditBox("Height ft"));
+        _threeDThicknessBox = RegisterThreeDMutationControl(ThreeDEditBox("Width in"));
         inputs.Children.Add(_threeDHeightBox);
         inputs.Children.Add(_threeDThicknessBox);
         editor.Children.Add(inputs);
@@ -195,19 +195,19 @@ public partial class MainWindow
             Margin = new Thickness(0, 0, 0, 4),
         });
 
-        _threeDRoofDefinesSlopeCheck = new CheckBox
+        _threeDRoofDefinesSlopeCheck = RegisterThreeDMutationControl(new CheckBox
         {
             Content = "Defines Slope (eave)",
             IsThreeState = true,
             FontSize = 11,
             Margin = new Thickness(0, 0, 0, 4),
             ToolTip = "When on, this edge slopes a roof plane at the pitch below; off makes it a flat rake/gable edge",
-        };
+        });
         stack.Children.Add(_threeDRoofDefinesSlopeCheck);
 
         var inputs = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 4) };
-        _threeDRoofEdgePitchBox = ThreeDEditBox("Pitch rise/run, e.g. 6/12, 4, or 0.333");
-        _threeDRoofEdgeOverhangBox = ThreeDEditBox("Overhang beyond the wall, in inches");
+        _threeDRoofEdgePitchBox = RegisterThreeDMutationControl(ThreeDEditBox("Pitch rise/run, e.g. 6/12, 4, or 0.333"));
+        _threeDRoofEdgeOverhangBox = RegisterThreeDMutationControl(ThreeDEditBox("Overhang beyond the wall, in inches"));
         _threeDRoofEdgePitchBox.KeyDown += ThreeDRoofEdgeField_KeyDown;
         _threeDRoofEdgeOverhangBox.KeyDown += ThreeDRoofEdgeField_KeyDown;
         inputs.Children.Add(LabeledField("Pitch", _threeDRoofEdgePitchBox));
@@ -315,10 +315,11 @@ public partial class MainWindow
                     : "No 3D wall selected";
         _threeDHeightBox.Text = hasWall ? _selectedThreeDWall!.HeightFeet.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "";
         _threeDThicknessBox.Text = hasWall ? _selectedThreeDWall!.ThicknessInches.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "";
-        _threeDHeightBox.IsEnabled = hasWall;
-        _threeDThicknessBox.IsEnabled = hasWall;
-        _threeDApplyWallButton.IsEnabled = hasWall;
-        _threeDApplyGroupButton.IsEnabled = hasWall;
+        bool canEditWall = hasWall && ThreeDEditingAllowed;
+        _threeDHeightBox.IsEnabled = canEditWall;
+        _threeDThicknessBox.IsEnabled = canEditWall;
+        _threeDApplyWallButton.IsEnabled = canEditWall;
+        _threeDApplyGroupButton.IsEnabled = canEditWall;
 
         UpdateThreeDRoofEdgeGroup(selectedRoofEdgeCount);
         UpdateThreeDRoofMoveControls();
@@ -338,10 +339,11 @@ public partial class MainWindow
         IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
         bool any = guides.Count > 0;
         _threeDRoofEdgeGroup.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
-        _threeDRoofDefinesSlopeCheck.IsEnabled = any;
-        _threeDRoofEdgePitchBox.IsEnabled = any;
-        _threeDRoofEdgeOverhangBox.IsEnabled = any;
-        _threeDRoofApplyEdgeButton.IsEnabled = any;
+        bool canEditEdges = any && ThreeDEditingAllowed;
+        _threeDRoofDefinesSlopeCheck.IsEnabled = canEditEdges;
+        _threeDRoofEdgePitchBox.IsEnabled = canEditEdges;
+        _threeDRoofEdgeOverhangBox.IsEnabled = canEditEdges;
+        _threeDRoofApplyEdgeButton.IsEnabled = canEditEdges;
         if (!any)
             return;
 
@@ -371,7 +373,7 @@ public partial class MainWindow
         _ = selectedRoofEdgeCount;
     }
 
-    private static Button ThreeDSideButton(string text, string tooltip, Action action)
+    private Button ThreeDSideButton(string text, string tooltip, Action action, bool mutates = true)
     {
         var button = new Button
         {
@@ -383,6 +385,6 @@ public partial class MainWindow
             ToolTip = tooltip,
         };
         button.Click += (_, _) => action();
-        return button;
+        return mutates ? RegisterThreeDMutationControl(button) : button;
     }
 }

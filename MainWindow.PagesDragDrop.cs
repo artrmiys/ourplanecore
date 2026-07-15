@@ -15,6 +15,12 @@ public partial class MainWindow
         if (UpdatePagesTreeMarqueeSelection(e))
             return;
 
+        if (IsCurrentJobReadOnly)
+        {
+            ResetPagesDragState();
+            return;
+        }
+
         if (_pagesDragStart == null)
             return;
 
@@ -76,6 +82,12 @@ public partial class MainWindow
 
     private void DoPagesDragDrop(object payload, DragDropEffects effects)
     {
+        if (!EnsureCurrentJobWritable("drag pages or folders"))
+        {
+            ResetPagesDragState();
+            return;
+        }
+
         try
         {
             DragDrop.DoDragDrop(PagesTree, payload, effects);
@@ -97,6 +109,14 @@ public partial class MainWindow
     private void PagesTree_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = DragDropEffects.None;
+        if (IsCurrentJobReadOnly)
+        {
+            ClearPageTakeoffLegendDropCue();
+            ClearPagesPositionDropCue();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Data.GetData(typeof(PageTakeoffLegendDrag)) is PageTakeoffLegendDrag legendDrag)
         {
             TreeViewItem? legendTargetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
@@ -152,6 +172,15 @@ public partial class MainWindow
 
     private void PagesTree_Drop(object sender, DragEventArgs e)
     {
+        if (!EnsureCurrentJobWritable("drop pages or folders"))
+        {
+            ClearPageTakeoffLegendDropCue();
+            ClearPagesPositionDropCue();
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
         if (e.Data.GetData(typeof(PageTakeoffLegendDrag)) is PageTakeoffLegendDrag legendDrag)
         {
             TreeViewItem? legendTargetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
@@ -204,7 +233,10 @@ public partial class MainWindow
 
     private bool CanDropPagesToRootBottom(PagesClipboard payload)
     {
-        if (_currentJob == null || payload.Entries.Count == 0 || !Directory.Exists(_currentJob.PagesRoot))
+        if (IsCurrentJobReadOnly ||
+            _currentJob == null ||
+            payload.Entries.Count == 0 ||
+            !Directory.Exists(_currentJob.PagesRoot))
             return false;
 
         foreach (PagesClipboardEntry entry in payload.Entries)
@@ -263,7 +295,7 @@ public partial class MainWindow
         canDrop = false;
         status = "";
 
-        if (copy || _currentJob == null || payload.Entries.Count == 0 || targetItem == null)
+        if (IsCurrentJobReadOnly || copy || _currentJob == null || payload.Entries.Count == 0 || targetItem == null)
             return false;
 
         string? targetPath = GetPagesNodePath(targetItem);
@@ -301,7 +333,10 @@ public partial class MainWindow
 
     private bool CanDropPagesToPosition(PagesClipboard payload, string targetPath, bool after)
     {
-        if (_currentJob == null || payload.Entries.Count == 0 || string.IsNullOrWhiteSpace(targetPath))
+        if (IsCurrentJobReadOnly ||
+            _currentJob == null ||
+            payload.Entries.Count == 0 ||
+            string.IsNullOrWhiteSpace(targetPath))
             return false;
 
         string targetParent = Path.GetDirectoryName(targetPath) ?? "";
@@ -377,6 +412,9 @@ public partial class MainWindow
 
     private void DropPagesPosition(PagesClipboard payload, TreeViewItem targetItem, bool after)
     {
+        if (!EnsureCurrentJobWritable("reorder pages or folders"))
+            return;
+
         string? targetPath = GetPagesNodePath(targetItem);
         if (string.IsNullOrWhiteSpace(targetPath))
             return;
@@ -451,6 +489,9 @@ public partial class MainWindow
 
     private void DropPagesToRootBottom(PagesClipboard payload)
     {
+        if (!EnsureCurrentJobWritable("move pages or folders"))
+            return;
+
         if (_currentJob == null)
             return;
 

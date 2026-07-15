@@ -386,6 +386,47 @@ internal static class PlanSwiftImportTests
         });
     }
 
+    public static void ImportIntoReadOnlyCurrentJobStopsBeforeMutation()
+    {
+        WithTempParent(parent =>
+        {
+            string sourceJob = Path.Combine(parent, "PlanSwift Job");
+            CreateSyntheticPlanSwiftJob(sourceJob);
+            OurPlanCoreJob currentJob = OurPlanCoreJobStore.CreateJob(parent, "Read Only ONC Job");
+            string pageBucket = Path.Combine(
+                currentJob.PagesRoot,
+                PlanSwiftImportOptions.DefaultCurrentJobImportFolderName);
+            string takeoffBucket = Path.Combine(
+                currentJob.TakeoffsRoot,
+                PlanSwiftImportOptions.DefaultCurrentJobImportFolderName);
+
+            JobWriteAccess.ResetForTests();
+            JobAccessSessionToken token = JobWriteAccess.RegisterJob(
+                currentJob.RootPath,
+                JobAccessMode.ReadOnly);
+            try
+            {
+                Throws<JobWriteDeniedException>(() => PlanSwiftProjectImporter.Import(new PlanSwiftImportOptions
+                {
+                    SourceJobPath = sourceJob,
+                    DestinationJobPath = currentJob.RootPath,
+                    ConvertPageImages = false,
+                }));
+
+                AssertFalse(Directory.Exists(pageBucket), "read-only import must not create the page bucket");
+                AssertFalse(Directory.Exists(takeoffBucket), "read-only import must not create the takeoff bucket");
+                AssertFalse(
+                    Directory.Exists(Path.Combine(currentJob.RootPath, "import_reports")),
+                    "read-only import must not create reports");
+            }
+            finally
+            {
+                JobWriteAccess.Close(token);
+                JobWriteAccess.ResetForTests();
+            }
+        });
+    }
+
     public static void ImportCopiesExistingOurPlanCoreJobTakeoffs()
     {
         WithTempParent(parent =>
@@ -1205,6 +1246,20 @@ internal static class PlanSwiftImportTests
     {
         if (condition)
             throw new InvalidOperationException(message);
+    }
+
+    private static T Throws<T>(Action action) where T : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (T error)
+        {
+            return error;
+        }
+
+        throw new InvalidOperationException($"Expected {typeof(T).Name}.");
     }
 
     private static string FindRepoRoot()

@@ -75,6 +75,8 @@ public partial class MainWindow
     {
         if (_currentJob == null)
             return;
+        if (!EnsureCurrentJobWritable("analyze and apply PDF metadata"))
+            return;
 
         var pages = GetPagesForMetadata(item).ToList();
         if (pages.Count == 0)
@@ -93,6 +95,8 @@ public partial class MainWindow
         using (ShowBusyOverlay($"Analyzing PDF metadata for {pages.Count} page(s)..."))
         {
             await WaitForBusyOverlayRenderAsync();
+            if (!EnsureExpectedJobWritable(job, "analyze PDF metadata"))
+                return;
             results = await Task.Run(() =>
             {
                 var analyzed = new List<PdfMetadataPageResult>();
@@ -110,6 +114,8 @@ public partial class MainWindow
                 return analyzed;
             });
         }
+        if (!EnsureExpectedJobWritable(job, "review PDF metadata results"))
+            return;
 
         int okCount = results.Count(result => result.Ok);
         int failCount = results.Count - okCount;
@@ -149,6 +155,8 @@ public partial class MainWindow
             TxtStatus.Text = $"PDF metadata analyzed: {okCount} OK, apply cancelled.";
             return;
         }
+        if (!EnsureExpectedJobWritable(job, "apply PDF metadata results", showDialog: true))
+            return;
 
         ApplyPdfMetadataResults(job, results, dialog.Rows);
     }
@@ -159,6 +167,12 @@ public partial class MainWindow
         IReadOnlyList<PdfMetadataPreviewRow> rows,
         bool reviewedByUser = true)
     {
+        if (!IsExpectedJobWritable(job))
+        {
+            TxtStatus.Text = "PDF metadata was not applied because the originating job changed or became read-only.";
+            return new PdfMetadataApplySummary(0, 0, rows.Count);
+        }
+
         int renamed = 0;
         int scaled = 0;
         int failed = 0;
@@ -174,6 +188,12 @@ public partial class MainWindow
                      row.ScaleAction != PdfMetadataScaleAction.Keep ||
                      (reviewedByUser && row.ReviewScale)))
         {
+            if (!IsExpectedJobWritable(job))
+            {
+                failed++;
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(row.PageFolder))
             {
                 failed++;

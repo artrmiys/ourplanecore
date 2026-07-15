@@ -34,6 +34,9 @@ public partial class MainWindow
             return;
         }
 
+        if (!EnsureThreeDEditable("build the 3D massing draft"))
+            return;
+
         try
         {
             SmartMassingDraft draft = SmartMassingDraftService.SaveDraftFromMarkers(_currentJob);
@@ -62,6 +65,9 @@ public partial class MainWindow
             TxtStatus.Text = "Open a job before building a 3D draft from takeoffs.";
             return;
         }
+
+        if (!EnsureThreeDEditable("build the 3D massing draft from takeoffs"))
+            return;
 
         double currentLevelSpacing = _settings.MassingLevelSpacingFeet > 0
             ? _settings.MassingLevelSpacingFeet
@@ -111,6 +117,9 @@ public partial class MainWindow
             TxtStatus.Text = "Open a job before running AI 3D Sort.";
             return;
         }
+
+        if (!EnsureThreeDEditable("run AI 3D Sort"))
+            return;
 
         string apiKey = AppSettingsStore.ReadOpenAiApiKey();
         if (string.IsNullOrWhiteSpace(apiKey))

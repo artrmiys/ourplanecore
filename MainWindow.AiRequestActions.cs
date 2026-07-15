@@ -29,11 +29,12 @@ public partial class MainWindow
     private bool CanAddManualAiResponse(ObservationDisplayItem item) =>
         IsModuleEnabled(ModuleId.Ai) &&
         _currentJob != null &&
+        IsCurrentJobWritable &&
         SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id) != null;
 
     private bool CanRunAiRequest(ObservationDisplayItem item)
     {
-        if (!IsModuleEnabled(ModuleId.Ai) || _currentJob == null || _isRunningAiRequest)
+        if (!IsModuleEnabled(ModuleId.Ai) || _currentJob == null || !IsCurrentJobWritable || _isRunningAiRequest)
             return false;
 
         SmartAiRequest? request = SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id);
@@ -68,6 +69,8 @@ public partial class MainWindow
             return;
 
         if (_currentJob == null)
+            return;
+        if (!EnsureCurrentJobWritable("apply an AI sheet metadata response"))
             return;
 
         SmartAiRequest? request = SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id);
@@ -197,6 +200,8 @@ public partial class MainWindow
             TxtStatus.Text = "Open a job before running AI.";
             return;
         }
+        if (!EnsureCurrentJobWritable("run an AI request"))
+            return;
 
         if (_isRunningAiRequest)
         {
@@ -249,6 +254,8 @@ public partial class MainWindow
 
         if (_currentJob == null)
             return;
+        if (!EnsureCurrentJobWritable("run an AI request"))
+            return;
 
         if (IsRoofRecognitionRequest(request) && StopLegacy3DMassingWorkflow("Auto Roof AI request"))
             return;
@@ -267,13 +274,14 @@ public partial class MainWindow
         }
 
         string model = AppSettingsStore.ResolveOpenAiModel(_settings);
+        OurPlanCoreJob runJob = _currentJob;
         var runCts = new CancellationTokenSource();
         _activeAiRequestCts = runCts;
         _isRunningAiRequest = true;
         try
         {
             request.Status = "running";
-            SmartContextStore.SaveAiRequest(_currentJob, request);
+            SmartContextStore.SaveAiRequest(runJob, request);
             TxtStatus.Text = $"Running AI request {request.Id}...";
             LoadObservationsInbox();
 
@@ -282,7 +290,7 @@ public partial class MainWindow
             {
                 await WaitForBusyOverlayRenderAsync();
                 result = await OpenAiRequestRunner.RunAsync(
-                    _currentJob,
+                    runJob,
                     request,
                     apiKey,
                     model,
@@ -290,11 +298,12 @@ public partial class MainWindow
             }
 
             runCts.Token.ThrowIfCancellationRequested();
+            JobWriteAccess.Demand(runJob.RootPath, "save an AI response");
 
             if (result.Success)
             {
                 SmartAiResponse response = SmartContextStore.SaveAiResponse(
-                    _currentJob,
+                    runJob,
                     request,
                     "done",
                     result.OutputText,
@@ -303,13 +312,13 @@ public partial class MainWindow
                     result.Model,
                     result.ProviderResponseId,
                     result.RawResponsePath);
-                SmartContextStore.SaveAiActionDraftFromResponse(_currentJob, request, response);
+                SmartContextStore.SaveAiActionDraftFromResponse(runJob, request, response);
                 TxtStatus.Text = $"AI response saved for {request.Id}.";
             }
             else
             {
                 SmartAiResponse response = SmartContextStore.SaveAiResponse(
-                    _currentJob,
+                    runJob,
                     request,
                     "failed",
                     "",
@@ -318,37 +327,50 @@ public partial class MainWindow
                     result.Model,
                     result.ProviderResponseId,
                     result.RawResponsePath);
-                SmartContextStore.SaveAiActionDraftFromResponse(_currentJob, request, response);
+                SmartContextStore.SaveAiActionDraftFromResponse(runJob, request, response);
                 ReportAiRequestFailure(result.Error);
             }
         }
         catch (OperationCanceledException) when (runCts.IsCancellationRequested)
         {
-            SmartContextStore.SaveAiResponse(
-                _currentJob,
-                request,
-                "cancelled",
-                "",
-                "AI request cancelled because the AI module was disabled.",
-                "openai",
-                model,
-                "",
-                "");
-            TxtStatus.Text = $"AI request {request.Id} cancelled.";
+            if (JobWriteAccess.GetMode(runJob.RootPath) == JobAccessMode.Writable)
+            {
+                SmartContextStore.SaveAiResponse(
+                    runJob,
+                    request,
+                    "cancelled",
+                    "",
+                    "AI request cancelled before completion.",
+                    "openai",
+                    model,
+                    "",
+                    "");
+            }
+            TxtStatus.Text = IsCurrentJobWritable
+                ? $"AI request {request.Id} cancelled."
+                : $"AI request {request.Id} cancelled because the job became read-only.";
+        }
+        catch (JobWriteDeniedException ex)
+        {
+            TxtStatus.Text = $"AI request {request.Id} stopped because write access was lost.";
+            AppLog.Warn(ex, TxtStatus.Text);
         }
         catch (Exception ex)
         {
-            SmartAiResponse response = SmartContextStore.SaveAiResponse(
-                _currentJob,
-                request,
-                "failed",
-                "",
-                ex.Message,
-                "openai",
-                model,
-                "",
-                "");
-            SmartContextStore.SaveAiActionDraftFromResponse(_currentJob, request, response);
+            if (JobWriteAccess.GetMode(runJob.RootPath) == JobAccessMode.Writable)
+            {
+                SmartAiResponse response = SmartContextStore.SaveAiResponse(
+                    runJob,
+                    request,
+                    "failed",
+                    "",
+                    ex.Message,
+                    "openai",
+                    model,
+                    "",
+                    "");
+                SmartContextStore.SaveAiActionDraftFromResponse(runJob, request, response);
+            }
             ReportAiRequestFailure(ex.Message);
         }
         finally

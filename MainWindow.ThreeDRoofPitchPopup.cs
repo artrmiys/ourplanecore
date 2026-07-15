@@ -114,6 +114,12 @@ public partial class MainWindow
 
     private void ApplyThreeDRoofPitchFromPopup()
     {
+        if (!EnsureThreeDEditable("edit 3D roof edge pitch"))
+        {
+            HideThreeDRoofPitchPopup();
+            return;
+        }
+
         IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
         if (guides.Count == 0 || _threeDRoofPitchPopupBox == null)
         {

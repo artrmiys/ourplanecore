@@ -8,7 +8,7 @@ public partial class MainWindow
 {
     private void QueueSheetLegendAutoSortSweep()
     {
-        if (_currentJob == null)
+        if (_currentJob == null || !IsCurrentJobWritable)
             return;
 
         string jobRoot = _currentJob.RootPath;
@@ -28,7 +28,7 @@ public partial class MainWindow
 
     private void RunSheetLegendAutoSortSweep()
     {
-        if (_currentJob == null)
+        if (_currentJob == null || !IsCurrentJobWritable)
             return;
 
         int cleared = 0;

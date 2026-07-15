@@ -48,6 +48,7 @@ public static partial class SmartLearningStore
 
     public static void EnsureLearningStore(OurPlanCoreJob job)
     {
+        JobWriteAccess.Demand(ProjectLearningRoot(job), "prepare project learning store");
         Directory.CreateDirectory(ProjectLearningRoot(job));
         Directory.CreateDirectory(GlobalLearningRoot);
         EnsureFile(ProjectSheetFeedbackPath(job), "");
@@ -193,7 +194,8 @@ public static partial class SmartLearningStore
 
     public static SmartLearnedRuleSet LoadProjectLearnedRules(OurPlanCoreJob job)
     {
-        EnsureLearningStore(job);
+        if (JobWriteAccess.IsWriteAllowed(job.RootPath))
+            EnsureLearningStore(job);
         return LoadJson<SmartLearnedRuleSet>(ProjectLearnedRulesPath(job)) ?? new SmartLearnedRuleSet();
     }
 

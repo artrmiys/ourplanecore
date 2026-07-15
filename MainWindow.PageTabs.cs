@@ -464,8 +464,11 @@ public partial class MainWindow
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
-            QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage);
-            QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage);
+            if (IsCurrentJobWritable)
+            {
+                QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage);
+                QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage);
+            }
             ApplyViewportPageTakeoffVisibility(viewportPage);
             RefreshAiMarkersOverlay();
             RefreshThreeDRoofGuideOverlay();
@@ -478,7 +481,9 @@ public partial class MainWindow
             bool autoLoaded = _currentJob == null && _takeoffItems.Count == 0 && TryAutoLoad();
             if (!autoLoaded)
             {
-                IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt);
+                IReadOnlyList<TakeoffItem> scaledItems = IsCurrentJobWritable
+                    ? ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt)
+                    : [];
                 RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems);
             }
             trace?.Mark("takeoff-refresh");
@@ -529,7 +534,7 @@ public partial class MainWindow
     {
         // Whole-job sweep is opt-in: on big jobs it competes with interactive
         // sharpening for CPU/disk for many minutes after a job opens.
-        if (_currentJob == null || !_settings.BackgroundJobWarmupEnabled)
+        if (_currentJob == null || !IsCurrentJobWritable || !_settings.BackgroundJobWarmupEnabled)
             return;
 
         string jobRoot = _currentJob.RootPath;
@@ -561,7 +566,7 @@ public partial class MainWindow
 
     private void QueueJobRasterSheetRefreshWarmupDeferred(int deferredVersion, PageInfo viewportPage)
     {
-        if (_currentJob == null || !_settings.BackgroundJobWarmupEnabled)
+        if (_currentJob == null || !IsCurrentJobWritable || !_settings.BackgroundJobWarmupEnabled)
             return;
 
         string jobRoot = _currentJob.RootPath;
@@ -691,7 +696,7 @@ public partial class MainWindow
 
     private void QueueNearbyPagePreviewPrefetch(PageInfo activePage)
     {
-        if (_currentJob == null || string.IsNullOrWhiteSpace(activePage.FolderPath))
+        if (_currentJob == null || !IsCurrentJobWritable || string.IsNullOrWhiteSpace(activePage.FolderPath))
             return;
 
         string pagesRoot = _currentJob.PagesRoot;
@@ -788,7 +793,7 @@ public partial class MainWindow
 
     private void QueueJobPagePreviewWarmup(PageInfo activePage)
     {
-        if (_currentJob == null || string.IsNullOrWhiteSpace(activePage.FolderPath))
+        if (_currentJob == null || !IsCurrentJobWritable || string.IsNullOrWhiteSpace(activePage.FolderPath))
             return;
 
         string pagesRoot = _currentJob.PagesRoot;

@@ -363,6 +363,8 @@ public partial class MainWindow
 
         if (_currentJob == null)
             return;
+        if (!EnsureCurrentJobWritable("analyze sheets in Sheet Manager"))
+            return;
 
         IReadOnlyList<PageInfo> pages = SelectedSheetManagerPages();
         if (pages.Count == 0)
@@ -388,6 +390,8 @@ public partial class MainWindow
             using (ShowBusyOverlay($"Sheet Manager analyzing {pages.Count} sheet(s)..."))
             {
                 await WaitForBusyOverlayRenderAsync();
+                if (!EnsureExpectedJobWritable(job, "analyze sheets in Sheet Manager"))
+                    return;
                 results = await Task.Run(() =>
                 {
                     var analyzed = new List<PdfMetadataPageResult>();
@@ -417,6 +421,8 @@ public partial class MainWindow
             if (ReferenceEquals(_sheetManagerAnalysisCts, analysisCts))
                 _sheetManagerAnalysisCts = null;
         }
+        if (!EnsureExpectedJobWritable(job, "show Sheet Manager analysis results"))
+            return;
 
         if (!IsModuleEnabled(ModuleId.SheetManager))
             return;
@@ -469,6 +475,8 @@ public partial class MainWindow
     private void BtnSheetManagerApplyChecked_Click(object sender, RoutedEventArgs e)
     {
         if (_currentJob == null)
+            return;
+        if (!EnsureCurrentJobWritable("apply Sheet Manager name and scale changes"))
             return;
 
         SheetManagerGrid.CommitEdit(DataGridEditingUnit.Cell, true);

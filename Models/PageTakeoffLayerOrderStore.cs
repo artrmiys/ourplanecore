@@ -34,6 +34,7 @@ public static class PageTakeoffLayerOrderStore
     public static void Save(string pageFolder, IReadOnlyList<string> order)
     {
         string path = Path.Combine(pageFolder, FileName);
+        JobWriteAccess.Demand(path, "save takeoff layer order");
         var file = new PageTakeoffLayerOrderFile
         {
             Order = Normalize(order).ToList(),

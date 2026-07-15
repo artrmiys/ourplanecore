@@ -123,7 +123,8 @@ internal static class TakeoffsTreeRegressionTests
             deferredMethod.Contains("QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal) &&
             !deferredMethod.Contains("OurPlanCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
-            deferredMethod.Contains("IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("IReadOnlyList<TakeoffItem> scaledItems = IsCurrentJobWritable", StringComparison.Ordinal) &&
+            deferredMethod.Contains("? ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "deferred page-open work should keep the previous follow-up operations behind a stale-page guard");
@@ -3768,6 +3769,7 @@ internal static class TakeoffsTreeRegressionTests
         string detail = ReadRepoFile(Path.Combine("Controls", "PdfViewport.DetailRender.cs"));
         string rendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Rendering.cs"));
         string recovery = ReadRepoFile("MainWindow.JobRecovery.cs");
+        string jobAccess = ReadRepoFile("MainWindow.JobAccess.cs");
 
         AssertTrue(
             source.Contains("OURPLANCORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM", StringComparison.Ordinal) &&
@@ -3857,10 +3859,10 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("ViewportPerformanceRecorder.RecordSlowFrame", StringComparison.Ordinal),
             "viewport render, decode, and paint paths must feed the perf recorder");
         AssertTrue(
-            recovery.Contains("ShouldSuppressAutomatedRecoveryPrompt", StringComparison.Ordinal) &&
-            recovery.Contains("ViewportPageStressSmokeEnv", StringComparison.Ordinal) &&
-            recovery.Contains("Skipping stale recovery prompt during automation", StringComparison.Ordinal),
-            "hidden viewport stress smoke must not block on the stale recovery MessageBox before opening the first sheet");
+            !recovery.Contains("QueueOpenedJobRecovery", StringComparison.Ordinal) &&
+            !recovery.Contains("JobRecoveryService.WriteLock", StringComparison.Ordinal) &&
+            jobAccess.Contains("leaseService.TryAcquire(jobRoot)", StringComparison.Ordinal),
+            "hidden viewport stress smoke must use the enforced lease path and never queue the legacy stale-recovery prompt");
     }
 
     public static void PagesTreeSelectedSheetScaleMenuIsWired()

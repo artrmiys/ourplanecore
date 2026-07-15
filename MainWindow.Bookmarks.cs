@@ -23,6 +23,7 @@ public partial class MainWindow
             dockRow: BookmarksDockRow,
             setStatus: message => TxtStatus.Text = message,
             currentJob: () => _currentJob,
+            canWriteCurrentJob: () => IsCurrentJobWritable,
             currentPage: () => _currentPage,
             viewport: _viewport,
             openBookmarkView: OpenPageBookmarkView);
@@ -40,6 +41,9 @@ public partial class MainWindow
 
     private void AddBookmarkFromShortcut() =>
         _bookmarksController?.AddFromShortcut();
+
+    private void ApplyBookmarksJobAccessState() =>
+        _bookmarksController?.ApplyJobAccessState();
 
     private void OpenPageBookmarkView(PageInfo page, PdfViewport.ViewState viewState)
     {

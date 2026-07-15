@@ -176,6 +176,7 @@ internal static class StorageSupport
 
     public static void WriteItemDataXml(string folder, string itemClass, string name, int orderIndex)
     {
+        JobWriteAccess.Demand(Path.Combine(folder, "Data.xml"), "create node metadata");
         string guid = Guid.NewGuid().ToString().ToUpperInvariant();
         var root = new XElement("Item",
             new XAttribute("Class", itemClass),
@@ -197,6 +198,7 @@ internal static class StorageSupport
     // path as measurements.json.
     internal static void SaveDataXmlAtomic(string folder, XDocument doc)
     {
+        JobWriteAccess.Demand(Path.Combine(folder, "Data.xml"), "save node metadata");
         using var writer = new Utf8StringWriter();
         doc.Save(writer);
         IoUtil.WriteAllTextAtomic(Path.Combine(folder, "Data.xml"), writer.ToString());
@@ -209,6 +211,7 @@ internal static class StorageSupport
 
     public static void UpdateItemName(string folder, string name)
     {
+        JobWriteAccess.Demand(Path.Combine(folder, "Data.xml"), "rename node metadata");
         XDocument? doc = GetCachedDoc(folder);
         XElement? root = doc?.Root;
         if (doc == null || root == null) return;
@@ -233,6 +236,7 @@ internal static class StorageSupport
 
     public static void SetProperty(string folder, string propertyName, string value)
     {
+        JobWriteAccess.Demand(Path.Combine(folder, "Data.xml"), $"set '{propertyName}' metadata");
         XDocument? doc = GetCachedDoc(folder);
         XElement? root = doc?.Root;
         if (doc == null || root == null) return;
@@ -248,6 +252,7 @@ internal static class StorageSupport
     /// </summary>
     public static void SetProperties(string folder, IEnumerable<KeyValuePair<string, string>> properties)
     {
+        JobWriteAccess.Demand(Path.Combine(folder, "Data.xml"), "set node metadata");
         XDocument? doc = GetCachedDoc(folder);
         XElement? root = doc?.Root;
         if (doc == null || root == null) return;
@@ -313,6 +318,8 @@ internal static class StorageSupport
             {
                 string timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                 targetPath = UniqueCorruptJsonPath($"{path}.corrupt-{timestamp}");
+                JobWriteAccess.Demand(path, "quarantine corrupt JSON");
+                JobWriteAccess.Demand(targetPath, "quarantine corrupt JSON");
                 File.Move(path, targetPath);
             }
         }

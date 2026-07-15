@@ -37,6 +37,7 @@ public static partial class SmartContextStore
     public static (int Archived, int Failed) ArchiveStaleRequestFiles(string jobRoot, int keepDays = 60)
     {
         string contextRoot = ContextRoot(jobRoot);
+        JobWriteAccess.Demand(contextRoot, "archive stale AI requests");
         DateTime cutoff = DateTime.UtcNow.AddDays(-Math.Max(7, keepDays));
         int archived = 0;
         int failed = 0;
@@ -54,12 +55,19 @@ public static partial class SmartContextStore
                     if (File.GetLastWriteTimeUtc(file) >= cutoff)
                         continue;
 
+                    JobWriteAccess.Demand(target, "create AI request archive");
                     Directory.CreateDirectory(target);
                     string destination = Path.Combine(target, Path.GetFileName(file));
                     if (File.Exists(destination))
                         destination = StorageSupport.UniqueFilePath(destination);
+                    JobWriteAccess.Demand(file, "archive stale AI request");
+                    JobWriteAccess.Demand(destination, "archive stale AI request");
                     File.Move(file, destination);
                     archived++;
+                }
+                catch (JobWriteDeniedException)
+                {
+                    throw;
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -81,6 +89,7 @@ public static partial class SmartContextStore
     public static int ResetStuckRunningRequests(string jobRoot)
     {
         string requestsDir = Path.Combine(ContextRoot(jobRoot), "requests");
+        JobWriteAccess.Demand(requestsDir, "reset stale AI requests");
         if (!Directory.Exists(requestsDir))
             return 0;
 
@@ -96,8 +105,13 @@ public static partial class SmartContextStore
 
                 request.Status = "failed";
                 request.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
+                JobWriteAccess.Demand(file, "reset stale AI request");
                 IoUtil.WriteAllTextAtomic(file, JsonSerializer.Serialize(request, JsonOptions));
                 reset++;
+            }
+            catch (JobWriteDeniedException)
+            {
+                throw;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
@@ -119,6 +133,7 @@ public static partial class SmartContextStore
     public static int PruneOrphanCrops(string jobRoot, int keepDays = 60)
     {
         string contextRoot = ContextRoot(jobRoot);
+        JobWriteAccess.Demand(contextRoot, "prune orphan AI crops");
         string cropsDir = Path.Combine(contextRoot, "crops");
         if (!Directory.Exists(cropsDir))
             return 0;
@@ -165,8 +180,13 @@ public static partial class SmartContextStore
                 if (references.Contains(name, StringComparison.OrdinalIgnoreCase))
                     continue;
 
+                JobWriteAccess.Demand(crop, "delete orphan AI crop");
                 File.Delete(crop);
                 pruned++;
+            }
+            catch (JobWriteDeniedException)
+            {
+                throw;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -180,17 +200,18 @@ public static partial class SmartContextStore
     public static SmartProjectContext EnsureProjectContext(string jobRoot, string projectName)
     {
         string contextRoot = ContextRoot(jobRoot);
-        Directory.CreateDirectory(contextRoot);
-        Directory.CreateDirectory(Path.Combine(contextRoot, "pages"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "crops"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "requests"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "responses"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "actions"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "markers"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "marker_sets"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "crop_bookmarks"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "exports"));
-        Directory.CreateDirectory(Path.Combine(contextRoot, "learning"));
+        JobWriteAccess.Demand(contextRoot, "prepare AI project context");
+        CreateJobDirectory(contextRoot, "prepare AI project context");
+        CreateJobDirectory(Path.Combine(contextRoot, "pages"), "prepare AI pages context");
+        CreateJobDirectory(Path.Combine(contextRoot, "crops"), "prepare AI crops context");
+        CreateJobDirectory(Path.Combine(contextRoot, "requests"), "prepare AI requests context");
+        CreateJobDirectory(Path.Combine(contextRoot, "responses"), "prepare AI responses context");
+        CreateJobDirectory(Path.Combine(contextRoot, "actions"), "prepare AI actions context");
+        CreateJobDirectory(Path.Combine(contextRoot, "markers"), "prepare AI markers context");
+        CreateJobDirectory(Path.Combine(contextRoot, "marker_sets"), "prepare AI marker sets context");
+        CreateJobDirectory(Path.Combine(contextRoot, "crop_bookmarks"), "prepare AI crop bookmarks context");
+        CreateJobDirectory(Path.Combine(contextRoot, "exports"), "prepare AI exports context");
+        CreateJobDirectory(Path.Combine(contextRoot, "learning"), "prepare AI learning context");
 
         string projectJsonPath = ProjectContextPath(jobRoot);
         SmartProjectContext context = LoadProjectContext(projectJsonPath) ?? new SmartProjectContext
@@ -217,8 +238,13 @@ public static partial class SmartContextStore
         return context;
     }
 
-    public static IReadOnlyList<string> LoadHiddenMarkerTypes(OurPlanCoreJob job) =>
-        EnsureProjectContext(job.RootPath, job.Name).HiddenMarkerTypes.ToList();
+    public static IReadOnlyList<string> LoadHiddenMarkerTypes(OurPlanCoreJob job)
+    {
+        if (!JobWriteAccess.IsWriteAllowed(job.RootPath))
+            return LoadProjectContext(ProjectContextPath(job.RootPath))?.HiddenMarkerTypes.ToList() ?? [];
+
+        return EnsureProjectContext(job.RootPath, job.Name).HiddenMarkerTypes.ToList();
+    }
 
     public static void SaveHiddenMarkerTypes(OurPlanCoreJob job, IEnumerable<string> hiddenMarkerTypes)
     {
@@ -248,12 +274,16 @@ public static partial class SmartContextStore
         };
 
         string contextRoot = ContextRoot(job.RootPath);
+        string observationsPath = Path.Combine(contextRoot, "observations.jsonl");
+        string projectMarkdownPath = Path.Combine(contextRoot, "project.md");
+        JobWriteAccess.Demand(observationsPath, "append AI observation");
         File.AppendAllText(
-            Path.Combine(contextRoot, "observations.jsonl"),
+            observationsPath,
             JsonSerializer.Serialize(observation) + Environment.NewLine);
 
+        JobWriteAccess.Demand(projectMarkdownPath, "append AI project notes");
         File.AppendAllText(
-            Path.Combine(contextRoot, "project.md"),
+            projectMarkdownPath,
             BuildMarkdownObservation(observation));
 
         return observation;
@@ -320,12 +350,22 @@ public static partial class SmartContextStore
         {
             IoUtil.WriteAllTextAtomic(requestPath, JsonSerializer.Serialize(request, JsonOptions));
         }
+        catch (JobWriteDeniedException)
+        {
+            throw;
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             throw new InvalidOperationException($"Failed to save '{Path.GetFileName(requestPath)}': {ex.Message}", ex);
         }
 
         return request;
+    }
+
+    private static void CreateJobDirectory(string path, string operation)
+    {
+        JobWriteAccess.Demand(path, operation);
+        Directory.CreateDirectory(path);
     }
 
 }

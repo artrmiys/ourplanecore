@@ -25,15 +25,19 @@ public partial class MainWindow
 
     private void QueueRoofRecognitionRequest()
     {
+        if (!EnsureThreeDEditable("queue Auto Roof recognition"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before running Auto Roof.";
             return;
         }
+        OurPlanCoreJob recognitionJob = _currentJob;
 
         try
         {
-            IReadOnlyList<SmartAiMarker> allMarkers = SmartContextStore.LoadAiMarkers(_currentJob);
+            IReadOnlyList<SmartAiMarker> allMarkers = SmartContextStore.LoadAiMarkers(recognitionJob);
             PageInfo? page = _currentPage ?? allMarkers
                 .Where(IsRoofRecognitionSourceMarker)
                 .Select(ResolveMarkerPage)
@@ -46,11 +50,12 @@ public partial class MainWindow
             }
 
             List<SmartAiMarker> pageMarkers = allMarkers
-                .Where(marker => MarkerBelongsToPage(marker, page, _currentJob))
+                .Where(marker => MarkerBelongsToPage(marker, page, recognitionJob))
                 .Where(IsRoofRecognitionSourceMarker)
                 .ToList();
 
             if (!TrySaveRoofRecognitionCrop(
+                    recognitionJob,
                     page,
                     pageMarkers,
                     out string cropPath,
@@ -92,13 +97,13 @@ public partial class MainWindow
                 prompt;
 
             SmartObservation observation = SmartContextStore.AddObservation(
-                _currentJob,
+                recognitionJob,
                 page,
                 "roof_recognition_request",
                 details);
 
             SmartContextStore.AddAiRequest(
-                _currentJob,
+                recognitionJob,
                 page,
                 observation,
                 "roof_recognition_request",
@@ -117,6 +122,7 @@ public partial class MainWindow
     }
 
     private bool TrySaveRoofRecognitionCrop(
+        OurPlanCoreJob recognitionJob,
         PageInfo page,
         IReadOnlyList<SmartAiMarker> pageMarkers,
         out string relativePath,
@@ -126,6 +132,7 @@ public partial class MainWindow
     {
         SKRect requested = RoofRecognitionCropRect(pageMarkers, out cropMode);
         return TrySavePageCrop(
+            recognitionJob,
             page,
             requested,
             "roof_recognition",

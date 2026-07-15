@@ -182,6 +182,9 @@ public partial class MainWindow
 
     private void OnJoistDirectionCaptured(Measurement area, SKPoint start, SKPoint end)
     {
+        if (!EnsureCurrentJobWritable("change joist direction"))
+            return;
+
         TakeoffItem? item = FindTakeoffItemForMeasurement(area);
         if (item == null)
             return;

@@ -21,6 +21,14 @@ public partial class MainWindow
 
     private void OnScaleChanged(double scale)
     {
+        if (IsCurrentJobReadOnly)
+        {
+            UpdateScaleUi(scale);
+            UpdateStatusBarSegments();
+            TxtStatus.Text = "Read-only: sheet scale was not changed.";
+            return;
+        }
+
         if (_currentPage != null)
             _currentPage.ScaleMetersPerPt = scale;
         // Only takeoffs with measurements on the current page can change
@@ -81,6 +89,9 @@ public partial class MainWindow
 
     private void OnViewportTakeoffRenameRequested(Measurement? measurement)
     {
+        if (!EnsureCurrentJobWritable("rename a takeoff"))
+            return;
+
         if (measurement == null)
         {
             TxtStatus.Text = "Select a measurement before pressing F2.";
@@ -125,6 +136,18 @@ public partial class MainWindow
             IsEnabled = false,
         });
         menu.Items.Add(new Separator());
+
+        if (IsCurrentJobReadOnly)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = "Read-only job: view and copy only",
+                IsEnabled = false,
+            });
+            AddMeasurementClipboardMenuItems(menu, request);
+            menu.IsOpen = true;
+            return;
+        }
 
         if (IsModuleEnabled(ModuleId.SheetOverlay) && request.OverlayHit != ViewportOverlayHitKind.None)
         {
@@ -174,6 +197,9 @@ public partial class MainWindow
 
     private async void OnAiCropNoteSelectionCompleted(ViewportAiCropSelectionRequest selection)
     {
+        if (!EnsureCurrentJobWritable("create an AI crop note"))
+            return;
+
         if (!RequireModule(ModuleId.Ai, "AI crop note"))
             return;
 
@@ -201,6 +227,9 @@ public partial class MainWindow
 
     private void SaveViewportObservation(ViewportContextRequest request, string type, string title, string initialText)
     {
+        if (!EnsureCurrentJobWritable("save an AI observation"))
+            return;
+
         if (!RequireModule(ModuleId.Ai, title))
             return;
 
@@ -245,6 +274,9 @@ public partial class MainWindow
 
     private void SaveAiCropObservation(ViewportContextRequest request)
     {
+        if (!EnsureCurrentJobWritable("save an AI crop"))
+            return;
+
         if (!RequireModule(ModuleId.Ai, "Save AI crop"))
             return;
 
@@ -272,11 +304,17 @@ public partial class MainWindow
 
     private async Task ReadAiCropIntoNoteAsync(ViewportContextRequest request, SKRect? selectedCropRect = null)
     {
+        if (!EnsureCurrentJobWritable("create an AI crop note"))
+            return;
+
         if (!RequireModule(ModuleId.Ai, "AI crop note"))
             return;
 
         if (_currentJob == null || _currentPage == null)
             return;
+
+        OurPlanCoreJob runJob = _currentJob;
+        PageInfo runPage = _currentPage;
 
         if (_isRunningAiRequest)
         {
@@ -310,13 +348,13 @@ public partial class MainWindow
             details += $"- Measurement: {measurementSummary}" + Environment.NewLine;
 
         SmartObservation observation = SmartContextStore.AddObservation(
-            _currentJob,
-            _currentPage,
+            runJob,
+            runPage,
             "quick_crop_note_request",
             details);
         SmartAiRequest aiRequest = SmartContextStore.AddAiRequest(
-            _currentJob,
-            _currentPage,
+            runJob,
+            runPage,
             observation,
             "quick_crop_note_request",
             prompt,
@@ -337,7 +375,7 @@ public partial class MainWindow
         try
         {
             aiRequest.Status = "running";
-            SmartContextStore.SaveAiRequest(_currentJob, aiRequest);
+            SmartContextStore.SaveAiRequest(runJob, aiRequest);
             TxtStatus.Text = $"Reading crop into note with {OpenAiRequestRunner.QuickCropNoteModel}...";
             LoadObservationsInbox();
 
@@ -346,7 +384,7 @@ public partial class MainWindow
             {
                 await WaitForBusyOverlayRenderAsync();
                 result = await OpenAiRequestRunner.RunAsync(
-                    _currentJob,
+                    runJob,
                     aiRequest,
                     apiKey,
                     OpenAiRequestRunner.QuickCropNoteModel,
@@ -354,11 +392,12 @@ public partial class MainWindow
             }
 
             runCts.Token.ThrowIfCancellationRequested();
+            JobWriteAccess.Demand(runJob.RootPath, "save an AI crop note response");
 
             if (!result.Success)
             {
                 SmartContextStore.SaveAiResponse(
-                    _currentJob,
+                    runJob,
                     aiRequest,
                     "failed",
                     "",
@@ -372,7 +411,7 @@ public partial class MainWindow
             }
 
             SmartContextStore.SaveAiResponse(
-                _currentJob,
+                runJob,
                 aiRequest,
                 "done",
                 result.OutputText,
@@ -386,35 +425,50 @@ public partial class MainWindow
             SKPoint noteOrigin = AiCropNoteOrigin(request, cropRect);
             int lineCount = noteText.Replace("\r\n", "\n").Split('\n').Length;
             float height = Math.Clamp(120f + lineCount * 17f, 170f, 360f);
+            if (!ReferenceEquals(_currentJob, runJob) || !IsCurrentJobWritable)
+                return;
             _viewport.AddNoteAnnotationAt(noteOrigin, noteText, "#F9A825", 380f, height);
-            TxtStatus.Text = $"AI crop note added on {_currentPage.Name}.";
+            TxtStatus.Text = $"AI crop note added on {runPage.Name}.";
         }
         catch (OperationCanceledException) when (runCts.IsCancellationRequested)
         {
-            SmartContextStore.SaveAiResponse(
-                _currentJob,
-                aiRequest,
-                "cancelled",
-                "",
-                "AI crop note cancelled because the AI module was disabled.",
-                "openai",
-                OpenAiRequestRunner.QuickCropNoteModel,
-                "",
-                "");
-            TxtStatus.Text = $"AI crop note {aiRequest.Id} cancelled.";
+            if (JobWriteAccess.GetMode(runJob.RootPath) == JobAccessMode.Writable)
+            {
+                SmartContextStore.SaveAiResponse(
+                    runJob,
+                    aiRequest,
+                    "cancelled",
+                    "",
+                    "AI crop note cancelled before completion.",
+                    "openai",
+                    OpenAiRequestRunner.QuickCropNoteModel,
+                    "",
+                    "");
+            }
+            TxtStatus.Text = IsCurrentJobWritable
+                ? $"AI crop note {aiRequest.Id} cancelled."
+                : $"AI crop note {aiRequest.Id} cancelled because the job became read-only.";
+        }
+        catch (JobWriteDeniedException ex)
+        {
+            TxtStatus.Text = $"AI crop note {aiRequest.Id} stopped because write access was lost.";
+            AppLog.Warn(ex, TxtStatus.Text);
         }
         catch (Exception ex)
         {
-            SmartContextStore.SaveAiResponse(
-                _currentJob,
-                aiRequest,
-                "failed",
-                "",
-                ex.Message,
-                "openai",
-                OpenAiRequestRunner.QuickCropNoteModel,
-                "",
-                "");
+            if (JobWriteAccess.GetMode(runJob.RootPath) == JobAccessMode.Writable)
+            {
+                SmartContextStore.SaveAiResponse(
+                    runJob,
+                    aiRequest,
+                    "failed",
+                    "",
+                    ex.Message,
+                    "openai",
+                    OpenAiRequestRunner.QuickCropNoteModel,
+                    "",
+                    "");
+            }
             TxtStatus.Text = $"AI crop note failed: {ex.Message}";
         }
         finally
@@ -471,6 +525,9 @@ public partial class MainWindow
 
     private void SaveAiMarker(ViewportContextRequest request)
     {
+        if (!EnsureCurrentJobWritable("save an AI marker"))
+            return;
+
         if (!RequireModule(ModuleId.Ai, "Save AI marker"))
             return;
 
@@ -848,6 +905,9 @@ public partial class MainWindow
 
     private void SuggestTakeoffItemFromContext(ViewportContextRequest request)
     {
+        if (!EnsureCurrentJobWritable("create a takeoff suggestion"))
+            return;
+
         if (!RequireModule(ModuleId.Ai, "Suggest takeoff item"))
             return;
 

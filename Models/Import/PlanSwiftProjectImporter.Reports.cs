@@ -17,6 +17,7 @@ public static partial class PlanSwiftProjectImporter
         PlanSwiftImportResult result)
     {
         string reportRoot = Path.Combine(job.RootPath, "import_reports");
+        JobWriteAccess.Demand(reportRoot, "create PlanSwift import reports");
         Directory.CreateDirectory(reportRoot);
 
         var json = new
@@ -83,8 +84,10 @@ public static partial class PlanSwiftProjectImporter
             messages = result.Messages,
         };
 
+        string manifestPath = Path.Combine(reportRoot, "planswift_import_manifest.json");
+        JobWriteAccess.Demand(manifestPath, "write a PlanSwift import manifest");
         File.WriteAllText(
-            Path.Combine(reportRoot, "planswift_import_manifest.json"),
+            manifestPath,
             JsonSerializer.Serialize(json, OurPlanCoreJobStore.JsonOptions));
 
         var sourceMetadata = new
@@ -115,12 +118,16 @@ public static partial class PlanSwiftProjectImporter
             notes = manifest.Notes,
         };
 
+        string metadataPath = Path.Combine(reportRoot, "planswift_source_metadata.json");
+        JobWriteAccess.Demand(metadataPath, "write PlanSwift source metadata");
         File.WriteAllText(
-            Path.Combine(reportRoot, "planswift_source_metadata.json"),
+            metadataPath,
             JsonSerializer.Serialize(sourceMetadata, OurPlanCoreJobStore.JsonOptions));
 
+        string reportPath = Path.Combine(reportRoot, "planswift_import_report.md");
+        JobWriteAccess.Demand(reportPath, "write a PlanSwift import report");
         File.WriteAllText(
-            Path.Combine(reportRoot, "planswift_import_report.md"),
+            reportPath,
             BuildReportMarkdown(manifest, result));
     }
 

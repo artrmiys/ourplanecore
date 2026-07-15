@@ -314,7 +314,7 @@ public partial class MainWindow
 
     private void OnPdfLayersDiscovered(IReadOnlyList<PdfLayerInfo> layers)
     {
-        if (_currentPage == null || _currentPage.PdfLayersCached)
+        if (_currentPage == null || _currentPage.PdfLayersCached || !IsCurrentJobWritable)
             return;
 
         try

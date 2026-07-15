@@ -93,13 +93,19 @@ public partial class MainWindow
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!FlushTakeoffAutosavesBeforeClose())
+        if (IsCurrentJobReadOnly && !PrepareReadOnlyJobForExit("close OurPlanCore"))
         {
             e.Cancel = true;
             return;
         }
 
-        if (!SaveCurrentPageStateBeforeClose())
+        if (!IsCurrentJobReadOnly && !FlushTakeoffAutosavesBeforeClose())
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        if (!IsCurrentJobReadOnly && !SaveCurrentPageStateBeforeClose())
         {
             e.Cancel = true;
             return;
@@ -114,8 +120,9 @@ public partial class MainWindow
         _sheetLegendAutoSortTimer.Stop();
         _takeoffSaveService.Stop();
         RunCloseCleanup(SaveSidePanelWidths, "save side panel widths");
-        RunCloseCleanup(RunRasterCacheCleanupOnClose, "clean raster cache");
-        RunCloseCleanup(ClearJobRecoveryLock, "clear job recovery lock");
+        if (IsCurrentJobWritable)
+            RunCloseCleanup(RunRasterCacheCleanupOnClose, "clean raster cache");
+        RunCloseCleanup(CloseCurrentJobAccess, "release job lease");
         RunCloseCleanup(PdfLayerRenderService.StopWorker, "stop PDF layer worker");
         base.OnClosed(e);
     }

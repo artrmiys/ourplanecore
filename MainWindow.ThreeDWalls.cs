@@ -35,6 +35,9 @@ public partial class MainWindow
             return;
         }
 
+        if (!_threeDRoofMoveModeEnabled && !EnsureThreeDEditable("move the 3D roof"))
+            return;
+
         _threeDRoofMoveModeEnabled = !_threeDRoofMoveModeEnabled;
         TxtStatus.Text = _threeDRoofMoveModeEnabled
             ? "3D Move Roof: drag in the viewer to slide the roof over the walls. Toggle off when aligned."
@@ -45,6 +48,9 @@ public partial class MainWindow
     private void ResetThreeDRoofOffset()
     {
         if (!RequireModule(ModuleId.ThreeD, "Reset 3D roof position"))
+            return;
+
+        if (!EnsureThreeDEditable("reset the 3D roof position"))
             return;
 
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
@@ -75,7 +81,7 @@ public partial class MainWindow
     private void NudgeThreeDRoofOffsetFromDrag(PerspectiveCamera camera, Vector delta, double distance)
     {
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
-        if (placement == null)
+        if (placement == null || !ThreeDEditingAllowed)
             return;
 
         Vector3D look = camera.LookDirection;
@@ -129,6 +135,9 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.ThreeD, "Build 3D walls"))
             return;
 
+        if (!EnsureThreeDEditable("build 3D walls"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before building 3D walls.";
@@ -178,6 +187,9 @@ public partial class MainWindow
     private void BuildAuto3DWallsFromTakeoffs(bool switchTo3DTab)
     {
         if (!RequireModule(ModuleId.ThreeD, "Auto-build 3D model"))
+            return;
+
+        if (!EnsureThreeDEditable("auto-build the 3D model"))
             return;
 
         if (_currentJob == null)
@@ -340,6 +352,12 @@ public partial class MainWindow
 
     private void SaveCurrentThreeDModel(bool allowEmpty = false)
     {
+        if (!IsCurrentJobWritable)
+        {
+            AppLog.Warn("Blocked a 3D model save because the current job is read-only.");
+            return;
+        }
+
         if (_currentJob == null ||
             (!allowEmpty &&
              _threeDWallElements.Count == 0 &&

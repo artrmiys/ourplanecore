@@ -51,12 +51,14 @@ public partial class MainWindow
         {
             if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Up)
             {
-                MovePageTakeoffLegendNodes(node, -1);
+                if (EnsureCurrentJobWritable("reorder the sheet legend"))
+                    MovePageTakeoffLegendNodes(node, -1);
                 e.Handled = true;
             }
             else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Down)
             {
-                MovePageTakeoffLegendNodes(node, 1);
+                if (EnsureCurrentJobWritable("reorder the sheet legend"))
+                    MovePageTakeoffLegendNodes(node, 1);
                 e.Handled = true;
             }
             return;
@@ -136,50 +138,51 @@ public partial class MainWindow
         {
             int selectedCount = PageSelectionCount(item);
             bool isRoot = folder.IsRoot;
+            bool canWrite = !IsCurrentJobReadOnly;
             bool canPaste = CanPasteInto(folder.FolderPath);
             bool hasChildren = Directory.Exists(folder.FolderPath) &&
                                Directory.EnumerateDirectories(folder.FolderPath).Any();
             IReadOnlyList<PageInfo> folderLegendPages = LegendPagesInFolder(folder.FolderPath);
 
-            menu.Items.Add(MakeMenuItem("New Blank Sheet", true, () => NewBlankPage(item)));
-            menu.Items.Add(MakeMenuItem("New Folder", true, () => NewPageFolder(item)));
-            menu.Items.Add(MakeMenuItem("Rename Folder", !isRoot && selectedCount <= 1, () => RenamePagesNode(item)));
-            menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Folder", !isRoot || selectedCount > 1, () => DeletePagesNode(item)));
+            menu.Items.Add(MakeMenuItem("New Blank Sheet", canWrite, () => NewBlankPage(item)));
+            menu.Items.Add(MakeMenuItem("New Folder", canWrite, () => NewPageFolder(item)));
+            menu.Items.Add(MakeMenuItem("Rename Folder", canWrite && !isRoot && selectedCount <= 1, () => RenamePagesNode(item)));
+            menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Folder", canWrite && (!isRoot || selectedCount > 1), () => DeletePagesNode(item)));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeSubmenu(
                 "Clipboard",
                 MakeMenuItem(selectedCount > 1 ? "Copy Selected" : "Copy Folder", !isRoot || selectedCount > 1, () => CopyCutPagesNode(item, PagesClipboardMode.Copy)),
-                MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Folder", !isRoot || selectedCount > 1, () => CopyCutPagesNode(item, PagesClipboardMode.Cut)),
+                MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Folder", canWrite && (!isRoot || selectedCount > 1), () => CopyCutPagesNode(item, PagesClipboardMode.Cut)),
                 MakeMenuItem("Paste Into Folder", canPaste, () => PasteIntoSelectedTarget(item))));
             menu.Items.Add(MakeSubmenu(
                 "Organize",
-                MakeMenuItem("Auto Create Folders", true, () => AutoCreatePageFolders(folder.FolderPath)),
-                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up", CanMovePagesNodes(item, -1), () => MovePagesNodes(item, -1)),
-                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down", CanMovePagesNodes(item, 1), () => MovePagesNodes(item, 1)),
-                MakeMenuItem("Sort Children A-Z", hasChildren, () => SortFolderChildren(item, descending: false)),
-                MakeMenuItem("Sort Children Z-A", hasChildren, () => SortFolderChildren(item, descending: true)),
-                MakeMenuItem("Sort Sheet Legends Auto in Folder", CanSortPageLegends(folderLegendPages), () => SortPageLegendsAuto(folderLegendPages)),
-                MakeMenuItem("Sort Sheet Legends A-Z in Folder", CanSortPageLegends(folderLegendPages), () => SortPageLegendsByName(folderLegendPages)),
-                MakeMenuItem("Reset Sheet Legend Orders in Folder", HasCustomPageLegendOrders(folderLegendPages), () => ResetPageLegendOrders(folderLegendPages)),
-                MakeMenuItem("Sort A/S in This Folder", true, () => SortPagesIntoArchStruct(folder.FolderPath)),
-                MakeMenuItem("Sort D/Sec/WT in This Folder", true, () => SortPagesBySuffix(folder.FolderPath)),
-                MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks)));
+                MakeMenuItem("Auto Create Folders", canWrite, () => RunPagesMutation("create page folders", () => AutoCreatePageFolders(folder.FolderPath))),
+                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up", canWrite && CanMovePagesNodes(item, -1), () => MovePagesNodes(item, -1)),
+                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down", canWrite && CanMovePagesNodes(item, 1), () => MovePagesNodes(item, 1)),
+                MakeMenuItem("Sort Children A-Z", canWrite && hasChildren, () => SortFolderChildren(item, descending: false)),
+                MakeMenuItem("Sort Children Z-A", canWrite && hasChildren, () => SortFolderChildren(item, descending: true)),
+                MakeMenuItem("Sort Sheet Legends Auto in Folder", canWrite && CanSortPageLegends(folderLegendPages), () => RunPagesMutation("sort sheet legends", () => SortPageLegendsAuto(folderLegendPages))),
+                MakeMenuItem("Sort Sheet Legends A-Z in Folder", canWrite && CanSortPageLegends(folderLegendPages), () => RunPagesMutation("sort sheet legends", () => SortPageLegendsByName(folderLegendPages))),
+                MakeMenuItem("Reset Sheet Legend Orders in Folder", canWrite && HasCustomPageLegendOrders(folderLegendPages), () => RunPagesMutation("reset sheet legend order", () => ResetPageLegendOrders(folderLegendPages))),
+                MakeMenuItem("Sort A/S in This Folder", canWrite, () => RunPagesMutation("sort pages into architecture and structure", () => SortPagesIntoArchStruct(folder.FolderPath))),
+                MakeMenuItem("Sort D/Sec/WT in This Folder", canWrite, () => RunPagesMutation("sort pages by suffix", () => SortPagesBySuffix(folder.FolderPath))),
+                MakeMenuItem("Repair Measurement Links", canWrite, () => RunPagesMutation("repair measurement links", RepairMeasurementPageLinks))));
             if (IsModuleEnabled(ModuleId.SheetManager))
             {
                 var folderMetadataMenu = MakeSubmenu(
                     "PDF Metadata",
-                    MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)),
-                    MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)),
-                    MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
-                    MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)));
+                    MakeMenuItem("Analyze PDF Metadata", canWrite, async () => await RunPagesMutationAsync("analyze PDF metadata", () => AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false))),
+                    MakeMenuItem("Auto Rename from PDF...", canWrite, async () => await RunPagesMutationAsync("auto-rename pages", () => AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false))),
+                    MakeMenuItem("Auto Scale from PDF...", canWrite, async () => await RunPagesMutationAsync("auto-scale pages", () => AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true))),
+                    MakeMenuItem("Auto Rename + Scale from PDF...", canWrite, async () => await RunPagesMutationAsync("auto-rename and scale pages", () => AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true))));
                 if (IsModuleEnabled(ModuleId.Ai))
-                    folderMetadataMenu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)));
+                    folderMetadataMenu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", canWrite, () => RunPagesMutation("queue PDF metadata analysis", () => QueuePdfMetadataFallback(item))));
                 menu.Items.Add(folderMetadataMenu);
                 menu.Items.Add(MakeSubmenu(
                     "Learning",
-                    MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
-                    MakeMenuItem("Review Project Learned Rules...", true, ReviewProjectLearnedRules),
-                    MakeMenuItem("Review Global Learned Rules...", true, ReviewLearnedRules)));
+                    MakeMenuItem("Capture Final Learning Snapshot", canWrite, () => RunPagesMutation("capture a learning snapshot", () => CaptureFinalLearningSnapshot(item))),
+                    MakeMenuItem("Review Project Learned Rules...", canWrite, () => RunPagesMutation("edit project learned rules", ReviewProjectLearnedRules)),
+                    MakeMenuItem("Review Global Learned Rules...", canWrite, () => RunPagesMutation("edit global learned rules", ReviewLearnedRules))));
             }
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Open in Explorer", true, () => OpenFolderInExplorer(folder.FolderPath)));
@@ -188,6 +191,7 @@ public partial class MainWindow
         {
             int selectedCount = PageSelectionCount(item);
             int selectedPageCount = GetSelectedPageEntries(item).Count(entry => entry.IsPage);
+            bool canWrite = !IsCurrentJobReadOnly;
             IReadOnlyList<PageInfo> selectedLegendPages = SelectedLegendPages(item);
             int selectedLegendPageCount = selectedLegendPages.Count;
             bool multiLegendPages = selectedLegendPageCount > 1;
@@ -209,15 +213,19 @@ public partial class MainWindow
                     () => OpenSelectedPagesInDetachedWindows(item, tileOnSecondMonitor: true)));
             }
             if (IsModuleEnabled(ModuleId.SheetOverlay))
-                menu.Items.Add(BuildSheetOverlayMenu(page));
+            {
+                MenuItem overlayMenu = BuildSheetOverlayMenu(page);
+                overlayMenu.IsEnabled = canWrite;
+                menu.Items.Add(overlayMenu);
+            }
             menu.Items.Add(MakeMenuItem(
                 selectedPageCount > 1 ? $"Set Scale for {selectedPageCount} Selected..." : "Set Scale...",
-                selectedPageCount >= 1,
-                () => SetSelectedPagesScaleFromContext(item)));
+                canWrite && selectedPageCount >= 1,
+                () => RunPagesMutation("set sheet scale", () => SetSelectedPagesScaleFromContext(item))));
             menu.Items.Add(MakeMenuItem(
                 selectedPageCount > 1 ? $"Apply Current Sheet Scale to {selectedPageCount} Selected" : "Apply Current Sheet Scale",
-                selectedPageCount >= 1 && CurrentPageScaleMetersPerPt() > 0,
-                () => ApplyCurrentScaleToSelectedPagesFromContext(item)));
+                canWrite && selectedPageCount >= 1 && CurrentPageScaleMetersPerPt() > 0,
+                () => RunPagesMutation("apply the current sheet scale", () => ApplyCurrentScaleToSelectedPagesFromContext(item))));
             if (IsModuleEnabled(ModuleId.PdfOutput))
             {
                 menu.Items.Add(MakeMenuItem(
@@ -229,53 +237,53 @@ public partial class MainWindow
                         "Export PDF")));
             }
             menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Rename Page", selectedCount <= 1, () => RenamePagesNode(item)));
-            menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Page", true, () => DeletePagesNode(item)));
-            menu.Items.Add(MakeMenuItem("Duplicate Page", selectedCount <= 1, () => DuplicatePageNode(item)));
-            menu.Items.Add(MakeMenuItem("New Blank Sheet in Parent", selectedCount <= 1, () => NewBlankPage(item)));
+            menu.Items.Add(MakeMenuItem("Rename Page", canWrite && selectedCount <= 1, () => RenamePagesNode(item)));
+            menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Page", canWrite, () => DeletePagesNode(item)));
+            menu.Items.Add(MakeMenuItem("Duplicate Page", canWrite && selectedCount <= 1, () => DuplicatePageNode(item)));
+            menu.Items.Add(MakeMenuItem("New Blank Sheet in Parent", canWrite && selectedCount <= 1, () => NewBlankPage(item)));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeSubmenu(
                 "Clipboard",
                 MakeMenuItem(selectedCount > 1 ? "Copy Selected" : "Copy Page", true, () => CopyCutPagesNode(item, PagesClipboardMode.Copy)),
-                MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Page", true, () => CopyCutPagesNode(item, PagesClipboardMode.Cut)),
+                MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Page", canWrite, () => CopyCutPagesNode(item, PagesClipboardMode.Cut)),
                 MakeMenuItem("Paste Into Parent Folder", CanPasteInto(parent), () => PasteIntoSelectedTarget(item))));
             menu.Items.Add(MakeSubmenu(
                 "Organize",
-                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up", CanMovePagesNodes(item, -1), () => MovePagesNodes(item, -1)),
-                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down", CanMovePagesNodes(item, 1), () => MovePagesNodes(item, 1)),
-                MakeMenuItem("Move to Folder...", selectedCount <= 1, () => MovePageToFolder(item)),
+                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up", canWrite && CanMovePagesNodes(item, -1), () => MovePagesNodes(item, -1)),
+                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down", canWrite && CanMovePagesNodes(item, 1), () => MovePagesNodes(item, 1)),
+                MakeMenuItem("Move to Folder...", canWrite && selectedCount <= 1, () => MovePageToFolder(item)),
                 MakeMenuItem(
                     multiLegendPages ? $"Sort {selectedLegendPageCount} Selected Sheet Legends Auto" : "Sort Sheet Legend Auto",
-                    multiLegendPages ? CanSortPageLegends(selectedLegendPages) : CanSortPageLegend(page),
-                    () => { if (multiLegendPages) SortPageLegendsAuto(selectedLegendPages); else SortPageLegendAuto(page); }),
+                    canWrite && (multiLegendPages ? CanSortPageLegends(selectedLegendPages) : CanSortPageLegend(page)),
+                    () => RunPagesMutation("sort sheet legends", () => { if (multiLegendPages) SortPageLegendsAuto(selectedLegendPages); else SortPageLegendAuto(page); })),
                 MakeMenuItem(
                     multiLegendPages ? $"Sort {selectedLegendPageCount} Selected Sheet Legends A-Z" : "Sort Sheet Legend A-Z",
-                    multiLegendPages ? CanSortPageLegends(selectedLegendPages) : CanSortPageLegend(page),
-                    () => { if (multiLegendPages) SortPageLegendsByName(selectedLegendPages); else SortPageLegendByName(page); }),
+                    canWrite && (multiLegendPages ? CanSortPageLegends(selectedLegendPages) : CanSortPageLegend(page)),
+                    () => RunPagesMutation("sort sheet legends", () => { if (multiLegendPages) SortPageLegendsByName(selectedLegendPages); else SortPageLegendByName(page); })),
                 MakeMenuItem(
                     multiLegendPages ? $"Reset {selectedLegendPageCount} Sheet Legend Orders" : "Reset Sheet Legend Order",
-                    multiLegendPages ? HasCustomPageLegendOrders(selectedLegendPages) : HasCustomPageLegendOrder(page),
-                    () => { if (multiLegendPages) ResetPageLegendOrders(selectedLegendPages); else ResetPageLegendOrder(page); }),
-                MakeMenuItem("Sort A/S into Arch/Struct", true, SortPagesIntoArchStruct),
-                MakeMenuItem("Sort D/Sec/WT by Suffix", true, SortPagesBySuffix),
-                MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks)));
+                    canWrite && (multiLegendPages ? HasCustomPageLegendOrders(selectedLegendPages) : HasCustomPageLegendOrder(page)),
+                    () => RunPagesMutation("reset sheet legend order", () => { if (multiLegendPages) ResetPageLegendOrders(selectedLegendPages); else ResetPageLegendOrder(page); })),
+                MakeMenuItem("Sort A/S into Arch/Struct", canWrite, () => RunPagesMutation("sort pages into architecture and structure", SortPagesIntoArchStruct)),
+                MakeMenuItem("Sort D/Sec/WT by Suffix", canWrite, () => RunPagesMutation("sort pages by suffix", SortPagesBySuffix)),
+                MakeMenuItem("Repair Measurement Links", canWrite, () => RunPagesMutation("repair measurement links", RepairMeasurementPageLinks))));
             if (IsModuleEnabled(ModuleId.SheetManager))
             {
                 var pageMetadataMenu = MakeSubmenu(
                     "PDF Metadata",
-                    MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)),
-                    MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)),
-                    MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
-                    MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)));
+                    MakeMenuItem("Analyze PDF Metadata", canWrite, async () => await RunPagesMutationAsync("analyze PDF metadata", () => AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false))),
+                    MakeMenuItem("Auto Rename from PDF...", canWrite, async () => await RunPagesMutationAsync("auto-rename pages", () => AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false))),
+                    MakeMenuItem("Auto Scale from PDF...", canWrite, async () => await RunPagesMutationAsync("auto-scale pages", () => AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true))),
+                    MakeMenuItem("Auto Rename + Scale from PDF...", canWrite, async () => await RunPagesMutationAsync("auto-rename and scale pages", () => AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true))));
                 if (IsModuleEnabled(ModuleId.Ai))
-                    pageMetadataMenu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)));
+                    pageMetadataMenu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", canWrite, () => RunPagesMutation("queue PDF metadata analysis", () => QueuePdfMetadataFallback(item))));
                 pageMetadataMenu.Items.Add(MakeMenuItem("Open source_pdf.json", File.Exists(OurPlanCoreJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath)));
                 menu.Items.Add(pageMetadataMenu);
                 menu.Items.Add(MakeSubmenu(
                     "Learning",
-                    MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
-                    MakeMenuItem("Review Project Learned Rules...", true, ReviewProjectLearnedRules),
-                    MakeMenuItem("Review Global Learned Rules...", true, ReviewLearnedRules)));
+                    MakeMenuItem("Capture Final Learning Snapshot", canWrite, () => RunPagesMutation("capture a learning snapshot", () => CaptureFinalLearningSnapshot(item))),
+                    MakeMenuItem("Review Project Learned Rules...", canWrite, () => RunPagesMutation("edit project learned rules", ReviewProjectLearnedRules)),
+                    MakeMenuItem("Review Global Learned Rules...", canWrite, () => RunPagesMutation("edit global learned rules", ReviewLearnedRules))));
             }
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Open Page Folder in Explorer", true, () => OpenFolderInExplorer(page.FolderPath)));

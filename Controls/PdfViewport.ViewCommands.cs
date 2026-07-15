@@ -19,7 +19,7 @@ public sealed partial class PdfViewport
 {
     public void SetTool(string name)
     {
-        _tool = name.ToLower() switch
+        ViewerTool requestedTool = name.ToLower() switch
         {
             "select" => ViewerTool.Select,
             "scale" => ViewerTool.Scale,
@@ -40,6 +40,13 @@ public sealed partial class PdfViewport
             "areacut" => ViewerTool.AreaCut,
             _       => ViewerTool.Pan,
         };
+        if (IsReadOnlyMode && requestedTool is not (ViewerTool.Pan or ViewerTool.Select))
+        {
+            PostStatus("Read-only: choose Pan or Select to inspect this job.");
+            return;
+        }
+
+        _tool = requestedTool;
         CancelDrawing(clearSelection: _tool != ViewerTool.AreaCut);
         SetSnapPreview(null);
         UpdateCursor();

@@ -76,6 +76,7 @@ public static class TakeoffFolderPropertiesStore
 
     public static void Save(string folderPath, TakeoffFolderProperties properties)
     {
+        JobWriteAccess.Demand(PropertiesPath(folderPath), "save takeoff-folder properties");
         Directory.CreateDirectory(folderPath);
         properties.SchemaVersion = 1;
         properties.DisplayName = string.IsNullOrWhiteSpace(properties.DisplayName)

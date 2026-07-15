@@ -13,6 +13,9 @@ public partial class MainWindow
 
     private void SetSelectedThreeDRoofGuideKind(string kind, bool applyPitch)
     {
+        if (!EnsureThreeDEditable("edit 3D roof edges"))
+            return;
+
         IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
         if (guides.Count == 0)
         {
@@ -55,6 +58,9 @@ public partial class MainWindow
 
     private void ApplyThreeDRoofPitchToSelectedEdges()
     {
+        if (!EnsureThreeDEditable("edit 3D roof edge pitch"))
+            return;
+
         IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
         if (guides.Count == 0)
         {
@@ -81,6 +87,9 @@ public partial class MainWindow
 
     private void ApplyThreeDRoofPitchToEaves()
     {
+        if (!EnsureThreeDEditable("edit the 3D roof pitch"))
+            return;
+
         double pitch = ResolveThreeDRoofPitchRisePerFoot();
         string groupId = ActiveThreeDRoofGroupId();
         int changed = 0;
@@ -113,6 +122,9 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.ThreeD, "Edit 3D roof edges"))
             return;
 
+        if (!EnsureThreeDEditable("edit 3D roof edges"))
+            return;
+
         TryApplyPendingThreeDRoofEdgePropertiesFromPanel(showStatus: true);
     }
 
@@ -120,6 +132,13 @@ public partial class MainWindow
     {
         if (!IsModuleEnabled(ModuleId.ThreeD))
             return false;
+
+        if (!ThreeDEditingAllowed)
+        {
+            if (showStatus)
+                EnsureThreeDEditable("edit 3D roof edges");
+            return false;
+        }
 
         IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
         if (guides.Count == 0)
@@ -242,6 +261,9 @@ public partial class MainWindow
 
     private void ApplySelectedEaveTakeoffsToRoofEdges(TreeViewItem? anchor)
     {
+        if (!EnsureThreeDEditable("apply eave takeoffs to 3D roof edges"))
+            return;
+
         if (_threeDRoofGuides.Count == 0)
         {
             TxtStatus.Text = "3D Roof: create Roof Base before using eave line takeoffs.";
@@ -275,6 +297,9 @@ public partial class MainWindow
 
     private int ApplyAvailableEaveTakeoffsToRoofEdges(TreeViewItem? anchor, double pitch)
     {
+        if (!ThreeDEditingAllowed)
+            return 0;
+
         IReadOnlyList<Measurement> sources = AutoRoofLineMeasurements(anchor);
         if (sources.Count == 0)
             return 0;

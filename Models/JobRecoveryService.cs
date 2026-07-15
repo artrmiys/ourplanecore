@@ -71,10 +71,12 @@ public static class JobRecoveryService
         int maxSnapshots = DefaultMaxSnapshots)
     {
         string snapshotRoot = SnapshotRoot(job);
+        JobWriteAccess.Demand(snapshotRoot, "create job snapshot root");
         Directory.CreateDirectory(snapshotRoot);
 
         string snapshotName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{NormalizeSnapshotReason(reason)}";
         string snapshotPath = UniqueDirectoryPath(Path.Combine(snapshotRoot, snapshotName));
+        JobWriteAccess.Demand(snapshotPath, "create job snapshot");
         Directory.CreateDirectory(snapshotPath);
 
         CopyIfExists(Path.Combine(job.RootPath, "Data.xml"), Path.Combine(snapshotPath, "Data.xml"));
@@ -95,7 +97,9 @@ public static class JobRecoveryService
             CreatedAtUtc = DateTime.UtcNow.ToString("O"),
         };
 
-        IoUtil.WriteAllTextAtomic(LockPath(job), JsonSerializer.Serialize(info, JsonOptions));
+        string path = LockPath(job);
+        JobWriteAccess.Demand(path, "write legacy job lock");
+        IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(info, JsonOptions));
     }
 
     public static bool TryReadLock(OurPlanCoreJob job, out JobRecoveryLockInfo info)
@@ -144,7 +148,10 @@ public static class JobRecoveryService
     {
         string path = LockPath(job);
         if (File.Exists(path))
+        {
+            JobWriteAccess.Demand(path, "clear legacy job lock");
             File.Delete(path);
+        }
     }
 
     private static void WriteManifest(OurPlanCoreJob job, string snapshotPath, string reason)
@@ -160,8 +167,10 @@ public static class JobRecoveryService
             excluded = new[] { "source PDFs", "rendered images", "AI crop images", "build output" },
         };
 
+        string manifestPath = Path.Combine(snapshotPath, "snapshot_manifest.json");
+        JobWriteAccess.Demand(manifestPath, "write job snapshot manifest");
         IoUtil.WriteAllTextAtomic(
-            Path.Combine(snapshotPath, "snapshot_manifest.json"),
+            manifestPath,
             JsonSerializer.Serialize(manifest, JsonOptions));
     }
 
@@ -170,11 +179,16 @@ public static class JobRecoveryService
         if (!Directory.Exists(source))
             return;
 
+        JobWriteAccess.Demand(destination, "create job snapshot metadata folder");
         Directory.CreateDirectory(destination);
         foreach (string file in Directory.EnumerateFiles(source))
         {
             if (ShouldCopySnapshotFile(file))
-                File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
+            {
+                string destinationFile = Path.Combine(destination, Path.GetFileName(file));
+                JobWriteAccess.Demand(destinationFile, "copy job snapshot metadata");
+                File.Copy(file, destinationFile, overwrite: true);
+            }
         }
 
         foreach (string directory in Directory.EnumerateDirectories(source))
@@ -198,7 +212,11 @@ public static class JobRecoveryService
 
         string? dir = Path.GetDirectoryName(destination);
         if (!string.IsNullOrWhiteSpace(dir))
+        {
+            JobWriteAccess.Demand(dir, "create job snapshot folder");
             Directory.CreateDirectory(dir);
+        }
+        JobWriteAccess.Demand(destination, "copy job snapshot file");
         File.Copy(source, destination, overwrite: true);
     }
 
@@ -218,7 +236,10 @@ public static class JobRecoveryService
             .ToList();
 
         foreach (DirectoryInfo snapshot in snapshots)
+        {
+            JobWriteAccess.Demand(snapshot.FullName, "prune old job snapshot");
             snapshot.Delete(recursive: true);
+        }
     }
 
     private static string UniqueDirectoryPath(string path)

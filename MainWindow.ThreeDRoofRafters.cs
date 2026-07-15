@@ -103,6 +103,12 @@ public partial class MainWindow
         if (!IsModuleEnabled(ModuleId.ThreeD) || !_threeDRafterFaceMode)
             return false;
 
+        if (!ThreeDEditingAllowed)
+        {
+            EnsureCurrentJobWritable("edit 3D roof rafters", showDialog: false);
+            return false;
+        }
+
         HitTestResult? hit = VisualTreeHelper.HitTest(viewport, point);
         if (hit is not RayMeshGeometry3DHitTestResult ray ||
             ray.ModelHit is not GeometryModel3D model ||
@@ -158,6 +164,9 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.ThreeD, "Pick 3D roof faces"))
             return;
 
+        if (!_threeDRafterFaceMode && !EnsureThreeDEditable("edit 3D roof rafters"))
+            return;
+
         if (_threeDRoofPlanes.Count == 0)
         {
             TxtStatus.Text = "Rafters: generate the roof first (Roof Base -> Select Edge -> Generate Roof).";
@@ -173,6 +182,9 @@ public partial class MainWindow
     private void Btn3dRafterAll_Click(object sender, RoutedEventArgs e)
     {
         if (!RequireModule(ModuleId.ThreeD, "Build 3D roof rafters"))
+            return;
+
+        if (!EnsureThreeDEditable("build 3D roof rafters"))
             return;
 
         var groupIds = _threeDRoofPlanes
@@ -209,6 +221,9 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.ThreeD, "Clear 3D roof rafters"))
             return;
 
+        if (!EnsureThreeDEditable("clear 3D roof rafters"))
+            return;
+
         if (_threeDRoofRafterSettings.All(settings => !settings.IsActive))
         {
             TxtStatus.Text = "Rafters: nothing to clear.";
@@ -232,6 +247,9 @@ public partial class MainWindow
         if (!IsInitialized ||
             !IsModuleEnabled(ModuleId.ThreeD) ||
             _threeDRoofRafterSettings.Count == 0)
+            return;
+
+        if (!ThreeDEditingAllowed)
             return;
 
         ThreeDRoofRafterSettings? last = null;

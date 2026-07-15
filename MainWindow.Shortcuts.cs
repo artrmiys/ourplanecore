@@ -59,10 +59,20 @@ public partial class MainWindow
         switch (key)
         {
             case Key.F4:
+                if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("set sheet scale"))
+                {
+                    e.Handled = true;
+                    return;
+                }
                 SetSelectedPagesScaleFromShortcut();
                 e.Handled = true;
                 break;
             case Key.F5:
+                if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("change sheet name or scale"))
+                {
+                    e.Handled = true;
+                    return;
+                }
                 BtnFloatingPageSetup_Click(this, new RoutedEventArgs());
                 e.Handled = true;
                 break;
@@ -72,10 +82,20 @@ public partial class MainWindow
                 e.Handled = true;
                 break;
             case Key.Space:
+                if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("record takeoffs"))
+                {
+                    e.Handled = true;
+                    return;
+                }
                 BtnActiveTakeoffRecord_Click(this, new RoutedEventArgs());
                 e.Handled = true;
                 break;
             case Key.T:
+                if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("add a takeoff item"))
+                {
+                    e.Handled = true;
+                    return;
+                }
                 BtnNewItem_Click(this, new RoutedEventArgs());
                 e.Handled = true;
                 break;
@@ -100,6 +120,8 @@ public partial class MainWindow
         if (string.Equals(sequence, "bk", StringComparison.Ordinal))
         {
             ClearGlobalShortcutSequence();
+            if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("add a bookmark"))
+                return true;
             AddBookmarkFromShortcut();
             return true;
         }
@@ -132,9 +154,13 @@ public partial class MainWindow
                     BtnOpen_Click(this, new RoutedEventArgs());
                     return true;
                 case Key.M:
+                    if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("merge measurements"))
+                        return true;
                     MergeSelectedMeasurementsToPromptedTakeoff();
                     return true;
                 case Key.S:
+                    if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("save this job"))
+                        return true;
                     BtnSave_Click(this, new RoutedEventArgs());
                     return true;
             }
@@ -148,6 +174,8 @@ public partial class MainWindow
                     ShowRecentJobPicker();
                     return true;
                 case Key.M:
+                    if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("split measurements"))
+                        return true;
                     SplitSelectedMeasurementsToNewTakeoff();
                     return true;
                 case Key.P:

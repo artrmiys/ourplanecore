@@ -25,10 +25,14 @@ public partial class MainWindow
             CopyMeasurementsToClipboard(source);
         }));
 
+        if (IsCurrentJobReadOnly)
+            return;
+
         int clipboardCount = _measurementClipboard?.Entries.Count ?? 0;
-        menu.Items.Add(MakeMenuItem(
+        menu.Items.Add(MakeWritableViewportMenuItem(
             clipboardCount > 0 ? $"Paste {clipboardCount} Measurement(s) to This Sheet" : "Paste Measurements to This Sheet",
             _currentPage != null && clipboardCount > 0,
+            "paste measurements",
             () => PasteMeasurementsFromClipboard(new SKPoint(request.PdfX, request.PdfY))));
 
         IReadOnlyList<Measurement> selection = selected.Count > 0
@@ -39,13 +43,15 @@ public partial class MainWindow
         if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
         {
             menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 selection.Count > 1 ? $"Merge {selection.Count} Segment(s)..." : "Merge Segment...",
                 selection.Count > 0,
+                "merge takeoff segments",
                 () => MergeSelectedMeasurementsToPromptedTakeoff(selection)));
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 selection.Count > 1 ? $"Split {selection.Count} Segment(s)..." : "Split Segment...",
                 selection.Count > 0,
+                "split takeoff segments",
                 () => SplitSelectedMeasurementsToNewTakeoff(selection)));
         }
     }
@@ -124,33 +130,39 @@ public partial class MainWindow
         bool hasItem = TryResolveTakeoffItemForMeasurement(measurement, out TakeoffItem item);
         string entryTitle = hasItem ? MeasurementEntryTitle(item) : "Measurement";
 
-        menu.Items.Add(MakeMenuItem(
+        menu.Items.Add(MakeWritableViewportMenuItem(
             "Takeoff Properties...",
             hasItem,
+            "edit takeoff properties",
             () => EditViewportTakeoffProperties(item)));
-        menu.Items.Add(MakeMenuItem(
+        menu.Items.Add(MakeWritableViewportMenuItem(
             $"{entryTitle} Properties...",
             hasItem,
+            "edit section properties",
             () => EditSectionProperties(item, measurement)));
         AddViewportCountDisplayMenuItem(menu, request);
         if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools) &&
             OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
         {
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 "Trace Walls Inside Area...",
                 hasItem && _currentJob != null && _currentPage != null,
+                "trace walls inside an area",
                 () => TraceWallsFromAreaSection(item, measurement)));
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 hasItem && item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
                 hasItem,
+                "edit joist properties",
                 () => EditViewportTakeoffProperties(item)));
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 "Set / Reset Joist Direction",
                 hasItem,
+                "set a joist direction",
                 () => SetJoistDirectionForSection(item, measurement)));
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 "Set Direction for All Areas",
                 hasItem,
+                "set joist directions",
                 () => SetJoistDirectionForAllAreas(item, measurement)));
         }
         if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools) &&
@@ -163,36 +175,43 @@ public partial class MainWindow
                 selectedLineSources.Count > 1 && selectedLineSources.Contains(measurement)
                     ? selectedLineSources
                     : [measurement];
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 pointSources.Count == 1
                     ? "Create Count Points Along Line..."
                     : $"Create Count Points Along {pointSources.Count} Lines...",
                 hasItem && _currentJob != null,
+                "create count points along lines",
                 () => CreatePointsAlongLines(pointSources, pointSources.Count == 1 ? item : null)));
         }
-        menu.Items.Add(MakeMenuItem(
+        menu.Items.Add(MakeWritableViewportMenuItem(
             $"Rename {entryTitle}",
             hasItem,
+            "rename a takeoff section",
             () => RenameSection(item, measurement)));
 
         if (measurement.MType is "line" or "area")
         {
-            menu.Items.Add(MakeMenuItem("Insert Vertex Here", true, () =>
+            menu.Items.Add(MakeWritableViewportMenuItem("Insert Vertex Here", true, "insert a measurement vertex", () =>
                 _viewport.InsertMeasurementVertex(measurement, request.PdfX, request.PdfY)));
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 "Remove Nearest Vertex",
                 CanRemoveMeasurementVertex(measurement),
+                "remove a measurement vertex",
                 () => _viewport.RemoveNearestMeasurementVertex(measurement, request.PdfX, request.PdfY)));
         }
 
-        menu.Items.Add(MakeMenuItem(
+        menu.Items.Add(MakeWritableViewportMenuItem(
             $"Delete {entryTitle}",
             hasItem,
+            "delete a takeoff section",
             () => DeleteSection(item, measurement)));
     }
 
     private void EditViewportTakeoffProperties(TakeoffItem item)
     {
+        if (!EnsureCurrentJobWritable("edit takeoff properties"))
+            return;
+
         if (FindTakeoffTreeItem(item) is not { } tvi)
         {
             TxtStatus.Text = "Takeoff item is not visible in the Takeoffs tree.";
@@ -219,6 +238,9 @@ public partial class MainWindow
             true,
             () =>
             {
+                if (!EnsureCurrentJobWritable("delete a page markup"))
+                    return;
+
                 _viewport.DeletePageAnnotation(annotation);
                 SaveCurrentPageAnnotations();
             }));
@@ -226,6 +248,9 @@ public partial class MainWindow
 
     private void EditPageNoteAnnotation(PageAnnotation annotation)
     {
+        if (!EnsureCurrentJobWritable("edit a page note"))
+            return;
+
         string? text = ShowMultilineInputDialog("Note text:", annotation.Text, "Edit Sheet Note");
         if (text == null)
             return;
@@ -246,6 +271,17 @@ public partial class MainWindow
             _ => "Drawing Markup",
         };
     }
+
+    private MenuItem MakeWritableViewportMenuItem(
+        string header,
+        bool isEnabled,
+        string operation,
+        Action action) =>
+        MakeMenuItem(header, isEnabled && !IsCurrentJobReadOnly, () =>
+        {
+            if (EnsureCurrentJobWritable(operation))
+                action();
+        });
 
     private void AddMeasurementAiMenuItems(ItemsControl menu, ViewportContextRequest request)
     {

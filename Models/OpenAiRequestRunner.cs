@@ -880,6 +880,7 @@ public static class OpenAiRequestRunner
             ? $"openai_{DateTime.UtcNow:yyyyMMdd_HHmmss}"
             : requestId.Trim();
         string path = Path.Combine(job.AIContextRoot, "responses", $"{cleanRequestId}.openai.raw.json");
+        JobWriteAccess.Demand(path, "save raw AI response");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
         IoUtil.WriteAllTextAtomic(path, body);
         return Path.GetRelativePath(job.RootPath, path);

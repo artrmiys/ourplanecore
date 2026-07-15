@@ -9,12 +9,15 @@ internal static class PlanSwiftPagePdfWriter
 {
     public static PlanSwiftPageNormalization WriteImagePagePdf(string imagePath, string outputPdfPath)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPdfPath) ?? ".");
+        string outputDirectory = Path.GetDirectoryName(outputPdfPath) ?? ".";
+        JobWriteAccess.Demand(outputDirectory, "create a PlanSwift page PDF folder");
+        Directory.CreateDirectory(outputDirectory);
         using SKBitmap? bitmap = DecodeBitmap(imagePath);
         if (bitmap == null)
             throw new InvalidOperationException($"Could not decode PlanSwift page image '{imagePath}'.");
 
         PlanSwiftPageNormalization normalization = ReadImagePageNormalization(imagePath, bitmap);
+        JobWriteAccess.Demand(outputPdfPath, "write a PlanSwift page PDF");
         using FileStream stream = File.Create(outputPdfPath);
         using SKDocument document = SKDocument.CreatePdf(stream);
         SKCanvas canvas = document.BeginPage((float)normalization.WidthPt, (float)normalization.HeightPt);
@@ -35,8 +38,11 @@ internal static class PlanSwiftPagePdfWriter
         string label,
         PlanSwiftPageNormalization? normalization = null)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPdfPath) ?? ".");
+        string outputDirectory = Path.GetDirectoryName(outputPdfPath) ?? ".";
+        JobWriteAccess.Demand(outputDirectory, "create a PlanSwift page PDF folder");
+        Directory.CreateDirectory(outputDirectory);
         normalization ??= PlanSwiftPageNormalization.Default();
+        JobWriteAccess.Demand(outputPdfPath, "write a PlanSwift placeholder PDF");
         using FileStream stream = File.Create(outputPdfPath);
         using SKDocument document = SKDocument.CreatePdf(stream);
         SKCanvas canvas = document.BeginPage((float)normalization.WidthPt, (float)normalization.HeightPt);

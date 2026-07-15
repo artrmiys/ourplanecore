@@ -25,8 +25,11 @@ internal static class NodeStore
         return int.TryParse(raw, out int order) ? order : int.MaxValue;
     }
 
-    public static void SetOrderIndex(string folder, int orderIndex) =>
+    public static void SetOrderIndex(string folder, int orderIndex)
+    {
+        JobWriteAccess.Demand(folder, "change node order");
         OurPlanCoreJobStore.SetProperty(folder, "OrderIndex", orderIndex.ToString());
+    }
 
     public static string RenameNode(string folder, string requestedName)
     {
@@ -35,6 +38,8 @@ internal static class NodeStore
         string parent = Path.GetDirectoryName(folder)
             ?? throw new InvalidOperationException("Cannot rename a root folder.");
         string target = Path.Combine(parent, folderName);
+        JobWriteAccess.Demand(folder, "rename node");
+        JobWriteAccess.Demand(target, "rename node");
 
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase) &&
             Directory.Exists(target))
@@ -64,6 +69,8 @@ internal static class NodeStore
         string target = string.Equals(folder, desiredTarget, StringComparison.OrdinalIgnoreCase)
             ? folder
             : OurPlanCoreJobStore.UniqueDirectoryPath(desiredTarget);
+        JobWriteAccess.Demand(folder, "rename node");
+        JobWriteAccess.Demand(target, "rename node");
 
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase))
             Directory.Move(folder, target);
@@ -81,6 +88,7 @@ internal static class NodeStore
     {
         string displayName = OurPlanCoreJobStore.DisplayName(sourcePath);
         string destPath = UniqueDestinationPath(targetFolder, displayName);
+        JobWriteAccess.Demand(destPath, "copy node");
         return CopyNodeCore(sourcePath, destPath, displayName, GetNextOrderIndex(targetFolder));
     }
 
@@ -93,6 +101,8 @@ internal static class NodeStore
             .ToList();
         if (sources.Count == 0)
             return [];
+
+        JobWriteAccess.Demand(targetFolder, "copy nodes");
 
         var results = new List<string>();
         int nextOrder = GetNextOrderIndex(targetFolder);
@@ -125,6 +135,9 @@ internal static class NodeStore
         if (string.Equals(sourceParent, targetFolder, StringComparison.OrdinalIgnoreCase))
             return sourcePath;
 
+        JobWriteAccess.Demand(sourcePath, "move node");
+        JobWriteAccess.Demand(targetFolder, "move node");
+
         int nextOrder = GetNextOrderIndex(targetFolder);
         string destPath = MoveNodeCore(sourcePath, targetFolder, ref nextOrder);
         NormalizeOrder(sourceParent);
@@ -142,6 +155,10 @@ internal static class NodeStore
             .ToList();
         if (sources.Count == 0)
             return [];
+
+        foreach (string sourcePath in sources)
+            JobWriteAccess.Demand(sourcePath, "move nodes");
+        JobWriteAccess.Demand(targetFolder, "move nodes");
 
         var results = new List<(string SourcePath, string MovedPath)>();
         var affectedSourceParents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -441,8 +458,12 @@ internal static class NodeStore
 
     private static void ApplySiblingOrder(IEnumerable<string> orderedFolders)
     {
+        var folders = orderedFolders.ToList();
+        foreach (string folder in folders)
+            JobWriteAccess.Demand(folder, "change sibling order");
+
         int order = 1;
-        foreach (string folder in orderedFolders)
+        foreach (string folder in folders)
             SetOrderIndex(folder, order++);
     }
 
@@ -514,11 +535,13 @@ internal static class NodeStore
 
     private static void CopyDirectory(string sourceDir, string destDir)
     {
+        JobWriteAccess.Demand(destDir, "copy directory");
         Directory.CreateDirectory(destDir);
 
         foreach (string file in Directory.EnumerateFiles(sourceDir))
         {
             string destFile = Path.Combine(destDir, Path.GetFileName(file));
+            JobWriteAccess.Demand(destFile, "copy file");
             File.Copy(file, destFile, overwrite: false);
         }
 
