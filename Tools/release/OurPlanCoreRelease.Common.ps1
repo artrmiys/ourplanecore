@@ -723,7 +723,8 @@ function Publish-GitHubRelease {
     Invoke-Native -FilePath 'git' -Arguments @('-C', $Root, 'push', 'origin', "HEAD:refs/heads/$branch") -Description "Push current branch only: $branch"
 
     if ($null -eq $remoteTagCommit) {
-        Invoke-Native -FilePath 'git' -Arguments @('-C', $Root, 'push', 'origin', "refs/tags/$Tag:refs/tags/$Tag") -Description "Push one release tag only: $Tag"
+        $tagRefspec = "refs/tags/${Tag}:refs/tags/${Tag}"
+        Invoke-Native -FilePath 'git' -Arguments @('-C', $Root, 'push', 'origin', $tagRefspec) -Description "Push one release tag only: $Tag"
     }
 
     $assetPaths = @($AssetExe, $AssetTemplate, $AssetDownload)
