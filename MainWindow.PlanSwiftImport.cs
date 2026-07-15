@@ -54,7 +54,11 @@ public partial class MainWindow
         AppSettingsStore.AddJobsRoot(_settings, destinationParent);
         SaveAppSettings();
 
-        OpenJob(result.DestinationJobPath);
+        if (!OpenJob(result.DestinationJobPath))
+        {
+            TxtStatus.Text = "PlanSwift import completed, but the current job could not be closed safely.";
+            return;
+        }
 
         string reportPath = PlanSwiftImportReportPath(result.DestinationJobPath);
         TxtStatus.Text =
@@ -85,6 +89,9 @@ public partial class MainWindow
             return;
 
         PlanSwiftImportOptions options = dialog.ImportOptions;
+        if (!TryFlushTakeoffAutosaves("import PlanSwift data into the current job"))
+            return;
+
         PlanSwiftImportResult result;
         using (ShowBusyOverlay("Importing PlanSwift job into current job..."))
         {
@@ -93,7 +100,11 @@ public partial class MainWindow
             result = await Task.Run(() => PlanSwiftProjectImporter.Import(options));
         }
 
-        OpenJob(currentJobPath);
+        if (!OpenJob(currentJobPath))
+        {
+            TxtStatus.Text = "PlanSwift import completed, but the current job could not be reloaded safely.";
+            return;
+        }
 
         string reportPath = PlanSwiftImportReportPath(result.DestinationJobPath);
         TxtStatus.Text =

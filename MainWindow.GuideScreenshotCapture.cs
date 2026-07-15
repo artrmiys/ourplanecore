@@ -75,7 +75,8 @@ public partial class MainWindow
         string sampleRoot = Path.Combine(Path.GetTempPath(), "onc_guide_capture_" + Guid.NewGuid().ToString("N"));
         OurPlanCoreJob sample = SampleJobService.CreateSampleJob(sampleRoot);
         manifest.JobPath = sample.RootPath;
-        OpenJob(sample.RootPath);
+        if (!OpenJob(sample.RootPath))
+            throw new InvalidOperationException("Guide capture could not switch away from a job with unsaved takeoff changes.");
         await SettleFramesAsync(4);
 
         PageInfo? planPage = CollectPagesUnder(_currentJob?.PagesRoot ?? "")

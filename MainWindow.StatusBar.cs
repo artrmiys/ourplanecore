@@ -83,12 +83,23 @@ public partial class MainWindow
         if (_currentJob == null)
             return "Save: --";
 
-        if (_takeoffSaveService.HasPending)
-            return "Save: Pending";
-
-        DateTime? flushed = _takeoffSaveService.LastFlushUtc;
-        return flushed.HasValue
-            ? $"Save: Saved {flushed.Value.ToLocalTime():HH:mm:ss}"
-            : "Save: Saved";
+        return FormatTakeoffSaveStatus(
+            _takeoffSaveService.State,
+            _takeoffSaveService.PendingCount,
+            _takeoffSaveService.LastSuccessfulFlushUtc);
     }
+
+    internal static string FormatTakeoffSaveStatus(
+        TakeoffSaveState state,
+        int pendingCount,
+        DateTime? lastSuccessfulFlushUtc) =>
+        state switch
+        {
+            TakeoffSaveState.Dirty => "Save: Pending",
+            TakeoffSaveState.Saving => "Save: Saving...",
+            TakeoffSaveState.Failed => $"Save: Failed — {pendingCount} pending",
+            _ when lastSuccessfulFlushUtc.HasValue =>
+                $"Save: Saved {lastSuccessfulFlushUtc.Value.ToLocalTime():HH:mm:ss}",
+            _ => "Save: Saved",
+        };
 }

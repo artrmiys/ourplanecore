@@ -315,6 +315,7 @@ public partial class MainWindow
     {
         try
         {
+            FlushTakeoffAutosaves();
             MeasurementMoveResult result = MeasurementMergeSplitService.MoveMeasurementsToTakeoff(
                 _takeoffItems,
                 selected,
@@ -334,7 +335,6 @@ public partial class MainWindow
 
     private void PersistAndRefreshMeasurementMove(MeasurementMoveResult result, string status)
     {
-        FlushTakeoffAutosaves();
         foreach (TakeoffItem item in result.ChangedItems)
         {
             QueueTakeoffAutosave(item);

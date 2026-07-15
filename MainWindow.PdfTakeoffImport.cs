@@ -307,7 +307,8 @@ public partial class MainWindow
         SaveAppSettings();
 
         OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, jobName);
-        OpenJob(job.RootPath);
+        if (!OpenJob(job.RootPath))
+            throw new InvalidOperationException("The new PDF takeoff job could not be opened because the current job has unsaved changes.");
     }
 
     private (string PagesFolder, string TakeoffsFolder) PreviewPdfTakeoffImportDestinations(PdfTakeoffImportOptions options)

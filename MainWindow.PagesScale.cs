@@ -154,7 +154,8 @@ public partial class MainWindow
             QueueTakeoffAutosave(item);
         }
 
-        FlushTakeoffAutosaves();
+        if (!TryFlushTakeoffAutosaves("save the page scale changes"))
+            return;
         RefreshPageTakeoffIndicatorsForFolders(affectedPageFolders);
         if (activePageScaled)
         {

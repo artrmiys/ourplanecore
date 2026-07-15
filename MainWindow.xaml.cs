@@ -487,15 +487,4 @@ public partial class MainWindow : Window
 
     // Display row and massing support types moved to MainWindow.SupportTypes.cs
 
-    protected override void OnClosed(EventArgs e)
-    {
-        _sheetLegendAutoSortTimer.Stop();
-        SaveSidePanelWidths();
-        SaveCurrentPageAnnotations();
-        base.OnClosed(e);
-        FlushTakeoffAutosaves();
-        RunRasterCacheCleanupOnClose();
-        ClearJobRecoveryLock();
-        PdfLayerRenderService.StopWorker();
-    }
 }

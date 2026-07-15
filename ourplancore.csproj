@@ -30,6 +30,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="OurPlanCore.Tests" />
+
     <!-- PDF rendering via PDFium (Google Chrome engine) -->
     <PackageReference Include="Docnet.Core" Version="2.6.0" />
 

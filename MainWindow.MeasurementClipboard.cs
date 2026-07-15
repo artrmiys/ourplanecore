@@ -458,8 +458,39 @@ public partial class MainWindow
     private void QueueTakeoffAutosave(IEnumerable<TakeoffItem> items)
         => _takeoffSaveService.MarkDirty(items);
 
-    private void FlushTakeoffAutosaves()
-        => _takeoffSaveService.Flush();
+    private TakeoffFlushResult FlushTakeoffAutosaves()
+    {
+        TakeoffFlushResult result = _takeoffSaveService.Flush();
+        if (!result.Success)
+            throw new IOException(TakeoffAutosaveFailureMessage("continue", result));
+        return result;
+    }
+
+    private bool TryFlushTakeoffAutosaves(string operation, bool showDialog = true)
+    {
+        TakeoffFlushResult result = _takeoffSaveService.Flush();
+        if (result.Success)
+            return true;
+
+        string message = TakeoffAutosaveFailureMessage(operation, result);
+        AppLog.Warn(message);
+        TxtStatus.Text = message;
+        if (showDialog)
+        {
+            MessageBox.Show(
+                message,
+                "Unsaved Takeoff Changes",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        return false;
+    }
+
+    private static string TakeoffAutosaveFailureMessage(string operation, TakeoffFlushResult result)
+    {
+        string detail = string.IsNullOrWhiteSpace(result.Error) ? "Unknown write failure." : result.Error;
+        return $"Cannot {operation}: {result.Failed} takeoff item(s) remain pending. {detail}";
+    }
 
     internal void FlushPendingAutosave() =>
         FlushTakeoffAutosaves();

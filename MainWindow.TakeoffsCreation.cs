@@ -135,7 +135,8 @@ public partial class MainWindow
         if (_currentJob == null || string.IsNullOrWhiteSpace(baseFolder) || !Directory.Exists(baseFolder))
             return;
 
-        FlushTakeoffAutosaves();
+        if (!TryFlushTakeoffAutosaves("create the Auto Takeoff Tree"))
+            return;
         string mode = ResolveFolderTemplateMode();
         string modeLabel = FolderTemplateModeLabel(mode);
         string baseName = string.Equals(baseFolder, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase)
@@ -171,7 +172,8 @@ public partial class MainWindow
         if (_currentJob == null || string.IsNullOrWhiteSpace(baseFolder) || !Directory.Exists(baseFolder))
             return;
 
-        FlushTakeoffAutosaves();
+        if (!TryFlushTakeoffAutosaves("create Takeoff folders from Pages"))
+            return;
         string mode = ResolveFolderTemplateMode();
         string modeLabel = FolderTemplateModeLabel(mode);
         IReadOnlyList<string> groupNames = PlanSwiftFolderTemplateService.CollectCapsGroupNames(_currentJob);

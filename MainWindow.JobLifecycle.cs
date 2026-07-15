@@ -162,10 +162,13 @@ public partial class MainWindow
         CreateBlankJobFromDialog();
     }
 
-    private void OpenJob(string rootPath, string? initialPageFolder = null)
+    private bool OpenJob(string rootPath, string? initialPageFolder = null)
     {
-        PrepareCurrentJobForSwitch();
-        _currentJob = OurPlanCoreJobStore.LoadJob(rootPath);
+        OurPlanCoreJob nextJob = OurPlanCoreJobStore.LoadJob(rootPath);
+        if (!PrepareCurrentJobForSwitch())
+            return false;
+
+        _currentJob = nextJob;
         ApplyFolderTemplateProviders();
         _currentPage = null;
         _currentPdfPath = "";
@@ -242,6 +245,7 @@ public partial class MainWindow
         Dispatcher.BeginInvoke(
             new Action(CollapseProjectTreeDisplays),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
+        return true;
     }
 
     private void ReportCorruptJsonFiles()
@@ -369,6 +373,12 @@ public partial class MainWindow
 
     private void LoadTakeoffsForJob()
     {
+        if (_takeoffSaveService.HasPending &&
+            !TryFlushTakeoffAutosaves("reload the Takeoffs tree"))
+        {
+            return;
+        }
+
         TakeoffsTreeSelectionSnapshot selectionSnapshot = CaptureTakeoffsTreeSelectionState();
 
         if (_currentJob == null)

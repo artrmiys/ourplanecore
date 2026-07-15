@@ -53,7 +53,8 @@ public partial class MainWindow
 
         try
         {
-            OpenJob(_settings.LastJobPath, initialPageFolder: _settings.LastPageFolder);
+            if (!OpenJob(_settings.LastJobPath, initialPageFolder: _settings.LastPageFolder))
+                return;
             TxtStatus.Text = $"Loaded last job: {_currentJob?.Name}. Select a page to render it.";
         }
         catch (Exception ex)

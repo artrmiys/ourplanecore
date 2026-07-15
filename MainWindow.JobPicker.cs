@@ -254,7 +254,8 @@ public partial class MainWindow
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
             var job = OurPlanCoreJobStore.CreateJob(parent, name);
-            OpenJob(job.RootPath);
+            if (!OpenJob(job.RootPath))
+                return;
             QueuePdfImportForNewJob(pdfPaths, pdfFolder);
         }
         catch (Exception ex)
@@ -294,7 +295,8 @@ public partial class MainWindow
             SaveAppSettings();
 
             OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, name);
-            OpenJob(job.RootPath);
+            if (!OpenJob(job.RootPath))
+                return;
             TxtStatus.Text = $"Blank job created: {job.Name}. Use Blank Sheet to add an empty sheet.";
         }
         catch (Exception ex)
@@ -379,7 +381,8 @@ public partial class MainWindow
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
             OurPlanCoreJob job = SampleJobService.CreateSampleJob(parent);
-            OpenJob(job.RootPath);
+            if (!OpenJob(job.RootPath))
+                return;
             TxtStatus.Text = $"Sample job created: {job.Name}.";
         }
         catch (Exception ex)
@@ -389,19 +392,20 @@ public partial class MainWindow
         }
     }
 
-    private void OpenJobSafely(string folder)
+    private bool OpenJobSafely(string folder)
     {
         if (string.IsNullOrWhiteSpace(folder))
-            return;
+            return false;
 
         try
         {
-            OpenJob(folder);
+            return OpenJob(folder);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Cannot open job:\n{ex.Message}", "Open Job",
                             MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
     }
 

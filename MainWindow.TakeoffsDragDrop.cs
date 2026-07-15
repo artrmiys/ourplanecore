@@ -676,7 +676,8 @@ public partial class MainWindow
             return;
         }
 
-        FlushTakeoffAutosaves();
+        if (!TryFlushTakeoffAutosaves(copy ? "copy takeoff sections" : "move takeoff sections"))
+            return;
         string targetType = OurPlanCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
         var changedItems = new HashSet<TakeoffItem>();
         var resultingNodes = new List<TakeoffMeasurementNode>();

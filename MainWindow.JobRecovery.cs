@@ -6,22 +6,36 @@ namespace OurPlanCore;
 
 public partial class MainWindow
 {
-    private void PrepareCurrentJobForSwitch()
+    private bool PrepareCurrentJobForSwitch()
     {
         if (_currentJob == null)
-            return;
+            return true;
+
+        if (!TryFlushTakeoffAutosaves("switch jobs"))
+            return false;
 
         try
         {
-            FlushTakeoffAutosaves();
             SaveCurrentPageScale();
             SaveCurrentPageAnnotations();
             SaveJobRecoverySnapshot("before_switch");
+            CloseDetachedSheetsForModuleDisable();
+            if (!TryFlushTakeoffAutosaves("switch jobs after closing detached sheets"))
+                return false;
+
             ClearJobRecoveryLock();
+            return true;
         }
         catch (Exception ex)
         {
-            TxtStatus.Text = $"Job switch snapshot skipped: {ex.Message}";
+            AppLog.Warn(ex, "Job switch preparation failed; current job remains open.");
+            TxtStatus.Text = $"Job switch canceled: {ex.Message}";
+            MessageBox.Show(
+                $"The current job could not be saved safely. The job switch was canceled.\n\n{ex.Message}",
+                "Job Switch Canceled",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
         }
     }
 

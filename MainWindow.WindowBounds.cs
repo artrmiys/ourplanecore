@@ -93,7 +93,98 @@ public partial class MainWindow
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (!FlushTakeoffAutosavesBeforeClose())
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        if (!SaveCurrentPageStateBeforeClose())
+        {
+            e.Cancel = true;
+            return;
+        }
+
         SaveWindowBounds();
         base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _sheetLegendAutoSortTimer.Stop();
+        _takeoffSaveService.Stop();
+        RunCloseCleanup(SaveSidePanelWidths, "save side panel widths");
+        RunCloseCleanup(RunRasterCacheCleanupOnClose, "clean raster cache");
+        RunCloseCleanup(ClearJobRecoveryLock, "clear job recovery lock");
+        RunCloseCleanup(PdfLayerRenderService.StopWorker, "stop PDF layer worker");
+        base.OnClosed(e);
+    }
+
+    private bool FlushTakeoffAutosavesBeforeClose()
+    {
+        if (TryFlushTakeoffAutosaves("close OurPlanCore", showDialog: false))
+            return true;
+
+        MessageBoxResult choice = MessageBox.Show(
+            $"Some takeoff changes could not be saved and the app will stay open.\n\n" +
+            $"{_takeoffSaveService.LastError}\n\n" +
+            "Yes = retry now.\n" +
+            "No = discard only entries whose takeoff folders are still unavailable, then close.\n" +
+            "Cancel = keep the app open.",
+            "Unsaved Takeoff Changes",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Error);
+        if (choice == MessageBoxResult.Yes &&
+            TryFlushTakeoffAutosaves("close OurPlanCore", showDialog: false))
+        {
+            return true;
+        }
+
+        if (choice == MessageBoxResult.No)
+        {
+            int discarded = _takeoffSaveService.DiscardUnavailableItems();
+            if (discarded > 0 &&
+                TryFlushTakeoffAutosaves("close OurPlanCore", showDialog: false))
+            {
+                AppLog.Warn($"Closing after the user discarded {discarded} unavailable pending takeoff item(s).");
+                return true;
+            }
+        }
+
+        TxtStatus.Text = "Close canceled: takeoff changes are still pending.";
+        return false;
+    }
+
+    private bool SaveCurrentPageStateBeforeClose()
+    {
+        try
+        {
+            SaveCurrentPageScale();
+            SaveCurrentPageAnnotations();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, "Close canceled because current page state could not be saved.");
+            TxtStatus.Text = $"Close canceled: current page could not be saved. {ex.Message}";
+            MessageBox.Show(
+                $"The current page scale or annotations could not be saved. The app will stay open.\n\n{ex.Message}",
+                "Page Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
+        }
+    }
+
+    private static void RunCloseCleanup(Action action, string description)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Failed to {description} while closing.");
+        }
     }
 }
