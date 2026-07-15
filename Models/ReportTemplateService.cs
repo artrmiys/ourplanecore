@@ -90,6 +90,7 @@ public sealed class ReportBuilderRow : INotifyPropertyChanged
 public static class ReportTemplateService
 {
     public const string DetailedFrameListSheetName = "Detailed Frame List";
+    public const string DefaultTemplateFileName = "TemplateCom.xlsm";
 
     private static readonly XNamespace SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private static readonly XNamespace WorkbookRelationshipNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -105,7 +106,21 @@ public static class ReportTemplateService
     public static string DefaultTemplatePath()
     {
         string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        return Path.Combine(desktop, "03_Excel_Templates_Macros", "Templates", "TemplateCom.xlsm");
+        return ResolveDefaultTemplatePath(AppContext.BaseDirectory, desktop);
+    }
+
+    public static string ResolveDefaultTemplatePath(string appBaseDirectory, string desktopDirectory)
+    {
+        string packagedPath = Path.Combine(appBaseDirectory, DefaultTemplateFileName);
+        string currentDevelopmentPath = Path.Combine(desktopDirectory, "Python", "1.macros", DefaultTemplateFileName);
+        string legacyPath = Path.Combine(
+            desktopDirectory,
+            "03_Excel_Templates_Macros",
+            "Templates",
+            DefaultTemplateFileName);
+
+        return new[] { packagedPath, currentDevelopmentPath, legacyPath }
+            .FirstOrDefault(File.Exists) ?? packagedPath;
     }
 
     public static ReportTemplateSheet LoadDefaultTemplate() =>

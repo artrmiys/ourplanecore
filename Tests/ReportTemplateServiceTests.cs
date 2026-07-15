@@ -43,6 +43,52 @@ internal static class ReportTemplateServiceTests
         AssertTrue(sheet.Rows.Any(row => string.Equals(row.A, "Description", StringComparison.OrdinalIgnoreCase)), "local template description row");
     }
 
+    public static void PrefersTemplateBesidePackagedExecutable()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "onc_report_template_resolution_" + Guid.NewGuid().ToString("N"));
+        string appBase = Path.Combine(root, "app");
+        string desktop = Path.Combine(root, "desktop");
+        string packagedPath = Path.Combine(appBase, ReportTemplateService.DefaultTemplateFileName);
+        string developmentPath = Path.Combine(desktop, "Python", "1.macros", ReportTemplateService.DefaultTemplateFileName);
+        try
+        {
+            Directory.CreateDirectory(appBase);
+            Directory.CreateDirectory(Path.GetDirectoryName(developmentPath)!);
+            File.WriteAllText(packagedPath, "packaged");
+            File.WriteAllText(developmentPath, "development");
+
+            string resolved = ReportTemplateService.ResolveDefaultTemplatePath(appBase, desktop);
+
+            AssertEqual(Path.GetFullPath(packagedPath), Path.GetFullPath(resolved), "packaged template path");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    public static void FallsBackToCurrentDevelopmentTemplate()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "onc_report_template_fallback_" + Guid.NewGuid().ToString("N"));
+        string appBase = Path.Combine(root, "app");
+        string desktop = Path.Combine(root, "desktop");
+        string developmentPath = Path.Combine(desktop, "Python", "1.macros", ReportTemplateService.DefaultTemplateFileName);
+        try
+        {
+            Directory.CreateDirectory(appBase);
+            Directory.CreateDirectory(Path.GetDirectoryName(developmentPath)!);
+            File.WriteAllText(developmentPath, "development");
+
+            string resolved = ReportTemplateService.ResolveDefaultTemplatePath(appBase, desktop);
+
+            AssertEqual(Path.GetFullPath(developmentPath), Path.GetFullPath(resolved), "development template path");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     public static void AppliesA3WallBlockLikeMacro()
     {
         List<ReportBuilderRow> rows = Enumerable.Range(1, 60)
@@ -184,6 +230,18 @@ internal static class ReportTemplateServiceTests
         {
             if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
                 File.Delete(path);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
         }
         catch
         {

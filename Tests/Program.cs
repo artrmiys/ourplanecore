@@ -431,6 +431,8 @@ var tests = new List<(string Name, Action Run)>
     ("settings manager folder template edits auto persist", TakeoffsTreeRegressionTests.SettingsManagerFolderTemplateEditsAutoPersist),
     ("report template loads synthetic detailed frame list", ReportTemplateServiceTests.LoadsSyntheticDetailedFrameList),
     ("report template loads local template if present", ReportTemplateServiceTests.LoadsLocalTemplateIfPresent),
+    ("report template prefers packaged sidecar", ReportTemplateServiceTests.PrefersTemplateBesidePackagedExecutable),
+    ("report template falls back to current development copy", ReportTemplateServiceTests.FallsBackToCurrentDevelopmentTemplate),
     ("report builder applies A3 wall block like macro", ReportTemplateServiceTests.AppliesA3WallBlockLikeMacro),
     ("planswift import creates job pages and measurements", PlanSwiftImportTests.ImportCreatesJobPagesAndMeasurements),
     ("planswift import normalizes oversized raster pages", PlanSwiftImportTests.ImportNormalizesOversizedRasterPageWithoutChangingMeasurements),
@@ -6244,18 +6246,10 @@ static void WithTempRasterBackedPage(
     Action<PageInfo> action,
     float renderScale = 0.5f)
 {
-    string pdfPath = Path.Combine(
-        FindRepoRoot(),
-        "reference",
-        "window_detector_poc",
-        "outputs",
-        "wind_window_points_marked.pdf");
-    if (!File.Exists(pdfPath))
-        throw new FileNotFoundException("Raster-backed viewport test PDF is missing.", pdfPath);
-
     string tempRoot = Path.Combine(Path.GetTempPath(), "onc_viewport_raster_tests", Guid.NewGuid().ToString("N"));
     try
     {
+        string pdfPath = RasterTestPdfFactory.Create(tempRoot);
         OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(tempRoot, name);
         string importFolder = OurPlanCoreJobStore.DefaultImportFolder(job);
         PageInfo page = OurPlanCoreJobStore.ImportPdf(job, pdfPath, [$"{name}_sheet"], importFolder).Single();
@@ -6288,23 +6282,6 @@ static PageInfo EnableRasterFirst(PageInfo page)
         RasterSheetCacheService.UseAsPageOpenRaster(refreshed.RasterSheet),
         "Raster First should be persisted on the page raster metadata");
     return refreshed;
-}
-
-static string FindRepoRoot()
-{
-    string dir = Directory.GetCurrentDirectory();
-    while (!string.IsNullOrWhiteSpace(dir))
-    {
-        if (File.Exists(Path.Combine(dir, "ourplancore.csproj")))
-            return dir;
-
-        string? parent = Directory.GetParent(dir)?.FullName;
-        if (string.Equals(parent, dir, StringComparison.OrdinalIgnoreCase))
-            break;
-        dir = parent ?? "";
-    }
-
-    throw new DirectoryNotFoundException("Could not locate ourplancore repo root.");
 }
 
 static void AssertTakeoffChildOrder(string parentFolder, string expected, string message)

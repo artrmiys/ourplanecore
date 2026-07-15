@@ -5,19 +5,10 @@ internal static class RasterSheetCacheTests
 {
     public static void BuildsWorkingImageAndStrictSnapManifest()
     {
-        string repoRoot = FindRepoRoot();
-        string pdfPath = Path.Combine(
-            repoRoot,
-            "reference",
-            "window_detector_poc",
-            "outputs",
-            "wind_window_points_marked.pdf");
-        if (!File.Exists(pdfPath))
-            throw new FileNotFoundException("Raster sheet test PDF is missing.", pdfPath);
-
         string tempRoot = Path.Combine(Path.GetTempPath(), "onc_raster_sheet_tests", Guid.NewGuid().ToString("N"));
         try
         {
+            string pdfPath = RasterTestPdfFactory.Create(tempRoot);
             OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(tempRoot, "Raster Test Job");
             string importFolder = OurPlanCoreJobStore.DefaultImportFolder(job);
             PageInfo page = OurPlanCoreJobStore.ImportPdf(job, pdfPath, ["Raster Test"], importFolder).Single();
@@ -332,23 +323,6 @@ internal static class RasterSheetCacheTests
             }
             catch { }
         }
-    }
-
-    private static string FindRepoRoot()
-    {
-        string dir = Directory.GetCurrentDirectory();
-        while (!string.IsNullOrWhiteSpace(dir))
-        {
-            if (File.Exists(Path.Combine(dir, "ourplancore.csproj")))
-                return dir;
-
-            string? parent = Directory.GetParent(dir)?.FullName;
-            if (string.Equals(parent, dir, StringComparison.OrdinalIgnoreCase))
-                break;
-            dir = parent ?? "";
-        }
-
-        throw new DirectoryNotFoundException("Could not locate ourplancore repo root.");
     }
 
     private static void AssertTrue(bool condition, string message)

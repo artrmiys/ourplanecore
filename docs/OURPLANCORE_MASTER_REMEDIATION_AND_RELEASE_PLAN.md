@@ -73,7 +73,8 @@ Rules:
   build produced from the exact source commit being released.
 - `TemplateCom.xlsm` must be copied from the verified source workbook, not from
   an old release folder.
-- `DOWNLOAD-LATEST.txt` must be regenerated after the GitHub Release exists.
+- `DOWNLOAD-LATEST.txt` must target the exact release tag and be reverified after
+  the GitHub Release exists.
 - Keep `ourplancore.exe.bak` immutable. If it already exists, create a
   timestamped additional rollback copy; never overwrite an existing backup.
 - The Desktop shortcut must target the packaged EXE and use the update folder
@@ -100,7 +101,6 @@ Each published release must contain:
 ourplancore.exe
 TemplateCom.xlsm
 DOWNLOAD-LATEST.txt
-SHA256SUMS.txt
 ```
 
 Release tag format:
@@ -135,7 +135,7 @@ using the stale pre-rebrand helper. The script must:
 6. copy the current Excel template;
 7. retarget and verify `OurPlanCore.lnk`;
 8. launch the installed EXE and validate only the latest startup log segment;
-9. generate `DOWNLOAD-LATEST.txt` and `SHA256SUMS.txt`;
+9. generate `DOWNLOAD-LATEST.txt` with SHA-256 values;
 10. upload the exact update-folder assets to a GitHub Release;
 11. verify the published asset names/sizes/digests and latest links.
 
@@ -146,16 +146,18 @@ before the first release; source work may continue before that point.
 
 Goal: make every later milestone recoverable and downloadable.
 
-- [ ] Fetch remote state and confirm branch divergence.
-- [ ] Create a named checkpoint tag before behavior-sensitive edits.
-- [ ] Commit this master plan explicitly despite the repository-wide `*.md`
+- [x] Fetch remote state and confirm branch divergence.
+- [x] Create a named checkpoint tag before behavior-sensitive edits.
+- [x] Commit this master plan explicitly despite the repository-wide `*.md`
       ignore rule.
 - [ ] Push the 11 existing local commits plus the plan commit to the existing
       feature branch without staging `docs/60-ux-ui/` accidentally.
 - [ ] Open/update one draft PR from the feature branch to `main` for reviewable
       source history.
-- [ ] Add the safe release script described in section 3.3.
-- [ ] Install/authenticate GitHub CLI or document a connector/API fallback.
+- [x] Add the safe release script described in section 3.3.
+- [x] Install and authenticate GitHub CLI for release upload.
+- [x] Remove the embedded OpenAI key from the public workbook source, resolve it
+      from `OPENAI_API_KEY`, and validate the saved workbook copy.
 - [ ] Create the first GitHub Release from the current known-good packaged EXE
       and current `TemplateCom.xlsm`.
 - [ ] Put `TemplateCom.xlsm` and `DOWNLOAD-LATEST.txt` beside the update EXE.
@@ -362,7 +364,7 @@ No milestone is `done` until all applicable checks pass:
 10. retarget and verify the Desktop shortcut;
 11. launch the packaged EXE and inspect only the latest startup log segment;
 12. commit only intended source/docs/scripts, push the branch, tag the exact
-    commit, and publish the four GitHub Release assets;
+    commit, and publish the three GitHub Release assets;
 13. verify hashes and permanent latest-download links.
 
 If any gate fails, retain the previous update package and previous GitHub
