@@ -159,6 +159,35 @@ f3834a0f22d7e1d453f4b436e7504cde1b6e7119
 
 ## Release status
 
-Код и data validation готовы к релизу. Packaged publish/deploy, global Precise v2
-activation, shortcut и startup-log evidence добавляются в этот раздел после
-финальной упаковки.
+Released from implementation commit `55fedcd`:
+
+- compressed self-contained single-file publish:
+  `bin/publish-sheetmeta-55fedcd/ourplancore.exe`;
+- deployed exe:
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`;
+- size: `173,707,582` bytes;
+- ProductVersion: `2.2.3+55fedcd7ece5d666fa3b454d280591edf1515f55`;
+- publish/deploy SHA256 match:
+  `E2F75BEEC7A79018AA2B7FD1C10B0B25144C76F980099314768C5784C48185EF`;
+- prior packaged exe preserved without overwriting existing backups:
+  `ourplancore.exe.bak-20260714-before-sheet-metadata-v2`;
+- Desktop shortcut target:
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`;
+- shortcut working directory:
+  `C:\Users\User\Desktop\updates\OurPlanCore`.
+
+Global activation:
+
+- preset path: `%LOCALAPPDATA%\OurPlanCore\presets\sheet_metadata.json`;
+- schema `2`, detector `PreciseV2`, import policy `Preview`;
+- preserve manual name/suffix/scale all enabled;
+- config SHA256:
+  `70BB8F43631D1985BA67F43D5430B23E402F9939A1FA604E0B6AA094EA631E74`.
+
+Packaged startup verification on 2026-07-14:
+
+- process `18180` alive and responding from the deployed exe;
+- job loaded: Croton Point;
+- after the latest `Application startup.` marker: `0` ERROR lines,
+  `1` `Loaded takeoffs` signal and `16` `Viewport` signals;
+- application left open for the user.

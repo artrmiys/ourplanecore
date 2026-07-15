@@ -16,8 +16,10 @@ Detailed handoff:
   synchronized learned scale text/numeric values.
 - Verified build `0 warnings / 0 errors`, C# tests `488/488`, Python detector
   tests `24/24`, and four real PDF sets (`125` pages, `0` golden failures).
-- Packaged publish/deploy and startup-log evidence are recorded in the detailed
-  handoff after release validation.
+- Activated global `Precise v2 / Preview`, deployed compressed single-file
+  ProductVersion `2.2.3+55fedcd...`, preserved a separate rollback, verified
+  publish/deploy SHA256 match, shortcut target, and packaged startup log with
+  `0` errors after the latest startup marker.
 
 ## 2026-07-14 Pages sort recovery, metadata buttons, and scale shortcuts
 
