@@ -1,5 +1,44 @@
 ﻿# Development Log
 
+## 2026-07-15 Reliable Takeoff Autosave
+
+- Rebuilt `TakeoffSaveService` around explicit `Clean`, `Dirty`, `Saving`, and
+  `Failed` states. Pending items remain dirty until their own disk write
+  succeeds; partial failures retain only the failed entries and retry after a
+  short delay.
+- Split `LastAttemptUtc` from `LastSuccessfulFlushUtc`, retained actionable
+  error details, and made the status bar report pending/saving/failure honestly
+  instead of displaying a false `Saved` state.
+- Bound every queued item to its originating job root and added canonical root
+  containment checks. A missing or temporarily unavailable item folder remains
+  pending; it is discarded only through the explicit close-time operator
+  choice.
+- Added checked flush boundaries before takeoff reloads, job switches,
+  destructive/copy/move operations, and measurement mutations. A failed flush
+  blocks the operation instead of allowing stale objects or another job to
+  replace unsaved state.
+- Moved the final save into cancellable `OnClosing`, including page scale and
+  annotation persistence. Job locks and detached sheets are released only
+  after successful old-job persistence; failed close offers Retry, explicit
+  unavailable-item discard, or Cancel.
+- Added deterministic service and lifecycle regression tests covering full and
+  partial write failure, retries, unavailable folders, reload, job switch, and
+  closing. Verification passed: C# tests `510/510`, Python metadata tests
+  `24/24`, and build `0 warnings / 0 errors`.
+- Published public latest release
+  `ourplancore-v2.2.3-20260715-55a75e6` from commit
+  `55a75e6404edc58c92e174ff3a2d8c697152986a`:
+  `https://github.com/artrmiys/ourplanecore/releases/tag/ourplancore-v2.2.3-20260715-55a75e6`.
+- Installed compressed single-file EXE: `171,714,143` bytes, ProductVersion
+  `2.2.3+55a75e6404edc58c92e174ff3a2d8c697152986a`, SHA-256
+  `F0EA8761CA7C47303739AB45940FDA7A159C45AE073E8C610098DB1DF487F20A`.
+  The workbook and download note also match their GitHub asset hashes.
+- Anonymous pinned and `latest` downloads reproduced all installed hashes;
+  direct latest EXE/workbook requests returned HTTP `200`. The Desktop
+  shortcut points to the update package, and the latest packaged startup at
+  line `3582` of `app-20260715.log` has zero `ERROR` entries plus
+  `Loaded takeoffs` and `Viewport`.
+
 ## 2026-07-15 Public GitHub Release Foundation
 
 - Added a fail-safe release workflow that builds from an exact clean commit,

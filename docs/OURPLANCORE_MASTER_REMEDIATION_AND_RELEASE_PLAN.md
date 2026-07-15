@@ -206,18 +206,52 @@ Phase 0 completion evidence (2026-07-15):
 Owners: `TakeoffSaveService.cs`, `MainWindow.StatusBar.cs`, lifecycle and
 shutdown hooks, storage tests.
 
-- [ ] Keep an item dirty until its save succeeds.
-- [ ] Requeue failed items automatically.
-- [ ] Distinguish `LastAttemptUtc` from `LastSuccessfulFlushUtc`.
-- [ ] Expose `Clean`, `Dirty`, `Saving`, and `Failed` states.
-- [ ] Never display `Saved` while a write failed or remains pending.
-- [ ] Flush before job switch, destructive operations, and base window close.
-- [ ] If final flush fails, block/confirm closing and preserve the dirty set.
-- [ ] Add injected write-failure, retry, deleted-folder, and partial-batch tests.
+- [x] Keep an item dirty until its save succeeds.
+- [x] Requeue failed items automatically.
+- [x] Distinguish `LastAttemptUtc` from `LastSuccessfulFlushUtc`.
+- [x] Expose `Clean`, `Dirty`, `Saving`, and `Failed` states.
+- [x] Never display `Saved` while a write failed or remains pending.
+- [x] Flush before job switch, destructive operations, and base window close.
+- [x] If final flush fails, block/confirm closing and preserve the dirty set.
+- [x] Add injected write-failure, retry, deleted-folder, and partial-batch tests.
 
 Reliability comes before moving writes off the UI thread. Async persistence may
 be added only after immutable save snapshots or equivalent synchronization are
 in place.
+
+Reliable autosave completion evidence (2026-07-15):
+
+- source commit: `55a75e6404edc58c92e174ff3a2d8c697152986a`;
+- checkpoint tag before the implementation: `checkpoint-before-autosave-20260715`;
+- release tag: `ourplancore-v2.2.3-20260715-55a75e6`;
+- public release:
+  `https://github.com/artrmiys/ourplanecore/releases/tag/ourplancore-v2.2.3-20260715-55a75e6`;
+- release state: public, non-draft, non-prerelease, and current `latest`;
+- failed and partial writes retain their dirty entries, retry automatically,
+  and report `Failed` instead of advancing the successful-save timestamp;
+- pending entries are bound to their job root, reload/job-switch/destructive
+  boundaries require a successful flush, and unavailable folders are retained
+  unless the operator explicitly chooses the close-time discard path;
+- final save moved to cancellable `OnClosing`; detached sheets and the old job
+  lock are released only after the old job has been saved successfully;
+- deterministic regression coverage includes write failure, retry, partial
+  batches, unavailable folders, reload, job switch, and close lifecycle;
+- clean verification: C# tests `510/510`, Python detector tests `24/24`, build
+  `0 warnings / 0 errors`;
+- installed EXE: `171,714,143` bytes, ProductVersion
+  `2.2.3+55a75e6404edc58c92e174ff3a2d8c697152986a`, SHA-256
+  `F0EA8761CA7C47303739AB45940FDA7A159C45AE073E8C610098DB1DF487F20A`;
+- workbook: `657,561` bytes, SHA-256
+  `DF9EA6D54BDB433788CC892DF20BA25E6E9B6E72F21AD7C681B70072057D92AC`;
+- note: `1,026` bytes, SHA-256
+  `62726D27E05A499F2F9B1BE0C508A7EF5C3B8143B66C70828D3D83CDB969239B`;
+- authenticated asset metadata plus unauthenticated pinned/latest downloads
+  reproduced the installed sizes and hashes; direct latest EXE and workbook
+  requests returned HTTP `200`;
+- Desktop shortcut target and working directory point to
+  `C:\Users\User\Desktop\updates\OurPlanCore`;
+- packaged log `app-20260715.log`, latest startup at line `3582`: zero
+  `ERROR`, with `Loaded takeoffs` and `Viewport` signals.
 
 ### 5.2 Enforced job lease
 
