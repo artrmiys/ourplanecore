@@ -17,6 +17,7 @@ publish/
 desktop.ini
 .folder_icon.ico
 *.md
+!docs/OURPLANCORE_MASTER_REMEDIATION_AND_RELEASE_PLAN.md
 
 __pycache__/
 *.pyc

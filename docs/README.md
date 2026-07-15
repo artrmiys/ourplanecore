@@ -5,14 +5,20 @@ instead of scanning dozens of dated handoffs.
 
 ## Read First
 
+- `OURPLANCORE_MASTER_REMEDIATION_AND_RELEASE_PLAN.md` - active authority for
+  remediation order, release gates, local update contents, and GitHub Releases.
 - `PROJECT_CONTEXT.md` - broad product and architecture context.
 - `CURRENT_OURPLANECORE_STATUS.md` - current behavior and known gaps.
-- `OURPLANECORE_TASK_ROADMAP.md` - task roadmap and priorities.
+- `OURPLANECORE_TASK_ROADMAP.md` - historical feature map; its priority order is
+  superseded by the active master remediation plan.
 - `DEVELOPMENT_LOG.md` - chronological work log.
 - `ARCHITECTURE_AUDIT_AND_REFACTOR_PLAN_2026_05_05.md` - refactor baseline.
 
 ## Current Priority Context
 
+- `OURPLANCORE_MASTER_REMEDIATION_AND_RELEASE_PLAN.md`
+  - current implementation phases, acceptance gates, rollback rules, and the
+    permanent EXE + Excel template + download-note release contract.
 - `00-start-here/NEXT_TASK_JOB_MOVE_AUTOREPAIR_AND_SHEET_RENDER_PERF_2026_06_06.md`
   - handoff/history for moved-job `page_folder` repair plus the next
     sheet-render performance strategy; the code-side job-move autorepair is now
@@ -54,5 +60,6 @@ instead of scanning dozens of dated handoffs.
 
 ## Git Note
 
-The repo `.gitignore` ignores `*.md`, so new markdown files may need
-`git add -f <path>` when they must be committed.
+The repo `.gitignore` ignores `*.md`. The active master plan has a narrow
+exception; other new markdown files may still need `git add -f <path>` when
+they must be committed.
