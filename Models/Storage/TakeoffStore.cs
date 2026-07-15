@@ -206,6 +206,49 @@ internal static class TakeoffStore
         return JsonSerializer.Deserialize<List<MeasurementDto>>(json) ?? [];
     }
 
+    internal static bool TryReadMeasurementCount(string takeoffFolder, out int count)
+    {
+        count = 0;
+        string path = MeasurementsJsonPath(takeoffFolder);
+        if (!File.Exists(path))
+            return false;
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
+            JsonElement root = document.RootElement;
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                count = root.GetArrayLength();
+                return true;
+            }
+
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("schema_version", out JsonElement schemaElement) ||
+                !schemaElement.TryGetInt32(out int schemaVersion) ||
+                schemaVersion != CurrentMeasurementsSchemaVersion ||
+                !root.TryGetProperty("measurements", out JsonElement measurementsElement) ||
+                measurementsElement.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            count = measurementsElement.GetArrayLength();
+            return true;
+        }
+        catch (Exception ex) when (ex is
+            JsonException or
+            NotSupportedException or
+            IOException or
+            UnauthorizedAccessException or
+            System.Security.SecurityException or
+            ArgumentException)
+        {
+            AppLog.Warn(ex, $"Could not verify measurement count for {path}");
+            return false;
+        }
+    }
+
     public static void SaveMeasurements(string takeoffFolder, IEnumerable<Measurement> measurements)
     {
         Directory.CreateDirectory(takeoffFolder);

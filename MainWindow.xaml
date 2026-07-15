@@ -1749,6 +1749,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -1763,8 +1764,15 @@
                                     Click="BtnNewItem_Click"
                                     Padding="5,3"
                                     ToolTip="Create a takeoff item (T)"/>
+                            <Button x:Name="BtnDeleteEmptyTakeoffs"
+                                    Grid.Column="2"
+                                    Content="Delete Empty"
+                                    Click="BtnDeleteEmptyTakeoffs_Click"
+                                    Padding="5,3"
+                                    Margin="4,0,0,0"
+                                    ToolTip="Delete all takeoff items with zero measurement sections; Ctrl+Z restores the batch"/>
                             <Button x:Name="BtnTakeoffMoreMenu"
-                                    Grid.Column="3"
+                                    Grid.Column="4"
                                     Click="DropdownButton_Click"
                                     Padding="5,3"
                                     Margin="6,0,4,0"
@@ -1784,7 +1792,7 @@
                                 </Button.ContextMenu>
                             </Button>
                             <Button x:Name="BtnRightExportMenu"
-                                    Grid.Column="4"
+                                    Grid.Column="5"
                                     Click="BtnRightExportMenu_Click"
                                     Padding="5,3"
                                     MinWidth="82"

@@ -1,5 +1,28 @@
 ﻿# Development Log
 
+## 2026-07-14 Takeoffs Tree safe empty-item cleanup
+
+- Added `Delete Empty` directly beside `New Item` in the lower Takeoffs Tree
+  action row. It scans the full current job but removes only takeoff item
+  nodes; folder nodes are never candidates.
+- Defined empty strictly as zero measurement records. A Count record or a
+  Line/Area section remains protected even when its geometry has zero points.
+- Added a strict disk safety check before deletion: `measurements.json` must be
+  a real array or a versioned envelope with an explicit array, its count must
+  agree with `Data.xml`, and corrupt/quarantined or unreadable data is skipped.
+- Candidate paths are snapshotted before pending autosaves are flushed, then
+  rechecked after the flush and immediately before deletion. This prevents an
+  autosave from turning ambiguous loaded data into an apparently empty item.
+- Active Record blocks the action. Multiline owners and their companion items
+  are protected. The confirmation lists candidates and the complete batch is
+  moved into the existing Takeoffs undo trash, so one `Ctrl+Z` restores it.
+- Implementation ownership:
+  `MainWindow.TakeoffsCleanup.cs`, `Models/TakeoffCleanupService.cs`, and the
+  strict count reader in `Models/Storage/TakeoffStore.cs`; regression coverage
+  is in `Tests/TakeoffCleanupServiceTests.cs`.
+- Verification passed: `dotnet build .\ourplancore.sln`
+  (`0 warnings / 0 errors`) and full tests (`494/494`).
+
 ## 2026-07-14 Sheet Metadata Precise v2
 
 Detailed handoff:
