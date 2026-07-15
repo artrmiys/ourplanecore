@@ -22,6 +22,15 @@
   is in `Tests/TakeoffCleanupServiceTests.cs`.
 - Verification passed: `dotnet build .\ourplancore.sln`
   (`0 warnings / 0 errors`) and full tests (`494/494`).
+- Deployed the compressed single-file build (`173,709,959` bytes) to
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe` with
+  ProductVersion `2.2.3+5a7e249...` and SHA256
+  `E0CABE4482F11B7FA874223DD1441808925DA581972CDDC73FA8983CF40EAB26`.
+  Preserved rollback
+  `ourplancore.exe.bak-20260714-before-delete-empty-takeoffs`, verified the
+  Desktop shortcut target/working directory, and relaunched the packaged app
+  on the previous job. The latest startup log has `Loaded takeoffs`, `Viewport`,
+  and `0` errors after `Application startup.`.
 
 ## 2026-07-14 Sheet Metadata Precise v2
 
