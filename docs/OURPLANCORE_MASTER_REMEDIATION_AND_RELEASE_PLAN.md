@@ -139,8 +139,9 @@ using the stale pre-rebrand helper. The script must:
 10. upload the exact update-folder assets to a GitHub Release;
 11. verify the published asset names/sizes/digests and latest links.
 
-Current prerequisite gap: GitHub CLI is not installed. Install/authenticate it
-before the first release; source work may continue before that point.
+GitHub CLI is available through the pinned portable tool path used by the
+release script and is authenticated only for the publishing operator. Public
+downloads do not require a GitHub account.
 
 ## 4. Phase 0 — Checkpoint and Release Foundation
 
@@ -150,18 +151,18 @@ Goal: make every later milestone recoverable and downloadable.
 - [x] Create a named checkpoint tag before behavior-sensitive edits.
 - [x] Commit this master plan explicitly despite the repository-wide `*.md`
       ignore rule.
-- [ ] Push the 11 existing local commits plus the plan commit to the existing
+- [x] Push the 11 existing local commits plus the plan commit to the existing
       feature branch without staging `docs/60-ux-ui/` accidentally.
-- [ ] Open/update one draft PR from the feature branch to `main` for reviewable
+- [x] Open/update one draft PR from the feature branch to `main` for reviewable
       source history.
 - [x] Add the safe release script described in section 3.3.
 - [x] Install and authenticate GitHub CLI for release upload.
 - [x] Remove the embedded OpenAI key from the public workbook source, resolve it
       from `OPENAI_API_KEY`, and validate the saved workbook copy.
-- [ ] Create the first GitHub Release from the current known-good packaged EXE
+- [x] Create the first GitHub Release from the current known-good packaged EXE
       and current `TemplateCom.xlsm`.
-- [ ] Put `TemplateCom.xlsm` and `DOWNLOAD-LATEST.txt` beside the update EXE.
-- [ ] Verify direct latest links from a clean request.
+- [x] Put `TemplateCom.xlsm` and `DOWNLOAD-LATEST.txt` beside the update EXE.
+- [x] Verify direct latest links from a clean request.
 
 Acceptance:
 
@@ -170,6 +171,33 @@ Acceptance:
 - workbook hashes match;
 - shortcut launches the update EXE;
 - latest log segment has no production `ERROR` after `Application startup.`.
+
+Phase 0 completion evidence (2026-07-15):
+
+- source commit: `568034e2f67d8726292599d599e4d02020170867`;
+- release tag: `ourplancore-v2.2.3-20260715-568034e`;
+- public release:
+  `https://github.com/artrmiys/ourplanecore/releases/tag/ourplancore-v2.2.3-20260715-568034e`;
+- draft PR: `https://github.com/artrmiys/ourplanecore/pull/2`;
+- release state: public, non-draft, non-prerelease, and current `latest`;
+- release assets: exactly `ourplancore.exe`, `TemplateCom.xlsm`, and
+  `DOWNLOAD-LATEST.txt`;
+- EXE: `171,710,350` bytes, SHA-256
+  `536C5DF8F6787C078B0A720C0D8A4C811B3A3EEF3A7FB519FE5AEE4666EA170B`;
+- workbook: `657,561` bytes, SHA-256
+  `DF9EA6D54BDB433788CC892DF20BA25E6E9B6E72F21AD7C681B70072057D92AC`;
+- note: `1,026` bytes, SHA-256
+  `195E0091C15CE6027CCE748EC388A0EF9E0ECD536DC47B1244142FC2C6A531C6`;
+- clean release worktree: C# tests `496/496`, Python detector tests `24/24`,
+  build `0 warnings / 0 errors`;
+- authenticated draft verification and unauthenticated pinned/latest downloads
+  all reproduced the same hashes;
+- installed ProductVersion:
+  `2.2.3+568034e2f67d8726292599d599e4d02020170867`;
+- Desktop shortcut target and working directory point to
+  `C:\Users\User\Desktop\updates\OurPlanCore`;
+- packaged log `app-20260715.log`, latest startup at line `3080`: zero
+  `ERROR`, with `Loaded takeoffs` and `Viewport` signals.
 
 ## 5. Phase 1 — Data Safety v1
 

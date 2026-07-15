@@ -1,5 +1,35 @@
 ﻿# Development Log
 
+## 2026-07-15 Public GitHub Release Foundation
+
+- Added a fail-safe release workflow that builds from an exact clean commit,
+  runs all tests, publishes the compressed single-file app, validates the
+  packaged startup log, deploys the local update transactionally, and verifies
+  both pinned and `latest` GitHub downloads without authentication.
+- Sanitized `TemplateCom.xlsm` and its VBA source so the OpenAI key is read from
+  `OPENAI_API_KEY`; the release scanner checks the complete workbook package
+  and extracted VBA before upload.
+- Published public release
+  `ourplancore-v2.2.3-20260715-568034e` from source commit
+  `568034e2f67d8726292599d599e4d02020170867` with exactly three assets:
+  `ourplancore.exe`, `TemplateCom.xlsm`, and `DOWNLOAD-LATEST.txt`.
+- Public release page:
+  `https://github.com/artrmiys/ourplanecore/releases/tag/ourplancore-v2.2.3-20260715-568034e`;
+  draft source-review PR: `https://github.com/artrmiys/ourplanecore/pull/2`.
+- Verification passed in the clean release worktree: C# tests `496/496`, Python
+  metadata tests `24/24`, build `0 warnings / 0 errors`, public anonymous
+  pinned/latest downloads, and byte-identical release/local hashes.
+- Installed EXE: `171,710,350` bytes, ProductVersion
+  `2.2.3+568034e2f67d8726292599d599e4d02020170867`, SHA-256
+  `536C5DF8F6787C078B0A720C0D8A4C811B3A3EEF3A7FB519FE5AEE4666EA170B`.
+- Installed workbook SHA-256:
+  `DF9EA6D54BDB433788CC892DF20BA25E6E9B6E72F21AD7C681B70072057D92AC`;
+  installed note SHA-256:
+  `195E0091C15CE6027CCE748EC388A0EF9E0ECD536DC47B1244142FC2C6A531C6`.
+- Desktop shortcut target/working directory are the update package. The latest
+  packaged startup segment in `app-20260715.log` has zero `ERROR` entries and
+  includes `Loaded takeoffs` and `Viewport`.
+
 ## 2026-07-14 Takeoffs Tree safe empty-item cleanup
 
 - Added `Delete Empty` directly beside `New Item` in the lower Takeoffs Tree
