@@ -19,7 +19,24 @@
 - Added deterministic lease, two-instance, stale-local, active-remote,
   takeover/CAS, heartbeat-loss, read-only integration, async identity, import,
   bookmarks, and 3D regression coverage. Verification passed: build
-  `0 warnings / 0 errors`, full regression suite `544/544`.
+  `0 warnings / 0 errors`, full regression suite `544/544`, and precise sheet
+  metadata tests `24/24`.
+- Published public latest release
+  `ourplancore-v2.2.3-20260715-24cfab9` from source commit
+  `24cfab9ed9b7c33a2395e95e38a6d73b755c8f2a` with exactly
+  `ourplancore.exe`, `TemplateCom.xlsm`, and `DOWNLOAD-LATEST.txt`:
+  `https://github.com/artrmiys/ourplanecore/releases/tag/ourplancore-v2.2.3-20260715-24cfab9`.
+- Installed compressed single-file EXE: `171,748,552` bytes, ProductVersion
+  `2.2.3+24cfab9ed9b7c33a2395e95e38a6d73b755c8f2a`, SHA-256
+  `B3EEA596F44FF2FC962FC3D84309D2B4E0E42C6703149792C8078412A4FA2962`.
+  Template SHA-256 is
+  `DF9EA6D54BDB433788CC892DF20BA25E6E9B6E72F21AD7C681B70072057D92AC`;
+  download-note SHA-256 is
+  `5D1453FF8D7F1C05E44DAE4462BCC7708E12AB8D354F41CD150E06CFBA848A0C`.
+- Anonymous pinned and `latest` downloads reproduced all three installed
+  hashes. The Desktop shortcut targets the update package, and the packaged
+  startup at line `8124` of `app-20260715.log` is alive with zero `ERROR`
+  entries plus `Loaded takeoffs` and `Viewport`.
 
 ## 2026-07-15 Reliable Takeoff Autosave
 

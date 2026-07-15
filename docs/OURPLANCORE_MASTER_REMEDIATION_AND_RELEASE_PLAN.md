@@ -269,7 +269,10 @@ Completed 2026-07-15. The v2 lease is fail-closed across storage services,
 autosave, import, AI continuations, bookmarks, overlays, and 3D/massing edits.
 Active local and remote owners cannot be taken over; only a proven stale lease
 can be replaced with compare-and-exchange ownership checks. Verification:
-build `0 warnings / 0 errors`, full regression suite `544/544`.
+build `0 warnings / 0 errors`, full regression suite `544/544`, precise sheet
+metadata tests `24/24`, and packaged startup with zero errors. Public latest:
+`ourplancore-v2.2.3-20260715-24cfab9`, source commit
+`24cfab9ed9b7c33a2395e95e38a6d73b755c8f2a`.
 
 ### 5.3 Tri-state data loading
 
