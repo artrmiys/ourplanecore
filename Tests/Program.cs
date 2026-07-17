@@ -328,6 +328,7 @@ var tests = new List<(string Name, Action Run)>
     ("job lease import metadata and similar flows recheck origin", JobLeaseLifecycleRegressionTests.ImportMetadataAndSimilarFlowsRecheckOriginAccess),
     ("takeoff tree refresh button is wired", TakeoffsTreeRegressionTests.TakeoffsTreeRefreshButtonIsWired),
     ("bookmarks dock panel and shortcut are wired", TakeoffsTreeRegressionTests.BookmarksDockPanelAndShortcutAreWired),
+    ("bookmark crop includes measurements and row preview is local", TakeoffsTreeRegressionTests.BookmarkCropIncludesVisibleMeasurementsAndRowPreviewIsLocal),
     ("takeoff template presets and collapsed depth are wired", TakeoffsTreeRegressionTests.TakeoffTemplatePresetsAndCollapsedDepthAreWired),
     ("tree marquee multi selection is wired", TakeoffsTreeRegressionTests.TreeMarqueeMultiSelectionIsWired),
     ("project tree collapse and takeoff delete selection are wired", TakeoffsTreeRegressionTests.ProjectTreeCollapseAndTakeoffDeleteSelectionAreWired),

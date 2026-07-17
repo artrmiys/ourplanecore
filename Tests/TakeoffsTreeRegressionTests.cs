@@ -1220,6 +1220,52 @@ internal static class TakeoffsTreeRegressionTests
             "global BK sequence must invoke AddBookmarkFromShortcut");
     }
 
+    public static void BookmarkCropIncludesVisibleMeasurementsAndRowPreviewIsLocal()
+    {
+        string bookmarksController = ReadRepoFile("PageBookmarksController.cs");
+        string cropCapture = ReadRepoFile("Controls/PdfViewport.CropCapture.cs");
+        string previewDialog = ReadRepoFile("Dialogs/PageBookmarkCropPreviewDialog.cs");
+        string snapshotMethod = SliceMethod(
+            cropCapture,
+            "private void DrawBookmarkMeasurementSnapshot(");
+        string previewClickMethod = SliceMethod(
+            bookmarksController,
+            "private void BookmarkCropPreviewButton_Click(");
+
+        AssertTrue(
+            bookmarksController.Contains("_viewport.IsPageRenderReady(page.FolderPath)", StringComparison.Ordinal) &&
+            bookmarksController.Contains("_viewport.TrySaveBookmarkCropRect(", StringComparison.Ordinal),
+            "bookmark crops must wait for the current page bitmap and use the measurement-aware capture path");
+        AssertTrue(
+            snapshotMethod.Contains("ActivePageMeasurements()", StringComparison.Ordinal) &&
+            snapshotMethod.Contains("LayerOrderedMeasurements(", StringComparison.Ordinal) &&
+            snapshotMethod.Contains("IsMeasurementVisible(measurement, cropPdfRect)", StringComparison.Ordinal) &&
+            snapshotMethod.Contains("ShouldDrawMeasurementDetails(", StringComparison.Ordinal) &&
+            snapshotMethod.Contains("ShouldUseSimplifiedAreaPaint(", StringComparison.Ordinal) &&
+            snapshotMethod.Contains("selected: false", StringComparison.Ordinal) &&
+            snapshotMethod.Contains("DrawMeasurementTopLabels(", StringComparison.Ordinal) &&
+            !snapshotMethod.Contains("DrawPageAnnotations(", StringComparison.Ordinal) &&
+            !snapshotMethod.Contains("DrawInProgress(", StringComparison.Ordinal),
+            "bookmark crop snapshots must reuse visible measurement geometry without selection or transient overlays");
+        AssertTrue(
+            bookmarksController.Contains("CellTemplate = BuildBookmarkViewCellTemplate()", StringComparison.Ordinal) &&
+            bookmarksController.Contains("Application.Current.FindResource(\"IconCrop\")", StringComparison.Ordinal) &&
+            bookmarksController.Contains("new Binding(nameof(PageBookmarkRow.Bookmark))", StringComparison.Ordinal) &&
+            bookmarksController.Contains("AutomationProperties.NameProperty", StringComparison.Ordinal) &&
+            bookmarksController.Contains("_bookmarkCropPreviewPress", StringComparison.Ordinal) &&
+            bookmarksController.Contains("RestoreBookmarkSelectionAfterCropPreview()", StringComparison.Ordinal) &&
+            bookmarksController.Contains("IsBookmarkRowButtonSource(e.OriginalSource as DependencyObject)", StringComparison.Ordinal) &&
+            bookmarksController.Contains("hasCropImage ? Visibility.Collapsed : Visibility.Visible", StringComparison.Ordinal) &&
+            previewClickMethod.Contains("OpenBookmarkCropImage(bookmark)", StringComparison.Ordinal) &&
+            !previewClickMethod.Contains("OpenPageBookmark(", StringComparison.Ordinal),
+            "crop bookmarks must expose a row-local preview button that does not navigate the sheet");
+        AssertTrue(
+            bookmarksController.Contains("new PageBookmarkCropPreviewDialog(bookmark.Name, path)", StringComparison.Ordinal) &&
+            previewDialog.Contains("BitmapCacheOption.OnLoad", StringComparison.Ordinal) &&
+            previewDialog.Contains("Stretch = Stretch.Uniform", StringComparison.Ordinal),
+            "bookmark images must open in a file-unlocked, fit-to-window in-app preview");
+    }
+
     public static void TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired()
     {
         string xaml = ReadRepoFile("MainWindow.xaml");

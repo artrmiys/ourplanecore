@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
@@ -12,6 +12,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using OurPlanCore.Controls;
 using SkiaSharp;
+using WpfPath = System.Windows.Shapes.Path;
 
 namespace OurPlanCore;
 
@@ -46,6 +47,8 @@ internal sealed class PageBookmarksController
     private GridLength _dockRowHeight = new(190);
     private bool _syncingBookmarkSelection;
     private bool _syncingBookmarkDockToggle;
+    private bool _bookmarkCropPreviewPress;
+    private PageBookmarkRow? _bookmarkSelectionBeforeCropPreview;
     private bool _moduleEnabled = true;
     private bool _wasDockedBeforeModuleDisable;
 
@@ -98,7 +101,7 @@ internal sealed class PageBookmarksController
                 {
                     new GridViewColumn { Header = "Name", Width = 94, DisplayMemberBinding = new Binding(nameof(PageBookmarkRow.Name)) },
                     new GridViewColumn { Header = "Page", Width = 58, DisplayMemberBinding = new Binding(nameof(PageBookmarkRow.Page)) },
-                    new GridViewColumn { Header = "View", Width = 44, DisplayMemberBinding = new Binding(nameof(PageBookmarkRow.View)) },
+                    new GridViewColumn { Header = "View", Width = 44, CellTemplate = BuildBookmarkViewCellTemplate() },
                 },
             },
         };
@@ -326,6 +329,79 @@ internal sealed class PageBookmarksController
         return style;
     }
 
+    private DataTemplate BuildBookmarkViewCellTemplate()
+    {
+        var cell = new FrameworkElementFactory(typeof(Grid));
+
+        var viewText = new FrameworkElementFactory(typeof(TextBlock));
+        viewText.SetBinding(TextBlock.TextProperty, new Binding(nameof(PageBookmarkRow.View)));
+        viewText.SetBinding(
+            UIElement.VisibilityProperty,
+            new Binding(nameof(PageBookmarkRow.ViewTextVisibility)));
+        viewText.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        viewText.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        cell.AppendChild(viewText);
+
+        var previewButton = new FrameworkElementFactory(typeof(Button));
+        previewButton.SetValue(FrameworkElement.WidthProperty, 20.0);
+        previewButton.SetValue(FrameworkElement.HeightProperty, 20.0);
+        previewButton.SetValue(FrameworkElement.MinWidthProperty, 0.0);
+        previewButton.SetValue(Control.PaddingProperty, new Thickness(2));
+        previewButton.SetValue(FrameworkElement.MarginProperty, new Thickness(0));
+        previewButton.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        previewButton.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        previewButton.SetValue(FrameworkElement.ToolTipProperty, "Preview crop image");
+        previewButton.SetValue(FrameworkElement.StyleProperty, Application.Current.FindResource("ToolBtn"));
+        previewButton.SetBinding(
+            AutomationProperties.NameProperty,
+            new Binding(nameof(PageBookmarkRow.Name))
+            {
+                StringFormat = "Preview crop image for {0}",
+            });
+        previewButton.SetBinding(
+            UIElement.VisibilityProperty,
+            new Binding(nameof(PageBookmarkRow.HasCropImage))
+            {
+                Converter = new BooleanToVisibilityConverter(),
+            });
+        previewButton.SetBinding(
+            FrameworkElement.TagProperty,
+            new Binding(nameof(PageBookmarkRow.Bookmark)));
+        previewButton.AddHandler(
+            UIElement.PreviewMouseLeftButtonDownEvent,
+            new MouseButtonEventHandler(BookmarkCropPreviewButton_PreviewMouseLeftButtonDown));
+        previewButton.AddHandler(
+            Button.ClickEvent,
+            new RoutedEventHandler(BookmarkCropPreviewButton_Click));
+        previewButton.AddHandler(
+            UIElement.LostMouseCaptureEvent,
+            new MouseEventHandler(BookmarkCropPreviewButton_LostMouseCapture));
+
+        var icon = new FrameworkElementFactory(typeof(WpfPath));
+        icon.SetValue(WpfPath.DataProperty, Application.Current.FindResource("IconCrop"));
+        icon.SetValue(FrameworkElement.WidthProperty, 13.0);
+        icon.SetValue(FrameworkElement.HeightProperty, 13.0);
+        icon.SetValue(FrameworkElement.MarginProperty, new Thickness(0));
+        icon.SetValue(WpfPath.StretchProperty, Stretch.Uniform);
+        icon.SetValue(WpfPath.StrokeThicknessProperty, 1.35);
+        icon.SetValue(WpfPath.StrokeLineJoinProperty, PenLineJoin.Round);
+        icon.SetValue(WpfPath.StrokeStartLineCapProperty, PenLineCap.Round);
+        icon.SetValue(WpfPath.StrokeEndLineCapProperty, PenLineCap.Round);
+        icon.SetBinding(
+            WpfPath.StrokeProperty,
+            new Binding(nameof(Control.Foreground))
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Button), 1),
+            });
+        previewButton.AppendChild(icon);
+        cell.AppendChild(previewButton);
+
+        return new DataTemplate
+        {
+            VisualTree = cell,
+        };
+    }
+
     private static Button BookmarkButton(string text, RoutedEventHandler click, string tooltip)
     {
         var button = new Button
@@ -346,12 +422,18 @@ internal sealed class PageBookmarksController
             return;
 
         var rows = _pageBookmarks
-            .Select((bookmark, index) => new PageBookmarkRow(
-                bookmark.Name,
-                BookmarkPageName(bookmark),
-                FormatBookmarkView(bookmark),
-                index + 1,
-                bookmark))
+            .Select((bookmark, index) =>
+            {
+                bool hasCropImage = HasBookmarkCropImage(bookmark);
+                return new PageBookmarkRow(
+                    bookmark.Name,
+                    BookmarkPageName(bookmark),
+                    FormatBookmarkView(bookmark),
+                    hasCropImage,
+                    hasCropImage ? Visibility.Collapsed : Visibility.Visible,
+                    index + 1,
+                    bookmark);
+            })
             .ToList();
 
         _syncingBookmarkSelection = true;
@@ -407,6 +489,15 @@ internal sealed class PageBookmarksController
         bookmark != null &&
         string.Equals(bookmark.Type, "crop_image", StringComparison.OrdinalIgnoreCase);
 
+    private bool HasBookmarkCropImage(PageBookmark bookmark)
+    {
+        if (!IsCropImageBookmark(bookmark) || string.IsNullOrWhiteSpace(bookmark.CropImagePath))
+            return false;
+
+        string path = BookmarkCropImageFullPath(bookmark);
+        return !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+    }
+
     private void UpdateBookmarkButtons()
     {
         PageBookmark? selection = SelectedBookmark();
@@ -431,14 +522,60 @@ internal sealed class PageBookmarksController
     private void BookmarkList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateBookmarkButtons();
-        if (_syncingBookmarkSelection || SelectedBookmark() == null)
+        if (_syncingBookmarkSelection || _bookmarkCropPreviewPress || SelectedBookmark() == null)
             return;
 
         OpenSelectedBookmark();
     }
 
+    private void BookmarkCropPreviewButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _bookmarkCropPreviewPress = true;
+        _bookmarkSelectionBeforeCropPreview = _bookmarkList?.SelectedItem as PageBookmarkRow;
+    }
+
+    private void BookmarkCropPreviewButton_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        try
+        {
+            if (sender is Button { Tag: PageBookmark bookmark })
+                OpenBookmarkCropImage(bookmark);
+        }
+        finally
+        {
+            RestoreBookmarkSelectionAfterCropPreview();
+        }
+    }
+
+    private void BookmarkCropPreviewButton_LostMouseCapture(object sender, MouseEventArgs e) =>
+        RestoreBookmarkSelectionAfterCropPreview();
+
+    private void RestoreBookmarkSelectionAfterCropPreview()
+    {
+        if (!_bookmarkCropPreviewPress)
+            return;
+
+        _syncingBookmarkSelection = true;
+        try
+        {
+            if (_bookmarkList != null)
+                _bookmarkList.SelectedItem = _bookmarkSelectionBeforeCropPreview;
+        }
+        finally
+        {
+            _syncingBookmarkSelection = false;
+            _bookmarkCropPreviewPress = false;
+            _bookmarkSelectionBeforeCropPreview = null;
+            UpdateBookmarkButtons();
+        }
+    }
+
     private void BookmarkList_KeyDown(object sender, KeyEventArgs e)
     {
+        if (IsBookmarkRowButtonSource(e.OriginalSource as DependencyObject))
+            return;
+
         if (e.Key == Key.Enter)
         {
             e.Handled = true;
@@ -449,6 +586,21 @@ internal sealed class PageBookmarksController
             e.Handled = true;
             DeleteSelectedBookmark();
         }
+    }
+
+    private static bool IsBookmarkRowButtonSource(DependencyObject? source)
+    {
+        for (DependencyObject? current = source; current != null;)
+        {
+            if (current is ButtonBase)
+                return true;
+
+            current = current is Visual
+                ? VisualTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+
+        return false;
     }
 
     private void BtnBookmarkAdd_Click(object sender, RoutedEventArgs e)
@@ -649,12 +801,17 @@ internal sealed class PageBookmarksController
             error = "No visible PDF area is available.";
             return false;
         }
+        if (!_viewport.IsPageRenderReady(page.FolderPath))
+        {
+            error = "The current page is still rendering. Try the bookmark again in a moment.";
+            return false;
+        }
 
         string outputPath = BookmarkCropImagePath(job, page, bookmarkName, bookmarkId);
         try
         {
             JobWriteAccess.Demand(outputPath, "save a bookmark crop image");
-            if (!_viewport.TrySaveCropRect(requestedRect, outputPath, out cropRect, out error))
+            if (!_viewport.TrySaveBookmarkCropRect(requestedRect, outputPath, out cropRect, out error))
                 return false;
         }
         catch (JobWriteDeniedException ex)
@@ -684,16 +841,22 @@ internal sealed class PageBookmarksController
 
         try
         {
-            Process.Start(new ProcessStartInfo
+            var dialog = new PageBookmarkCropPreviewDialog(bookmark.Name, path)
             {
-                FileName = path,
-                UseShellExecute = true,
-            });
-            _setStatus($"Opened crop image '{bookmark.Name}'.");
+                Owner = _owner,
+            };
+            dialog.ShowDialog();
+            _setStatus($"Viewed crop image '{bookmark.Name}'.");
         }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (
+            ex is IOException or
+            UnauthorizedAccessException or
+            NotSupportedException or
+            InvalidOperationException or
+            FormatException or
+            ArgumentException)
         {
-            _setStatus($"Could not open crop image: {ex.Message}");
+            _setStatus($"Could not preview crop image: {ex.Message}");
         }
     }
 
@@ -819,6 +982,8 @@ internal sealed class PageBookmarksController
         string Name,
         string Page,
         string View,
+        bool HasCropImage,
+        Visibility ViewTextVisibility,
         int Order,
         PageBookmark Bookmark);
 }

@@ -17,7 +17,12 @@ namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private bool TrySavePdfCrop(SKRect requestedPdfRect, string outputPath, out SKRect cropPdfRect, out string error)
+    private bool TrySavePdfCrop(
+        SKRect requestedPdfRect,
+        string outputPath,
+        bool includeMeasurementOverlay,
+        out SKRect cropPdfRect,
+        out string error)
     {
         cropPdfRect = SKRect.Empty;
         error = "";
@@ -51,6 +56,12 @@ public sealed partial class PdfViewport
             return false;
         }
 
+        cropPdfRect = new SKRect(
+            srcLeft / _bitmapScale,
+            srcTop / _bitmapScale,
+            srcRight / _bitmapScale,
+            srcBottom / _bitmapScale);
+
         string? directory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
@@ -63,6 +74,8 @@ public sealed partial class PdfViewport
                 _pageBitmap,
                 new SKRectI(srcLeft, srcTop, srcRight, srcBottom),
                 new SKRect(0, 0, cropWidth, cropHeight));
+            if (includeMeasurementOverlay)
+                DrawBookmarkMeasurementSnapshot(canvas, cropPdfRect, _bitmapScale);
         }
 
         using var image = SKImage.FromBitmap(crop);
@@ -70,13 +83,72 @@ public sealed partial class PdfViewport
         using var stream = File.Open(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
         data.SaveTo(stream);
 
-        cropPdfRect = new SKRect(
-            srcLeft / _bitmapScale,
-            srcTop / _bitmapScale,
-            srcRight / _bitmapScale,
-            srcBottom / _bitmapScale);
         return true;
     }
+
+    private void DrawBookmarkMeasurementSnapshot(SKCanvas canvas, SKRect cropPdfRect, float outputScale)
+    {
+        IReadOnlyList<Measurement> activeMeasurements = ActivePageMeasurements();
+        if (activeMeasurements.Count == 0 || outputScale <= 0)
+            return;
+
+        var transform = SKMatrix.CreateScaleTranslation(
+            outputScale,
+            outputScale,
+            -cropPdfRect.Left * outputScale,
+            -cropPdfRect.Top * outputScale);
+        using var restore = new SKAutoCanvasRestore(canvas, true);
+        canvas.Concat(ref transform);
+
+        ClearPaintJoistLayoutCache();
+        try
+        {
+            IReadOnlyList<Measurement> candidates = LayerOrderedMeasurements(
+                VisibleMeasurementCandidates(cropPdfRect));
+            var visibleMeasurements = new List<Measurement>(Math.Min(candidates.Count, 256));
+            bool drawDetails = ViewportRenderPolicy.ShouldDrawMeasurementDetails(
+                _zoom,
+                activeMeasurements.Count,
+                fastNavigationFrame: false);
+            bool simplifyAreaPaint = ViewportRenderPolicy.ShouldUseSimplifiedAreaPaint(
+                _zoom,
+                activeMeasurements.Count,
+                fastNavigationFrame: false);
+            foreach (Measurement measurement in candidates)
+            {
+                if (!IsMeasurementVisible(measurement, cropPdfRect))
+                    continue;
+
+                visibleMeasurements.Add(measurement);
+                DrawMeasurement(
+                    canvas,
+                    measurement,
+                    selected: false,
+                    drawLabels: false,
+                    drawDetails,
+                    simplifyAreaPaint);
+            }
+
+            bool drawAllLabels = ViewportRenderPolicy.ShouldDrawMeasurementLabels(
+                _zoom,
+                activeMeasurements.Count,
+                fastNavigationFrame: false);
+            foreach (Measurement measurement in visibleMeasurements)
+            {
+                bool drawDenseJoistLabel =
+                    measurement.MType == "area" &&
+                    measurement.JoistEnabled &&
+                    ShouldDrawJoistSummaryLabel();
+                if (drawAllLabels || drawDenseJoistLabel)
+                    DrawMeasurementTopLabels(canvas, measurement, cropPdfRect);
+            }
+        }
+        finally
+        {
+            ClearPaintJoistLayoutCache();
+        }
+    }
+
     public bool TrySaveContextCrop(
         float pdfX,
         float pdfY,
@@ -87,7 +159,7 @@ public sealed partial class PdfViewport
     {
         radiusPt = Math.Max(24f, radiusPt);
         var requested = SKRect.Create(pdfX - radiusPt, pdfY - radiusPt, radiusPt * 2, radiusPt * 2);
-        return TrySavePdfCrop(requested, outputPath, out cropPdfRect, out error);
+        return TrySavePdfCrop(requested, outputPath, includeMeasurementOverlay: false, out cropPdfRect, out error);
     }
 
     public bool TrySaveCropRect(
@@ -95,7 +167,14 @@ public sealed partial class PdfViewport
         string outputPath,
         out SKRect cropPdfRect,
         out string error) =>
-        TrySavePdfCrop(requestedPdfRect, outputPath, out cropPdfRect, out error);
+        TrySavePdfCrop(requestedPdfRect, outputPath, includeMeasurementOverlay: false, out cropPdfRect, out error);
+
+    public bool TrySaveBookmarkCropRect(
+        SKRect requestedPdfRect,
+        string outputPath,
+        out SKRect cropPdfRect,
+        out string error) =>
+        TrySavePdfCrop(requestedPdfRect, outputPath, includeMeasurementOverlay: true, out cropPdfRect, out error);
 
     public bool TrySaveMeasurementCrop(
         Measurement measurement,
@@ -120,6 +199,6 @@ public sealed partial class PdfViewport
         float centerY = (bounds.Top + bounds.Bottom) / 2f;
         var requested = SKRect.Create(centerX - width / 2f, centerY - height / 2f, width, height);
 
-        return TrySavePdfCrop(requested, outputPath, out cropPdfRect, out error);
+        return TrySavePdfCrop(requested, outputPath, includeMeasurementOverlay: false, out cropPdfRect, out error);
     }
 }
