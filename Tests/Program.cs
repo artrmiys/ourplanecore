@@ -493,6 +493,7 @@ var tests = new List<(string Name, Action Run)>
     ("planswift import all option keeps pages without takeoffs", PlanSwiftImportTests.ImportAllOptionKeepsPlanSwiftPagesWithoutTakeoffs),
     ("planswift import preserves holes box and containers", PlanSwiftImportTests.ImportPreservesPlanSwiftHolesBoxAndContainers),
     ("planswift import skips unusable area sections", PlanSwiftImportTests.ImportSkipsUnusablePlanSwiftAreaSections),
+    ("planswift import preserves hidden sections and holes", PlanSwiftImportVisibilityTests.ImportPreservesHiddenPlanSwiftSectionsAndHoles),
     ("planswift import preserves segments and source metadata", PlanSwiftImportTests.ImportPreservesSegmentsAndSourceMetadata),
     ("planswift import joist segments use linked area section directions", PlanSwiftImportTests.ImportJoistSegmentsUseLinkedAreaSectionDirections),
     ("planswift import into current job uses planswift buckets", PlanSwiftImportTests.ImportIntoCurrentJobUsesPlanSwiftBuckets),

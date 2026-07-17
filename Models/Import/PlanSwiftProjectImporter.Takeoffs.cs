@@ -22,6 +22,9 @@ public static partial class PlanSwiftProjectImporter
         ref int importedItems,
         ref int importedMeasurements)
     {
+        var pagesWithUpdatedHiddenMeasurements =
+            new Dictionary<string, PageInfo>(StringComparer.OrdinalIgnoreCase);
+
         foreach (PlanSwiftFolderRecord folder in manifest.TakeoffFolders)
         {
             string parent = EnsureRelativeFolder(takeoffsRoot, folder.ParentRelativeFolder);
@@ -60,18 +63,28 @@ public static partial class PlanSwiftProjectImporter
                     continue;
                 }
 
-                imported.Measurements.Add(CreateMeasurement(
+                Measurement measurement = CreateMeasurement(
                     manifest,
                     section,
                     page,
                     imported.FolderPath,
                     item.ColorHex,
-                    "Imported from PlanSwift"));
+                    "Imported from PlanSwift");
+                imported.Measurements.Add(measurement);
+                if (!section.Visible &&
+                    !page.Page.HiddenMeasurements.Contains(measurement.Id, StringComparer.OrdinalIgnoreCase))
+                {
+                    page.Page.HiddenMeasurements.Add(measurement.Id);
+                    pagesWithUpdatedHiddenMeasurements[page.Page.FolderPath] = page.Page;
+                }
                 importedMeasurements++;
             }
 
             OurPlanCoreJobStore.SaveTakeoffItem(imported);
         }
+
+        foreach (PageInfo page in pagesWithUpdatedHiddenMeasurements.Values)
+            OurPlanCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, page.HiddenMeasurements);
     }
 
     private static Measurement CreateMeasurement(

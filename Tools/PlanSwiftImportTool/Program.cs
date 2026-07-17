@@ -19,6 +19,7 @@ static int Run(string[] args)
         {
             "scan" => RunScan(options),
             "import" => RunImport(options),
+            "sync-takeoff-folder" => RunSyncTakeoffFolder(options),
             _ => UnknownCommand(command),
         };
     }
@@ -62,7 +63,7 @@ static int RunImport(IReadOnlyDictionary<string, string> options)
         SourceJobPath = Required(options, "--source"),
         DestinationParentPath = Required(options, "--dest"),
         DestinationJobName = Value(options, "--name"),
-        ConvertPageImages = !HasOption(options, "--no-images"),
+        ConvertPageImages = !BoolOption(options, "--no-images"),
         MaxPages = IntValue(options, "--max-pages"),
         MaxTakeoffItems = IntValue(options, "--max-items"),
         MaxMeasurements = IntValue(options, "--max-measurements"),
@@ -83,6 +84,33 @@ static int RunImport(IReadOnlyDictionary<string, string> options)
     return 0;
 }
 
+static int RunSyncTakeoffFolder(IReadOnlyDictionary<string, string> options)
+{
+    TakeoffFolderSyncResult result = TakeoffFolderSync.Run(new TakeoffFolderSyncOptions
+    {
+        SourceJobPath = Required(options, "--source-job"),
+        TargetJobPath = Required(options, "--target-job"),
+        SourceTakeoffFolder = Required(options, "--source-folder"),
+        TargetTakeoffFolder = Required(options, "--target-folder"),
+        BackupPath = Required(options, "--backup"),
+        Apply = BoolOption(options, "--apply"),
+    });
+
+    Console.WriteLine($"Mode: {(result.Applied ? "applied" : "dry-run")}");
+    Console.WriteLine($"Items: {result.Items}");
+    Console.WriteLine($"Target measurements: {result.TargetMeasurements}");
+    Console.WriteLine($"Measurements: {result.Measurements}");
+    Console.WriteLine($"Reused measurements: {result.ReusedMeasurements}");
+    Console.WriteLine($"Added measurements: {result.AddedMeasurements}");
+    Console.WriteLine("Removed measurements: 0");
+    Console.WriteLine($"Holes: {result.Holes}");
+    Console.WriteLine($"Hidden measurements: {result.HiddenMeasurements}");
+    Console.WriteLine($"Pages: {result.Pages}");
+    Console.WriteLine($"Pages with hidden-state changes: {result.HiddenPages}");
+    Console.WriteLine($"Backup: {result.BackupPath}");
+    return 0;
+}
+
 static IReadOnlyDictionary<string, string> ParseOptions(string[] args)
 {
     var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -99,7 +127,7 @@ static IReadOnlyDictionary<string, string> ParseOptions(string[] args)
         }
         else
         {
-            values[key] = "true";
+            values[key] = "";
         }
     }
 
@@ -109,8 +137,16 @@ static IReadOnlyDictionary<string, string> ParseOptions(string[] args)
 static bool HasArg(string[] args, string key) =>
     args.Any(arg => string.Equals(arg, key, StringComparison.OrdinalIgnoreCase));
 
-static bool HasOption(IReadOnlyDictionary<string, string> options, string key) =>
-    options.ContainsKey(key);
+static bool BoolOption(IReadOnlyDictionary<string, string> options, string key)
+{
+    if (!options.TryGetValue(key, out string? value))
+        return false;
+    if (string.IsNullOrWhiteSpace(value))
+        return true;
+    if (bool.TryParse(value, out bool parsed))
+        return parsed;
+    throw new ArgumentException($"{key} must be a boolean flag or true/false.");
+}
 
 static string Required(IReadOnlyDictionary<string, string> options, string key)
 {
@@ -143,9 +179,13 @@ static void PrintUsage()
     Console.WriteLine("Import:");
     Console.WriteLine("  PlanSwiftImportTool import --source \"C:\\Path\\To\\PlanSwiftJob\" --dest \"C:\\Path\\To\\OurPlanCoreJobs\" [--name \"Job Name\"]");
     Console.WriteLine();
+    Console.WriteLine("Sync one staged takeoff folder into an existing job:");
+    Console.WriteLine("  PlanSwiftImportTool sync-takeoff-folder --source-job \"C:\\StagedJob\" --target-job \"C:\\ActiveJob\" --source-folder \"siding\" --target-folder \"old\\siding\" --backup \"C:\\Backup\" [--apply]");
+    Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --no-images            Create blank page PDFs instead of converting PlanSwift images");
     Console.WriteLine("  --max-pages N          Import only first N pages");
     Console.WriteLine("  --max-items N          Import only first N measured takeoff items");
     Console.WriteLine("  --max-measurements N   Import only first N measured sections");
+    Console.WriteLine("  --apply                Apply a validated takeoff-folder sync; without it the command is dry-run only");
 }

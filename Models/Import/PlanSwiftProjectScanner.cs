@@ -82,7 +82,7 @@ public static partial class PlanSwiftProjectScanner
         {
             warnings.Add(
                 $"PlanSwift takeoff items were found ({items.Count.ToString(CultureInfo.InvariantCulture)}), " +
-                "but no visible measured sections with PageGUID and DigitizerData were found.");
+                "but no usable measured sections with PageGUID and DigitizerData were found.");
         }
     }
 
@@ -323,8 +323,6 @@ public static partial class PlanSwiftProjectScanner
                 continue;
 
             bool visible = PlanSwiftXml.ParseBool(section.Property("Visible"), fallback: true);
-            if (!visible)
-                continue;
 
             string pageGuid = PlanSwiftXml.NormalizeGuid(section.Property("PageGUID"));
             string sectionType = PlanSwiftGeometryConverter.MeasurementTypeFromClass(section.ClassName);
@@ -392,8 +390,6 @@ public static partial class PlanSwiftProjectScanner
             if (!PlanSwiftXml.TryReadItem(holeFolder, out PlanSwiftDataItem hole))
                 continue;
             if (!string.Equals(hole.ClassName, "Area Subtract Section", StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (!PlanSwiftXml.ParseBool(hole.Property("Visible"), fallback: true))
                 continue;
 
             string holePageGuid = PlanSwiftXml.NormalizeGuid(hole.Property("PageGUID"));
