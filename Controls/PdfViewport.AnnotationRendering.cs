@@ -99,6 +99,16 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (kind == "line")
+        {
+            using var path = new SKPath();
+            path.MoveTo(start);
+            for (int i = 1; i < annotation.Points.Count; i++)
+                path.LineTo(annotation.Points[i]);
+            canvas.DrawPath(path, stroke);
+            return;
+        }
+
         canvas.DrawLine(start, end, stroke);
         if (kind == "arrow")
         {
@@ -355,9 +365,9 @@ public sealed partial class PdfViewport
         SKPoint start = annotation.Points[0];
         SKPoint end = annotation.Points[1];
         float lengthPt = MeasurementGeometry.Distance(start, end);
-        double scale = annotation.ScaleMetersPerPt > 0
-            ? annotation.ScaleMetersPerPt
-            : ScaleMetersPerPt;
+        double scale = AnnotationGlyphRenderer.ResolveDimensionScale(
+            ScaleMetersPerPt,
+            annotation.ScaleMetersPerPt);
         return AnnotationGlyphRenderer.FormatLength(lengthPt, (float)scale, UnitMode);
     }
     private void DrawNoteAnnotation(SKCanvas canvas, PageAnnotation annotation, SKColor color, bool selected)

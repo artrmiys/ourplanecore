@@ -50,6 +50,12 @@ public sealed class DetachedSheetWindow : Window
         _viewport.InvalidateVisual();
     }
 
+    public void RefreshPageScale(double scaleMetersPerPt)
+    {
+        Page.ScaleMetersPerPt = scaleMetersPerPt;
+        _viewport.ScaleMetersPerPt = scaleMetersPerPt;
+    }
+
     private void ConfigureViewport(
         OurPlanCoreJob job,
         PageInfo page,

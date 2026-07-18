@@ -208,7 +208,9 @@ public sealed partial class PdfViewport
             if (SegmentIntersectsRect(points[i - 1], points[i], rect))
                 return true;
 
-        if (points.Count > 2)
+        string kind = OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        bool isClosed = kind is "rectangle" or "note" or "cloud" or "highlight" or "area";
+        if (isClosed && points.Count > 2)
         {
             if (SegmentIntersectsRect(points[^1], points[0], rect))
                 return true;

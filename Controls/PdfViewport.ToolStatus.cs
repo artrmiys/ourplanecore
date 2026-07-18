@@ -167,9 +167,12 @@ public sealed partial class PdfViewport
                     : $"Highlighter: click the opposite corner.{modes}");
                 break;
             case ViewerTool.DrawLine:
-                PostStatus(_drawPts.Count == 0
-                    ? $"Draw line: click the first endpoint.{modes}"
-                    : $"Draw line: click the second endpoint.{modes}");
+                PostStatus(_drawPts.Count switch
+                {
+                    0 => $"Draw line: click the first point.{modes}",
+                    1 => $"Draw line: click the next point. Backspace/Ctrl+Z undo.{modes}",
+                    _ => $"Draw line: click next point, or Esc / C / double-click to finish.{modes}",
+                });
                 break;
             case ViewerTool.DrawArrow:
                 PostStatus(_drawPts.Count == 0
@@ -199,7 +202,7 @@ public sealed partial class PdfViewport
                 PostStatus($"Note: click the sheet to place a text note.{modes}");
                 break;
             case ViewerTool.Select:
-                PostStatus("Select: left-drag a box to select measurements. Ctrl+click toggles, Ctrl+C copies, Ctrl+V pastes.");
+                PostStatus("Select: drag a box around measurements or markups. Ctrl toggles, Ctrl+Shift removes; Shift constrains edits horizontally/vertically.");
                 break;
         }
     }

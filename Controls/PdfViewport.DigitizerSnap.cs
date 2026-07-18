@@ -20,8 +20,28 @@ public sealed partial class PdfViewport
 {
     private SKPoint ResolveDigitizerPoint(SKPoint rawPdf, bool updatePreview)
     {
-        if (TryFindDigitizerSnapPoint(rawPdf, out SKPoint snapped, out string snapKind))
+        SKPoint? anchor = !ShouldPreviewAsBox() && TryGetOrthoAnchor(out SKPoint orthoAnchor)
+            ? orthoAnchor
+            : null;
+        return ResolveConstrainedPoint(rawPdf, anchor, updatePreview);
+    }
+
+    private SKPoint ResolveConstrainedPoint(
+        SKPoint rawPdf,
+        SKPoint? orthoAnchor,
+        bool updatePreview,
+        Func<SKPoint, bool>? rejectSnap = null)
+    {
+        bool applyOrtho = orthoAnchor.HasValue && IsOrthoActive();
+        SKPoint constrained = applyOrtho
+            ? ApplyOrtho(orthoAnchor!.Value, rawPdf)
+            : rawPdf;
+
+        if (TryFindDigitizerSnapPoint(constrained, out SKPoint snapped, out string snapKind) &&
+            (rejectSnap == null || !rejectSnap(snapped)))
         {
+            if (applyOrtho)
+                snapped = ProjectSnapToOrthoAxis(orthoAnchor!.Value, constrained, snapped);
             if (updatePreview)
                 SetSnapPreview(snapped, snapKind);
             return snapped;
@@ -30,12 +50,7 @@ public sealed partial class PdfViewport
         if (updatePreview)
             SetSnapPreview(null);
 
-        if (ShouldPreviewAsBox())
-            return rawPdf;
-
-        return TryGetOrthoAnchor(out SKPoint anchor) && IsOrthoActive()
-            ? ApplyOrtho(anchor, rawPdf)
-            : rawPdf;
+        return constrained;
     }
 
     private bool TryFindDigitizerSnapPoint(SKPoint rawPdf, out SKPoint snapped, out string snapKind)
@@ -74,17 +89,22 @@ public sealed partial class PdfViewport
     private bool IsOrthoActive()
     {
         bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
-        return OrthoEnabled ^ shift;
+        return OrthoEnabled || shift;
     }
 
-    private static bool IsSelectionModifierActive() =>
-        (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != ModifierKeys.None;
+    private bool HasActiveOrthoConstraint() =>
+        !ShouldPreviewAsBox() &&
+        IsOrthoActive() &&
+        TryGetOrthoAnchor(out _);
 
-    // Shift (without Ctrl) means "remove from selection" while a selection
-    // modifier is active. Ctrl means "add to selection".
+    private static bool IsSelectionModifierActive() =>
+        (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+    // Shift is reserved for Ortho. Ctrl adds/toggles selection, while
+    // Ctrl+Shift removes from selection.
     private static bool IsDeselectModifierActive() =>
         (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
-        (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.None;
+        (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
 
     // Alt switches the box/click into vertex (handle) mode on the selected
     // Line/Area object(s). Alt alone toggles handle selection.
@@ -96,7 +116,7 @@ public sealed partial class PdfViewport
 
     private static bool IsRemoveModifierActive() =>
         (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
-        (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.None;
+        (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
 
     private bool ShouldPreviewAsBox() =>
         _tool == ViewerTool.DrawRect ||
@@ -131,21 +151,28 @@ public sealed partial class PdfViewport
         return false;
     }
 
-    private static SKPoint ApplyOrtho(SKPoint anchor, SKPoint point)
+    internal static SKPoint ApplyOrtho(SKPoint anchor, SKPoint point)
     {
         float dx = point.X - anchor.X;
         float dy = point.Y - anchor.Y;
-        float length = MeasurementGeometry.Distance(point, anchor);
-        if (length <= ViewportConstants.ZeroLengthEpsilon)
+        if (Math.Abs(dx) <= ViewportConstants.ZeroLengthEpsilon &&
+            Math.Abs(dy) <= ViewportConstants.ZeroLengthEpsilon)
+        {
             return point;
+        }
 
-        float angle = MathF.Atan2(dy, dx);
-        float step = MathF.PI / 4f;
-        float snappedAngle = MathF.Round(angle / step) * step;
-        return new SKPoint(
-            anchor.X + MathF.Cos(snappedAngle) * length,
-            anchor.Y + MathF.Sin(snappedAngle) * length);
+        return Math.Abs(dx) >= Math.Abs(dy)
+            ? new SKPoint(point.X, anchor.Y)
+            : new SKPoint(anchor.X, point.Y);
     }
+
+    private static SKPoint ProjectSnapToOrthoAxis(
+        SKPoint anchor,
+        SKPoint constrained,
+        SKPoint snapped) =>
+        Math.Abs(constrained.Y - anchor.Y) <= ViewportConstants.ZeroLengthEpsilon
+            ? new SKPoint(snapped.X, anchor.Y)
+            : new SKPoint(anchor.X, snapped.Y);
 
     private bool TryFindSnapPoint(SKPoint rawPdf, out SKPoint snapped, out string snapKind)
     {
@@ -235,7 +262,8 @@ public sealed partial class PdfViewport
 
         for (int i = 0; i < _drawPts.Count; i++)
         {
-            if (i == _drawPts.Count - 1 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut)
+            if (i == _drawPts.Count - 1 &&
+                _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut or ViewerTool.DrawLine)
                 continue;
 
             Consider(_drawPts[i], "endpoint");
@@ -357,6 +385,9 @@ public sealed partial class PdfViewport
             return annotation.Points;
 
         string kind = OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        if (kind == "line")
+            return annotation.Points;
+
         if (kind == "area")
             return annotation.Points.Append(annotation.Points[0]).ToList();
 

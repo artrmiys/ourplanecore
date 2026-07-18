@@ -8,6 +8,8 @@ namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    private bool _boxSelectAnnotationDomain;
+
     private void BeginBoxSelection(SKPoint pdf, bool additive, bool removeMode = false)
     {
         ClearInProgressInputForEdit();
@@ -17,6 +19,7 @@ public sealed partial class PdfViewport
         _boxSelectEndPdf = pdf;
         _boxSelectAdditive = additive;
         _boxSelectRemove = removeMode;
+        _boxSelectAnnotationDomain = _annotationSelectionDomain;
         CaptureMouse();
         PostStatus(removeMode
             ? "Deselect: drag a box around objects to remove them from the selection."
@@ -71,6 +74,14 @@ public sealed partial class PdfViewport
                     return;
                 }
 
+                if (_boxSelectAnnotationDomain &&
+                    TryHitAnnotation(_boxSelectStartPdf, out PageAnnotation preferredAnnotation))
+                {
+                    ApplyAnnotationClickGesture(preferredAnnotation, _boxSelectRemove);
+                    RequestRepaint();
+                    return;
+                }
+
                 if (TryHitMeasurement(_boxSelectStartPdf, out Measurement hitMeasurement))
                 {
                     ApplyAdditiveObjectGesture([hitMeasurement], _boxSelectRemove);
@@ -79,7 +90,7 @@ public sealed partial class PdfViewport
 
                 if (TryHitAnnotation(_boxSelectStartPdf, out PageAnnotation toggledAnnotation))
                 {
-                    ToggleAnnotationSelection(toggledAnnotation);
+                    ApplyAnnotationClickGesture(toggledAnnotation, _boxSelectRemove);
                     RequestRepaint();
                     return;
                 }
@@ -98,14 +109,16 @@ public sealed partial class PdfViewport
                 ? MeasurementIntersectsRect(m, rect)
                 : MeasurementContainedInRect(m, rect))
             .ToList();
-        var annotationHits = hits.Count == 0
-            ? _annotations.Where(annotation =>
+        var annotationHits = _annotations.Where(annotation =>
                 IsAnnotationVisibleOnActivePage(annotation) &&
                 (selectTouched
                     ? AnnotationIntersectsRect(annotation, rect)
                     : AnnotationContainedInRect(annotation, rect)))
-                .ToList()
-            : new List<PageAnnotation>();
+                .ToList();
+        if (_boxSelectAnnotationDomain && annotationHits.Count > 0)
+            hits.Clear();
+        else if (hits.Count > 0)
+            annotationHits.Clear();
 
         if (_boxSelectAdditive)
         {
@@ -161,10 +174,7 @@ public sealed partial class PdfViewport
                 : $"Selected {GetSelectedMeasurements().Count} enclosed measurement(s). Ctrl+C copies, Ctrl+V pastes.");
     }
 
-    // Ctrl/Shift gesture (click or box) on object(s):
-    //  вЂў Shift            в†’ remove the hit objects from the selection.
-    //  вЂў Ctrl, new object в†’ add it to the multi-selection (2, 3, вЂ¦ N).
-    //  вЂў Ctrl, same object that is already selected в†’ select ALL its vertices.
+    // Ctrl adds/toggles objects; Ctrl+Shift removes them. Shift alone is Ortho.
     private void ApplyAdditiveObjectGesture(IReadOnlyList<Measurement> hits, bool removeMode)
     {
         var selected = GetSelectedMeasurements().ToList();
@@ -198,6 +208,24 @@ public sealed partial class PdfViewport
         PostStatus(selected.Count == 1
             ? "Object already selected. Drag a handle to edit it, or use Alt to select multiple handles."
             : $"{selected.Count} objects selected.");
+    }
+
+    private void ApplyAnnotationClickGesture(PageAnnotation annotation, bool removeMode)
+    {
+        if (!removeMode)
+        {
+            ToggleAnnotationSelection(annotation);
+            return;
+        }
+
+        var selected = GetSelectedAnnotations().ToList();
+        if (!selected.Remove(annotation))
+            return;
+
+        SetSelectedAnnotations(selected, selected.LastOrDefault(), -1);
+        PostStatus(selected.Count == 0
+            ? "Selection cleared."
+            : $"Removed markup. {selected.Count} still selected.");
     }
 
     private void SelectAllVerticesOf(IReadOnlyList<Measurement> measurements)

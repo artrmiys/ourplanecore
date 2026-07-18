@@ -9,6 +9,8 @@ namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    private bool _annotationSelectionDomain;
+
     private void SelectMeasurement(Measurement measurement, int vertexIndex)
     {
         SetSelectedMeasurements([measurement], measurement, vertexIndex);
@@ -36,6 +38,8 @@ public sealed partial class PdfViewport
 
         _selectedMeasurement = nextPrimary;
         _selectedVertexIndex = nextPrimary == null ? -1 : vertexIndex;
+        if (next.Count > 0)
+            _annotationSelectionDomain = false;
         ClearMeasurementVertexSelection();
         if (nextPrimary != null && vertexIndex >= 0)
             VertexSelectionSet(nextPrimary, create: true).Add(vertexIndex);
@@ -76,6 +80,27 @@ public sealed partial class PdfViewport
         PostStatus(selected.Count == 0
             ? "No measurements on this sheet."
             : $"Selected all {selected.Count} measurement(s) on this sheet.");
+    }
+
+    private void SelectAllActivePageObjects()
+    {
+        var annotations = _annotations
+            .Where(IsAnnotationVisibleOnActivePage)
+            .ToList();
+        var measurements = ActivePageMeasurements().ToList();
+        if (_annotationSelectionDomain || measurements.Count == 0 && annotations.Count > 0)
+        {
+            SetSelectedAnnotations(annotations, annotations.LastOrDefault(), -1);
+            PostStatus(annotations.Count == 0
+                ? "No markups on this sheet."
+                : $"Selected all {annotations.Count} markup(s) on this sheet.");
+            return;
+        }
+
+        SetSelectedMeasurements(measurements, measurements.LastOrDefault(), -1);
+        PostStatus(measurements.Count == 0
+            ? "No measurements on this sheet."
+            : $"Selected all {measurements.Count} measurement(s) on this sheet.");
     }
 
     private void SelectAnnotation(PageAnnotation annotation, int vertexIndex)
@@ -120,6 +145,8 @@ public sealed partial class PdfViewport
 
         _selectedAnnotation = nextPrimary;
         _selectedAnnotationVertexIndex = nextPrimary == null ? -1 : vertexIndex;
+        if (next.Count > 0)
+            _annotationSelectionDomain = true;
         if (primaryChanged || setChanged || vertexChanged)
             RequestRepaint();
         PublishTransformSelectionChanged();
@@ -139,7 +166,7 @@ public sealed partial class PdfViewport
         SetSelectedAnnotations(selected, selected.Contains(annotation) ? annotation : selected.LastOrDefault(), -1);
         PostStatus(selected.Count == 0
             ? "Selection cleared."
-            : $"Selected {selected.Count} markup(s). Delete removes them.");
+            : $"Selected {selected.Count} markup(s). Ctrl+C copies, Ctrl+V pastes, Delete removes.");
     }
 
     private void CenterOnMeasurement(Measurement measurement)

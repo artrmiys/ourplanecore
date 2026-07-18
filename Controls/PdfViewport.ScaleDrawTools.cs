@@ -137,16 +137,26 @@ public sealed partial class PdfViewport
         PostRecordPrompt();
     }
 
-    private void FinalizeAnnotation(string kind)
+    private void FinalizeAnnotation(string kind, bool useAllPoints = false)
     {
         if (_drawPts.Count < 2)
             return;
 
         string normalizedKind = OurPlanCoreJobStore.NormalizePageAnnotationKind(kind);
+        List<SKPoint> points = useAllPoints
+            ? CleanFinalizePoints(_drawPts, closeArea: false)
+            : _drawPts.Take(2).ToList();
+        if (points.Count < 2)
+        {
+            CancelDrawing();
+            PostStatus($"{ToolTitle(normalizedKind)} annotation cancelled.");
+            return;
+        }
+
         var annotation = new PageAnnotation
         {
             Kind = normalizedKind,
-            Points = _drawPts.Take(2).ToList(),
+            Points = points,
             Color = normalizedKind == "dimension"
                 ? "#1565C0"
                 : normalizedKind == "highlight"
@@ -360,6 +370,19 @@ public sealed partial class PdfViewport
 
             CancelDrawing();
             PostStatus("Area annotation cancelled.");
+            return;
+        }
+
+        if (_tool == ViewerTool.DrawLine)
+        {
+            if (_drawPts.Count >= 2)
+            {
+                FinalizeAnnotation("line", useAllPoints: true);
+                return;
+            }
+
+            CancelDrawing();
+            PostStatus("Line annotation cancelled.");
             return;
         }
 

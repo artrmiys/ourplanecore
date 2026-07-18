@@ -131,7 +131,19 @@ public sealed partial class PdfViewport : SKElement
     private string _aiActionDraftPreviewPage = "";
     private readonly List<SmartAiMarker> _aiMarkers = [];
     private readonly List<SheetLegendEntry> _sheetLegendEntries = [];
-    public  double   ScaleMetersPerPt { get; set; } = 0.0;
+    private double _scaleMetersPerPt;
+    public double ScaleMetersPerPt
+    {
+        get => _scaleMetersPerPt;
+        set
+        {
+            if (_scaleMetersPerPt.Equals(value))
+                return;
+
+            _scaleMetersPerPt = value;
+            RequestRepaint();
+        }
+    }
     public  string   ActiveColor      { get; set; } = "#FF4444";
     public  string   ActiveAnnotationColor { get; set; } = "#FF4444";
     public  double   ActiveAnnotationStrokeWidth { get; set; } = 5.0;

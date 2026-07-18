@@ -47,6 +47,17 @@ public sealed partial class PdfViewport
         }
 
         _tool = requestedTool;
+        if (requestedTool is ViewerTool.Ruler or ViewerTool.DrawHighlight or ViewerTool.DrawLine or
+            ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or
+            ViewerTool.Note)
+        {
+            _annotationSelectionDomain = true;
+        }
+        else if (requestedTool is ViewerTool.Beam or ViewerTool.Openings or ViewerTool.Point or
+                 ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut)
+        {
+            _annotationSelectionDomain = false;
+        }
         CancelDrawing(clearSelection: _tool != ViewerTool.AreaCut);
         SetSnapPreview(null);
         UpdateCursor();

@@ -248,19 +248,10 @@ public sealed partial class PdfViewport
 
     private SKPoint ResolveThreeDRoofPoint(SKPoint rawPdf, bool updatePreview)
     {
-        if (TryFindDigitizerSnapPoint(rawPdf, out SKPoint snapped, out string snapKind))
-        {
-            if (updatePreview)
-                SetSnapPreview(snapped, snapKind);
-            return snapped;
-        }
-
-        if (updatePreview)
-            SetSnapPreview(null);
-
-        return TryGetThreeDRoofOrthoAnchor(out SKPoint anchor) && IsOrthoActive()
-            ? ApplyOrtho(anchor, rawPdf)
-            : rawPdf;
+        SKPoint? anchor = TryGetThreeDRoofOrthoAnchor(out SKPoint orthoAnchor)
+            ? orthoAnchor
+            : null;
+        return ResolveConstrainedPoint(rawPdf, anchor, updatePreview);
     }
 
     private bool TryGetThreeDRoofOrthoAnchor(out SKPoint anchor)

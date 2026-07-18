@@ -145,6 +145,11 @@ public partial class MainWindow
                 IsEnabled = false,
             });
             AddMeasurementClipboardMenuItems(menu, request);
+            if (request.Annotation != null && IsModuleEnabled(ModuleId.Annotations))
+            {
+                menu.Items.Add(new Separator());
+                AddAnnotationEditMenuItems(menu, request);
+            }
             menu.IsOpen = true;
             return;
         }

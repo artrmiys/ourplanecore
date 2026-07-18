@@ -181,6 +181,7 @@ public partial class MainWindow
             _currentPage.ScaleMetersPerPt = scaleMetersPerPt;
         ApplyScaleToCurrentPageMeasurements(scaleMetersPerPt);
         OurPlanCoreJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
+        RefreshDetachedPageScale(pageFolder, scaleMetersPerPt);
         UpdateScaleUi(scaleMetersPerPt);
         return changed;
     }

@@ -80,6 +80,7 @@ public partial class MainWindow
         _currentPage.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
         ApplyScaleToCurrentPageMeasurements(_viewport.ScaleMetersPerPt);
         OurPlanCoreJobStore.SavePageScale(_currentPage.FolderPath, _viewport.ScaleMetersPerPt);
+        RefreshDetachedPageScale(_currentPage.FolderPath, _viewport.ScaleMetersPerPt);
     }
 
     private void ApplyViewportBackground(string color, bool persist)

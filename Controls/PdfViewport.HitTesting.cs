@@ -391,6 +391,15 @@ public sealed partial class PdfViewport
                    PointInPolygon(pdf, annotation.Points);
         }
 
+        if (kind == "line")
+        {
+            for (int i = 1; i < annotation.Points.Count; i++)
+                if (DistanceToSegment(pdf, annotation.Points[i - 1], annotation.Points[i]) <= tol)
+                    return true;
+
+            return false;
+        }
+
         return DistanceToSegment(pdf, start, end) <= tol;
     }
 }

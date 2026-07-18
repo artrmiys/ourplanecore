@@ -133,6 +133,7 @@ public partial class MainWindow
             page.ScaleMetersPerPt = scaleMetersPerPt;
             updatedPage.ScaleMetersPerPt = scaleMetersPerPt;
             affectedPageFolders.Add(updatedPage.FolderPath);
+            RefreshDetachedPageScale(updatedPage.FolderPath, scaleMetersPerPt);
 
             foreach (TakeoffItem item in ApplyScaleToPageMeasurements(
                          updatedPage.FolderPath,

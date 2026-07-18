@@ -469,6 +469,7 @@ public partial class MainWindow
             return;
 
         _viewport.OrthoEnabled = enabled;
+        SynchronizeOrthoAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
@@ -497,6 +498,7 @@ public partial class MainWindow
 
     private void OnViewportOrthoChanged(bool enabled)
     {
+        SynchronizeOrthoAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }

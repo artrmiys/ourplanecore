@@ -107,7 +107,7 @@ public partial class MainWindow
         Add("tool.toggleRecord", "Toggle Record", "Tools", "Space", "Toggle digitizer record mode for the current drawing tool.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.toggleSnap", "Toggle Snap", "Tools", "F3", "Toggle snap to existing takeoff points.");
         Add("tool.togglePdfSnap", "Toggle PDF Snap", "Tools", "Ctrl+F3", "Toggle snap to PDF vector corners and points.");
-        Add("tool.toggleOrtho", "Toggle Ortho", "Tools", "F8", "Toggle 90/45-degree ortho constraint.");
+        Add("tool.toggleOrtho", "Toggle Ortho", "Tools", "F8", "Toggle horizontal/vertical Ortho; Shift temporarily forces it.");
 
         Add("edit.copyMeasurements", "Copy Selected Measurements", "Edit", "Ctrl+C", "Copy the selected measurements.", selectedMeasurementCount > 0, "Select one or more measurements first.");
         Add("edit.pasteMeasurements", "Paste Measurements", "Edit", "Ctrl+V", "Paste copied measurements to the active page.", _measurementClipboard != null && hasPage, "Copy measurements and select a page first.");

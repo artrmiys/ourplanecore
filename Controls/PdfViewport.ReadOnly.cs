@@ -39,13 +39,25 @@ public sealed partial class PdfViewport
         bool remove = IsDeselectModifierActive();
         if (IsSelectionModifierActive())
         {
-            if (TryHitMeasurement(pdf, out Measurement toggledMeasurement))
+            if (_annotationSelectionDomain &&
+                TryHitAnnotation(pdf, out PageAnnotation preferredAnnotation))
+            {
+                ApplyAnnotationClickGesture(preferredAnnotation, remove);
+            }
+            else if (TryHitMeasurement(pdf, out Measurement toggledMeasurement))
                 ToggleMeasurementSelection(toggledMeasurement);
             else if (TryHitAnnotation(pdf, out PageAnnotation toggledAnnotation))
-                ToggleAnnotationSelection(toggledAnnotation);
+                ApplyAnnotationClickGesture(toggledAnnotation, remove);
             else
                 BeginBoxSelection(pdf, additive: true, removeMode: remove);
 
+            return true;
+        }
+
+        if (_annotationSelectionDomain &&
+            TryHitAnnotation(pdf, out PageAnnotation selectedAnnotation))
+        {
+            SelectAnnotation(selectedAnnotation, -1);
             return true;
         }
 

@@ -5,6 +5,18 @@ namespace OurPlanCore.Controls;
 
 public static class AnnotationGlyphRenderer
 {
+    public static double ResolveDimensionScale(
+        double pageScaleMetersPerPt,
+        double annotationScaleMetersPerPt)
+    {
+        if (double.IsFinite(pageScaleMetersPerPt) && pageScaleMetersPerPt > 0)
+            return pageScaleMetersPerPt;
+
+        return double.IsFinite(annotationScaleMetersPerPt) && annotationScaleMetersPerPt > 0
+            ? annotationScaleMetersPerPt
+            : 0;
+    }
+
     public static void DrawArrowHead(SKCanvas canvas, SKPoint start, SKPoint end, SKPaint paint, float size)
     {
         float length = MeasurementGeometry.Distance(start, end);

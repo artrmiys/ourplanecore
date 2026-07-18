@@ -225,24 +225,40 @@ public partial class MainWindow
     {
         PageAnnotation annotation = request.Annotation!;
         string title = MarkupTitle(annotation);
+        IReadOnlyList<PageAnnotation> selected = _viewport.GetSelectedPageAnnotations();
+        IReadOnlyList<PageAnnotation> source =
+            selected.Count > 0 && selected.Contains(annotation)
+                ? selected
+                : [annotation];
+        menu.Items.Add(MakeMenuItem(
+            source.Count > 1 ? $"Copy {source.Count} Selected Markups" : $"Copy {title}",
+            true,
+            () => _viewport.CopyPageAnnotations(source)));
+        menu.Items.Add(MakeWritableViewportMenuItem(
+            _viewport.AnnotationClipboardCount > 0
+                ? $"Paste {_viewport.AnnotationClipboardCount} Markup(s) Here"
+                : "Paste Markups Here",
+            _viewport.AnnotationClipboardCount > 0,
+            "paste page markups",
+            () => _viewport.PasteCopiedPageAnnotations(new SKPoint(request.PdfX, request.PdfY))));
+
         if (OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) == "note")
         {
-            menu.Items.Add(MakeMenuItem(
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 "Edit Note...",
                 true,
+                "edit a page note",
                 () => EditPageNoteAnnotation(annotation)));
         }
 
-        menu.Items.Add(MakeMenuItem(
-            $"Delete {title}",
+        menu.Items.Add(MakeWritableViewportMenuItem(
+            source.Count > 1 ? $"Delete {source.Count} Selected Markups" : $"Delete {title}",
             true,
+            "delete page markups",
             () =>
             {
-                if (!EnsureCurrentJobWritable("delete a page markup"))
-                    return;
-
-                _viewport.DeletePageAnnotation(annotation);
-                SaveCurrentPageAnnotations();
+                if (_viewport.DeletePageAnnotations(source))
+                    SaveCurrentPageAnnotations();
             }));
     }
 

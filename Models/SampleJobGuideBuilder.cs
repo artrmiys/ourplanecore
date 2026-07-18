@@ -162,7 +162,7 @@ internal static class SampleJobGuideBuilder
                 ]),
                 new("Snap, constrain, view", [
                     "Snap (F3) snaps to existing takeoff points; PDF Snap (Ctrl+F3) snaps to PDF vector points.",
-                    "Ortho (F8) locks 90/45; Box (F9) draws by opposite corners; Fit (F) and +/- control zoom.",
+                    "Ortho (F8) locks horizontal/vertical movement; Shift temporarily forces it. Box (F9) draws by opposite corners; Fit (F) and +/- control zoom.",
                     "Select supports vertex edit, box select, copy (Ctrl+C) / paste (Ctrl+V) / delete, and undo (Ctrl+Z).",
                 ]),
             ]),

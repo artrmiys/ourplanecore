@@ -51,18 +51,36 @@ public sealed partial class PdfViewport
                 ClearSelection();
                 ClearAnnotationSelection();
             }
-            else if (TryHitMeasurement(pdf, out Measurement measurement))
+            else
             {
-                _rightClickMeasurement = measurement;
-                if (_selectedMeasurements.Contains(measurement))
-                    SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1);
-                else
-                    SelectMeasurement(measurement, -1);
-            }
-            else if (TryHitAnnotation(pdf, out PageAnnotation annotation))
-            {
-                _rightClickAnnotation = annotation;
-                SelectAnnotation(annotation, -1);
+                PageAnnotation? preferredAnnotation = null;
+                if (_annotationSelectionDomain)
+                    TryHitAnnotation(pdf, out preferredAnnotation);
+
+                if (preferredAnnotation != null)
+                {
+                    _rightClickAnnotation = preferredAnnotation;
+                    if (_selectedAnnotations.Contains(preferredAnnotation))
+                        SetSelectedAnnotations(GetSelectedAnnotations(), preferredAnnotation, -1);
+                    else
+                        SelectAnnotation(preferredAnnotation, -1);
+                }
+                else if (TryHitMeasurement(pdf, out Measurement measurement))
+                {
+                    _rightClickMeasurement = measurement;
+                    if (_selectedMeasurements.Contains(measurement))
+                        SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1);
+                    else
+                        SelectMeasurement(measurement, -1);
+                }
+                else if (TryHitAnnotation(pdf, out PageAnnotation annotation))
+                {
+                    _rightClickAnnotation = annotation;
+                    if (_selectedAnnotations.Contains(annotation))
+                        SetSelectedAnnotations(GetSelectedAnnotations(), annotation, -1);
+                    else
+                        SelectAnnotation(annotation, -1);
+                }
             }
         }
 
@@ -165,6 +183,14 @@ public sealed partial class PdfViewport
                         return;
                     }
 
+                    if (_annotationSelectionDomain &&
+                        TryHitAnnotation(pdf, out PageAnnotation preferredAnnotation))
+                    {
+                        ApplyAnnotationClickGesture(preferredAnnotation, deselectModifierActive);
+                        e.Handled = true;
+                        return;
+                    }
+
                     if (TryHitMeasurement(pdf, out Measurement toggled))
                     {
                         ToggleMeasurementSelection(toggled);
@@ -174,7 +200,7 @@ public sealed partial class PdfViewport
 
                     if (TryHitAnnotation(pdf, out PageAnnotation toggledAnnotation))
                     {
-                        ToggleAnnotationSelection(toggledAnnotation);
+                        ApplyAnnotationClickGesture(toggledAnnotation, deselectModifierActive);
                         e.Handled = true;
                         return;
                     }
@@ -206,17 +232,16 @@ public sealed partial class PdfViewport
                     return;
                 }
 
-                if (TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
+                bool clearSelectionOnMiss = !hasInProgressInput && !preserveSelectionForAdd;
+                bool beganEdit = _annotationSelectionDomain
+                    ? TryBeginAnnotationEdit(pdf, pos, clearSelectionOnMiss: false) ||
+                      TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss)
+                    : TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: false) ||
+                      TryBeginAnnotationEdit(pdf, pos, clearSelectionOnMiss);
+                if (beganEdit)
                 {
-                    if (_draggingVertex || _draggingMeasurement)
-                        CaptureMouse();
-                    e.Handled = true;
-                    return;
-                }
-
-                if (TryBeginAnnotationEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
-                {
-                    if (_draggingAnnotationVertex || _draggingAnnotation)
+                    if (_draggingVertex || _draggingMeasurement ||
+                        _draggingAnnotationVertex || _draggingAnnotation)
                         CaptureMouse();
                     e.Handled = true;
                     return;
@@ -251,7 +276,7 @@ public sealed partial class PdfViewport
             }
 
             SKPoint rawPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
-            if (TryCommitEdgeSnapPreview(rawPdf))
+            if (!HasActiveOrthoConstraint() && TryCommitEdgeSnapPreview(rawPdf))
             {
                 e.Handled = true;
                 return;
@@ -264,11 +289,13 @@ public sealed partial class PdfViewport
             // Double-click (ClickCount==2) finishes a line/area without adding an extra point.
             // Single-click (ClickCount==1) adds a vertex as usual.
             if (e.ClickCount == 2 &&
-                (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.DrawArea ||
+                (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.DrawLine or ViewerTool.DrawArea ||
                  _tool == ViewerTool.AreaCut && !BoxModeEnabled))
             {
                 if (_tool == ViewerTool.AreaCut)
                     FinalizeAreaCutPolygon();
+                else if (_tool == ViewerTool.DrawLine)
+                    FinalizeAnnotation("line", useAllPoints: true);
                 else if (_tool == ViewerTool.DrawArea)
                     FinalizeAreaAnnotation();
                 else
@@ -404,10 +431,19 @@ public sealed partial class PdfViewport
             _selectedAnnotation != null &&
             _selectedAnnotationVertexIndex >= 0)
         {
-            SKPoint delta = ScreenDragDeltaToPdf(pos);
-            _selectedAnnotation.Points[_selectedAnnotationVertexIndex] = new SKPoint(
-                _dragAnnotationVertexOriginalPoint.X + delta.X,
-                _dragAnnotationVertexOriginalPoint.Y + delta.Y);
+            SKPoint rawDelta = ScreenDragDeltaToPdf(pos);
+            SKPoint rawTarget = new(
+                _dragAnnotationVertexOriginalPoint.X + rawDelta.X,
+                _dragAnnotationVertexOriginalPoint.Y + rawDelta.Y);
+            SKPoint resolved = ResolveConstrainedPoint(
+                rawTarget,
+                _dragAnnotationVertexOriginalPoint,
+                updatePreview: true,
+                IsAnnotationSelfVertexSnap);
+            SKPoint delta = new(
+                resolved.X - _dragAnnotationVertexOriginalPoint.X,
+                resolved.Y - _dragAnnotationVertexOriginalPoint.Y);
+            _selectedAnnotation.Points[_selectedAnnotationVertexIndex] = resolved;
             _dragAnnotationChanged = true;
             PostDragStatus("Dragging markup point", delta);
             RequestRepaint();
@@ -418,7 +454,7 @@ public sealed partial class PdfViewport
         if (_draggingAnnotation &&
             _selectedAnnotation != null)
         {
-            SKPoint delta = ScreenDragDeltaToPdf(pos);
+            SKPoint delta = ConstrainDragDeltaOrtho(ScreenDragDeltaToPdf(pos));
             if (_dragAnnotationSelectionOriginalPoints.Count > 0)
             {
                 foreach (var (annotation, originalPoints) in _dragAnnotationSelectionOriginalPoints)
@@ -518,7 +554,10 @@ public sealed partial class PdfViewport
         {
             pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
             _lastPointerPdf = pointerPdf;
-            UpdateEdgeSnapPreview(rawPointerPdf);
+            if (HasActiveOrthoConstraint())
+                ClearEdgeSnapPreview();
+            else
+                UpdateEdgeSnapPreview(rawPointerPdf);
         }
         else
         {
@@ -798,19 +837,35 @@ public sealed partial class PdfViewport
                     if (!CopySelectedCutRegions())
                     {
                         _holeClipboard.Clear();
-                        CopyMeasurementsRequested?.Invoke(GetSelectedMeasurements());
+                        if (!CopySelectedPageAnnotations())
+                        {
+                            IReadOnlyList<Measurement> selectedMeasurements = GetSelectedMeasurements();
+                            if (selectedMeasurements.Count > 0)
+                            {
+                                MarkMeasurementClipboardCurrent();
+                                CopyMeasurementsRequested?.Invoke(selectedMeasurements);
+                            }
+                            else
+                            {
+                                PostStatus("Select measurements or markups before copying.");
+                            }
+                        }
                     }
                     e.Handled = true;
                 }
-                else if (_drawPts.Count > 0 && (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.DrawArea || _tool == ViewerTool.AreaCut))
+                else if (_drawPts.Count > 0 &&
+                         (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.DrawLine or ViewerTool.DrawArea ||
+                          _tool == ViewerTool.AreaCut))
                 {
                     CompleteOrCancelDrawing();
                     e.Handled = true;
                 }
                 break;
             case Key.V when Keyboard.Modifiers == ModifierKeys.Control:
-                if (_holeClipboard.Count > 0)
+                if (IsCutRegionClipboardCurrent)
                     PasteCutRegions(_lastPointerPdf);
+                else if (IsAnnotationClipboardCurrent)
+                    PasteCopiedPageAnnotations(_lastPointerPdf);
                 else
                     PasteMeasurementsRequested?.Invoke(_lastPointerPdf);
                 e.Handled = true;
@@ -855,7 +910,7 @@ public sealed partial class PdfViewport
                 UndoLast(); e.Handled = true;
                 break;
             case Key.A when Keyboard.Modifiers == ModifierKeys.Control:
-                SelectAllActivePageMeasurements();
+                SelectAllActivePageObjects();
                 e.Handled = true;
                 break;
             case Key.Back:

@@ -45,7 +45,9 @@ public sealed partial class PdfViewport
                 AddTwoPointAnnotation(pdf, "highlight");
                 break;
             case ViewerTool.DrawLine:
-                AddTwoPointAnnotation(pdf, "line");
+                _drawPts.Add(pdf);
+                RequestRepaint();
+                PostRecordPrompt();
                 break;
             case ViewerTool.DrawArrow:
                 AddTwoPointAnnotation(pdf, "arrow");

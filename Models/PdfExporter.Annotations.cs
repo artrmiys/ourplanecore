@@ -97,6 +97,16 @@ public static partial class PdfExporter
                 continue;
             }
 
+            if (kind == "line")
+            {
+                using var path = new SKPath();
+                path.MoveTo(start);
+                for (int i = 1; i < annotation.Points.Count; i++)
+                    path.LineTo(annotation.Points[i]);
+                canvas.DrawPath(path, stroke);
+                continue;
+            }
+
             canvas.DrawLine(start, end, stroke);
             if (kind == "arrow")
             {
@@ -107,9 +117,9 @@ public static partial class PdfExporter
             if (kind == "dimension")
             {
                 AnnotationGlyphRenderer.DrawDimensionTicks(canvas, start, end, stroke, 5.5f);
-                double scale = annotation.ScaleMetersPerPt > 0
-                    ? annotation.ScaleMetersPerPt
-                    : pageScaleMetersPerPt;
+                double scale = AnnotationGlyphRenderer.ResolveDimensionScale(
+                    pageScaleMetersPerPt,
+                    annotation.ScaleMetersPerPt);
                 string label = string.IsNullOrWhiteSpace(annotation.Text)
                     ? FormatAnnotationLength(start, end, scale, options.UnitMode)
                     : annotation.Text;

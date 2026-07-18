@@ -41,8 +41,8 @@ public sealed partial class PdfViewport
 
         if (removeMode && !IsMeasurementVertexSelected(measurement, vertexIndex))
         {
-            // Shift-clicked a handle that is not selected: nothing to remove.
-            PostStatus("Shift-click a selected handle to deselect it; Ctrl-click to select.");
+            // Ctrl+Shift-clicked a handle that is not selected: nothing to remove.
+            PostStatus("Ctrl+Shift-click a selected handle to deselect it; Ctrl-click to select.");
             return true;
         }
 
@@ -67,7 +67,7 @@ public sealed partial class PdfViewport
         RequestRepaint();
         int selectedCount = SelectedVertexCount();
         PostStatus(selectedCount == 0
-            ? $"{EntryTitle(measurement.MType)} selected. Ctrl-click handles to select, Shift-click to deselect."
+            ? $"{EntryTitle(measurement.MType)} selected. Ctrl-click handles to select, Ctrl+Shift-click to deselect."
             : $"Selected {selectedCount} vertex/vertices. Drag a selected handle to move (hold Shift = ortho); Delete removes them.");
         return true;
     }

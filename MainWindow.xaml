@@ -834,7 +834,7 @@
                 </StackPanel>
             </ToggleButton>
             <ToggleButton x:Name="BtnOrtho"
-                          ToolTip="Lock Line/Area to 90/45 degrees (F8, Shift temporarily toggles)"
+                          ToolTip="Lock drawing and editing horizontally/vertically (F8; Shift temporarily forces Ortho)"
                           Checked="BtnOrtho_Checked" Unchecked="BtnOrtho_Unchecked"
                           Padding="6,2" MinWidth="60">
                 <StackPanel Orientation="Horizontal">

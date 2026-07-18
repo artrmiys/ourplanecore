@@ -329,24 +329,26 @@ public sealed partial class PdfViewport
         SKPoint rawTarget = new(
             _dragVertexOriginalPoint.X + rawDelta.X,
             _dragVertexOriginalPoint.Y + rawDelta.Y);
-
-        if (TryFindDigitizerSnapPoint(rawTarget, out SKPoint snapped, out string snapKind) &&
-            !IsSelfVertexSnap(snapped))
-        {
-            SetSnapPreview(snapped, snapKind);
-            return ConstrainDragDeltaOrtho(new SKPoint(
-                snapped.X - _dragVertexOriginalPoint.X,
-                snapped.Y - _dragVertexOriginalPoint.Y));
-        }
-
-        SetSnapPreview(null);
-        return ConstrainDragDeltaOrtho(rawDelta);
+        SKPoint resolved = ResolveConstrainedPoint(
+            rawTarget,
+            _dragVertexOriginalPoint,
+            updatePreview: true,
+            IsSelfVertexSnap);
+        return new SKPoint(
+            resolved.X - _dragVertexOriginalPoint.X,
+            resolved.Y - _dragVertexOriginalPoint.Y);
     }
 
     private bool IsSelfVertexSnap(SKPoint snapped)
     {
         float tolerance = Math.Max(ViewportConstants.ZeroLengthEpsilon, ScreenToPdfDistance(2f));
         return DistanceSquared(snapped, _dragVertexOriginalPoint) <= tolerance * tolerance;
+    }
+
+    private bool IsAnnotationSelfVertexSnap(SKPoint snapped)
+    {
+        float tolerance = Math.Max(ViewportConstants.ZeroLengthEpsilon, ScreenToPdfDistance(2f));
+        return DistanceSquared(snapped, _dragAnnotationVertexOriginalPoint) <= tolerance * tolerance;
     }
 
     // While moving selected vertices or whole shapes, holding Shift (ortho)

@@ -152,6 +152,7 @@ public sealed partial class PdfViewport
                 .ToList());
         }
 
+        MarkCutRegionClipboardCurrent();
         PostStatus($"Copied {_holeClipboard.Count} cut region(s). Ctrl+V pastes using the copied set's top-left corner as the cursor anchor.");
         return true;
     }

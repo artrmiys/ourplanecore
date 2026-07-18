@@ -25,6 +25,7 @@ public partial class MainWindow
             return;
         }
 
+        _viewport.MarkMeasurementClipboardCurrent();
         var itemByMeasurement = BuildTakeoffItemByMeasurementLookup();
         var entries = new List<MeasurementClipboardEntry>();
         foreach (Measurement measurement in unique)

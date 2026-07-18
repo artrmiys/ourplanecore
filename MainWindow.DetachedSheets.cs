@@ -8,6 +8,8 @@ namespace OurPlanCore;
 
 public partial class MainWindow
 {
+    private bool _synchronizingOrthoAcrossViewports;
+
     private void ConfigureDetachedSheetWindow(DetachedSheetWindow window, UnitMode unitMode)
     {
         PdfViewport viewport = window.Viewport;
@@ -29,11 +31,48 @@ public partial class MainWindow
         viewport.MeasurementsRemoved += measurements => OnDetachedMeasurementsRemoved(window, measurements, unitMode);
         viewport.MeasurementChanged += measurement => OnDetachedMeasurementsChanged(window, [measurement], unitMode);
         viewport.MeasurementsChanged += measurements => OnDetachedMeasurementsChanged(window, measurements, unitMode);
+        viewport.ScaleChanged += scale => OnDetachedPageScaleChanged(window, scale);
         viewport.PageAnnotationAdded += _ => SaveDetachedPageAnnotations(window);
         viewport.PageAnnotationRemoved += _ => SaveDetachedPageAnnotations(window);
         viewport.PageAnnotationChanged += _ => SaveDetachedPageAnnotations(window);
         viewport.PageAnnotationTextRequested += RequestPageAnnotationText;
+        viewport.OrthoChanged += SynchronizeOrthoAcrossViewports;
         viewport.JoistDirectionCaptured += (area, start, end) => OnDetachedJoistDirectionCaptured(window, area, start, end, unitMode);
+    }
+
+    private void OnDetachedPageScaleChanged(DetachedSheetWindow window, double scaleMetersPerPt)
+    {
+        if (!IsCurrentJobWritable || scaleMetersPerPt <= 0)
+            return;
+
+        ApplyScaleToPagesCore([window.Page], scaleMetersPerPt, allowClear: false, updateStatus: true);
+    }
+
+    private void SynchronizeOrthoAcrossViewports(bool enabled)
+    {
+        if (_synchronizingOrthoAcrossViewports)
+            return;
+
+        _synchronizingOrthoAcrossViewports = true;
+        try
+        {
+            _viewport.OrthoEnabled = enabled;
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+                window.Viewport.OrthoEnabled = enabled;
+        }
+        finally
+        {
+            _synchronizingOrthoAcrossViewports = false;
+        }
+    }
+
+    private void RefreshDetachedPageScale(string pageFolder, double scaleMetersPerPt)
+    {
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
+            if (IsSamePageFolder(window.Page.FolderPath, pageFolder))
+                window.RefreshPageScale(scaleMetersPerPt);
+        }
     }
 
     private void ApplyDetachedActiveTakeoff(PdfViewport viewport, TakeoffItem? item)
