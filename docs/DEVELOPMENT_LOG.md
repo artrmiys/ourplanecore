@@ -1,5 +1,40 @@
 ﻿# Development Log
 
+## 2026-07-18 Dimension Scale, Continuous Annotations, and Universal Ortho
+
+- Fixed Ruler/Beam dimension text so an existing annotation resolves its value
+  from the current positive page scale. The scale saved with the annotation is
+  now only a fallback for pages whose current scale is missing or zero.
+- Propagated page-scale changes to both the main viewport and detached sheet
+  windows from Page Setup, direct scale save, multi-page scale application, and
+  the detached Scale tool. The update repaints without rebuilding measurement
+  state or losing selection/undo history.
+- Changed annotation `Draw Line` (`D`) into one continuous open polyline. Each
+  click adds a vertex; `C`, `Esc`, or double-click completes it, while
+  `Backspace` or `Ctrl+Z` removes the last unfinished vertex.
+- Brought annotations into the normal editing workflow: active-domain
+  `Ctrl+A`, CAD window/crossing box selection, group move/delete, deep-copy
+  `Ctrl+C`/`Ctrl+V`, context-menu commands, persistence callbacks, and one undo
+  entry for a pasted group.
+- Standardized Ortho as strict horizontal/vertical projection. Holding `Shift`
+  forces Ortho and F8 enables it persistently; the two inputs now combine with
+  OR instead of cancelling each other. Creation paths project before snapping;
+  vertex and body/group edits use an Ortho-constrained point or movement delta.
+  The common rule covers joist direction, scale, AreaCut, and 3D roof guides.
+- Reserved plain `Shift` for Ortho. Selection addition/toggle uses `Ctrl`, and
+  selection removal uses `Ctrl+Shift`. Rotation keeps its existing
+  Shift-to-15-degree behavior.
+- Added focused regression coverage and passed the full suite: `557/557`.
+  Build passed with `0 warnings / 0 errors`; the compressed single-file package
+  was deployed from commit `a21310dc64d12297ed749d02d0d67982d44a5431`.
+- Installed EXE: `174,262,670` bytes, ProductVersion
+  `2.2.3+a21310dc64d12297ed749d02d0d67982d44a5431`, SHA-256
+  `627548A2E061A80D50D8DFD67BB35DF1419FABC3838345E3637AF806F60CABF1`.
+  The latest packaged startup remained alive with zero `ERROR` entries and
+  included `Loaded takeoffs` and `Viewport`.
+- Full implementation, behavior rules, rollback data, and future smoke checks:
+  `docs/30-takeoffs-measurements/KB_DIMENSION_ANNOTATION_ORTHO_2026_07_18.md`.
+
 ## 2026-07-15 Enforced Exclusive Job Lease
 
 - Replaced the notification-only recovery lock with a versioned exclusive job
