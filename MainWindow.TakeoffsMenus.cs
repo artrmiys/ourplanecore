@@ -32,6 +32,9 @@ public partial class MainWindow
             () => StartNewSection(tvi, item)));
         if (isArea && IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
         {
+            Measurement? selectedJoistArea = item.IsJoistArea
+                ? SelectedJoistAreaMeasurement(item)
+                : null;
             menu.Items.Add(MakeMenuItem("Create Line Grid...", singleSelection, () => CreateLineGridFromSelectedArea(tvi, item)));
             menu.Items.Add(MakeMenuItem(
                 "Trace Walls Inside Area...",
@@ -43,6 +46,14 @@ public partial class MainWindow
                     item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
                     singleSelection,
                     () => EditTakeoffItemProperties(tvi, item)),
+                MakeMenuItem(
+                    "Add Joists",
+                    singleSelection && item.IsJoistArea && IsCurrentJobWritable,
+                    () => AddJoistsToAllAreas(item)),
+                MakeMenuItem(
+                    "Add Extra Joist",
+                    singleSelection && selectedJoistArea?.JoistDirectionLocked == true && IsCurrentJobWritable,
+                    () => StartExtraJoistPlacement(item, selectedJoistArea!)),
                 MakeMenuItem("Set / Reset Joist Direction", singleSelection, () => SetJoistDirectionFromSelectedLine(tvi, item)),
                 MakeMenuItem("Set Direction for All Areas", singleSelection, () => SetJoistDirectionForAllAreasFromSelectedLine(tvi, item))));
         }

@@ -111,6 +111,8 @@ public sealed partial class PdfViewport
         }
         _dragSelectionOriginalPoints.Clear();
         _dragSelectionOriginalHoles.Clear();
+        _dragSelectionOriginalExtraJoists.Clear();
+        _dragMeasurementOriginalExtraJoists = CloneExtraJoists(measurement.ExtraJoists);
         CaptureMouse();
         foreach (Measurement selectedMeasurement in ActiveVertexMeasurements())
         {
@@ -138,6 +140,8 @@ public sealed partial class PdfViewport
 
         _dragMeasurementOriginalPoints = measurement.Points.ToList();
         _dragSelectionOriginalPoints.Clear();
+        _dragSelectionOriginalHoles.Clear();
+        _dragSelectionOriginalExtraJoists.Clear();
         var selected = GetSelectedMeasurements();
         if (selected.Count > 1 && selected.Contains(measurement))
         {
@@ -145,9 +149,11 @@ public sealed partial class PdfViewport
             {
                 _dragSelectionOriginalPoints[selectedMeasurement] = selectedMeasurement.Points.ToList();
                 _dragSelectionOriginalHoles[selectedMeasurement] = CloneHoles(selectedMeasurement.Holes);
+                _dragSelectionOriginalExtraJoists[selectedMeasurement] = CloneExtraJoists(selectedMeasurement.ExtraJoists);
             }
         }
         _dragMeasurementOriginalHoles = CloneHoles(measurement.Holes);
+        _dragMeasurementOriginalExtraJoists = CloneExtraJoists(measurement.ExtraJoists);
 
         PostStatus(selected.Count > 1
             ? $"Moving {selected.Count} selected measurements."
@@ -175,6 +181,7 @@ public sealed partial class PdfViewport
             PushMeasurementUndoSnapshots(
                 _dragSelectionOriginalPoints,
                 _dragSelectionOriginalHoles,
+                _dragSelectionOriginalExtraJoists,
                 "move selected measurements",
                 "measurement-drag");
             NotifyMeasurementsChanged(_dragSelectionOriginalPoints.Keys.ToList());
@@ -185,6 +192,7 @@ public sealed partial class PdfViewport
                 _selectedMeasurement,
                 _dragMeasurementOriginalPoints,
                 _dragMeasurementOriginalHoles,
+                _dragMeasurementOriginalExtraJoists,
                 wasVertexDrag ? "move vertex" : "move measurement",
                 wasVertexDrag ? "vertex-drag" : "measurement-drag");
             NotifyMeasurementsChanged([_selectedMeasurement]);
@@ -195,9 +203,11 @@ public sealed partial class PdfViewport
         _dragMeasurementChanged = false;
         _dragMeasurementOriginalPoints.Clear();
         _dragMeasurementOriginalHoles.Clear();
+        _dragMeasurementOriginalExtraJoists.Clear();
         _dragMeasurementVertexOriginalPoints.Clear();
         _dragSelectionOriginalPoints.Clear();
         _dragSelectionOriginalHoles.Clear();
+        _dragSelectionOriginalExtraJoists.Clear();
         if (IsMouseCaptured)
             ReleaseMouseCapture();
         RequestRepaint();

@@ -102,6 +102,7 @@ public sealed partial class PdfViewport
         {
             var pdf = ScreenToPdf((float)pos.X, (float)pos.Y);
             _lastPointerPdf = pdf;
+            if (HandleExtraJoistPlacementClick(pdf)) { e.Handled = true; return; }
             if (HandleReadOnlyLeftMouseDown(pdf))
             {
                 e.Handled = true;
@@ -417,6 +418,7 @@ public sealed partial class PdfViewport
                             originalHoles,
                             point => new SKPoint(point.X + delta.X, point.Y + delta.Y));
                     }
+                    RestoreTranslatedExtraJoists(measurement, _dragSelectionOriginalExtraJoists.GetValueOrDefault(measurement), delta);
                 }
             }
             else
@@ -431,6 +433,7 @@ public sealed partial class PdfViewport
                     _selectedMeasurement.Holes,
                     _dragMeasurementOriginalHoles,
                     point => new SKPoint(point.X + delta.X, point.Y + delta.Y));
+                RestoreTranslatedExtraJoists(_selectedMeasurement, _dragMeasurementOriginalExtraJoists, delta);
             }
 
             _dragMeasurementChanged = true;
@@ -522,6 +525,7 @@ public sealed partial class PdfViewport
 
         var pointerPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
         _lastPointerPdf = pointerPdf;
+        if (HandleExtraJoistPlacementMouseMove(pointerPdf)) { e.Handled = true; return; }
         if (IsSheetOverlayPointEditing)
         {
             UpdateSheetOverlayPointEditPreview(pointerPdf);
@@ -606,6 +610,7 @@ public sealed partial class PdfViewport
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         _cursorGuideVisible = false;
+        _extraJoistPlacementPreview = null;
         ClearSheetOverlayPointEditSnapPreview();
         ClearEdgeSnapPreview();
         RequestRepaint();
@@ -784,6 +789,7 @@ public sealed partial class PdfViewport
         switch (key)
         {
             case Key.Escape:
+                if (CancelExtraJoistPlacement(postStatus: true)) { e.Handled = true; break; }
                 if (CancelSheetOverlayDrag())
                 {
                     e.Handled = true;

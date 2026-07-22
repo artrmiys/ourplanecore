@@ -29,7 +29,8 @@ public sealed partial class PdfViewport
                 measurement,
                 measurement.Points.ToList(),
                 CloneHoles(measurement.Holes),
-                measurement.JoistDirectionDegrees))
+                measurement.JoistDirectionDegrees,
+                CloneExtraJoists(measurement.ExtraJoists)))
             .ToList();
         var annotationSnapshots = annotations
             .Where(annotation => _annotations.Contains(annotation))
@@ -67,6 +68,23 @@ public sealed partial class PdfViewport
         string status,
         string key = "")
     {
+        PushMeasurementUndoSnapshot(
+            measurement,
+            beforePoints,
+            beforeHoles,
+            CloneExtraJoists(measurement.ExtraJoists),
+            status,
+            key);
+    }
+
+    private void PushMeasurementUndoSnapshot(
+        Measurement measurement,
+        IReadOnlyList<SKPoint> beforePoints,
+        IReadOnlyList<IReadOnlyList<SKPoint>> beforeHoles,
+        IReadOnlyList<JoistExtraSegment> beforeExtraJoists,
+        string status,
+        string key = "")
+    {
         if (_applyingViewportUndo || !_measurementSet.Contains(measurement))
             return;
 
@@ -77,7 +95,8 @@ public sealed partial class PdfViewport
                 measurement,
                 beforePoints.ToList(),
                 CloneHoles(beforeHoles),
-                measurement.JoistDirectionDegrees)],
+                measurement.JoistDirectionDegrees,
+                CloneExtraJoists(beforeExtraJoists))],
             [],
             [],
             [],
@@ -135,6 +154,21 @@ public sealed partial class PdfViewport
         string status,
         string key = "")
     {
+        PushMeasurementUndoSnapshots(
+            beforePoints,
+            beforeHoles,
+            new Dictionary<Measurement, List<JoistExtraSegment>>(),
+            status,
+            key);
+    }
+
+    private void PushMeasurementUndoSnapshots(
+        IReadOnlyDictionary<Measurement, List<SKPoint>> beforePoints,
+        IReadOnlyDictionary<Measurement, List<List<SKPoint>>> beforeHoles,
+        IReadOnlyDictionary<Measurement, List<JoistExtraSegment>> beforeExtraJoists,
+        string status,
+        string key = "")
+    {
         if (_applyingViewportUndo || beforePoints.Count == 0)
             return;
 
@@ -146,7 +180,10 @@ public sealed partial class PdfViewport
                 beforeHoles.TryGetValue(pair.Key, out var holes)
                     ? CloneHoles(holes)
                     : CloneHoles(pair.Key.Holes),
-                pair.Key.JoistDirectionDegrees))
+                pair.Key.JoistDirectionDegrees,
+                beforeExtraJoists.TryGetValue(pair.Key, out var extraJoists)
+                    ? CloneExtraJoists(extraJoists)
+                    : CloneExtraJoists(pair.Key.ExtraJoists)))
             .ToList();
         if (snapshots.Count == 0)
             return;
@@ -172,6 +209,7 @@ public sealed partial class PdfViewport
             measurementBeforePoints,
             new Dictionary<Measurement, List<List<SKPoint>>>(),
             new Dictionary<Measurement, double>(),
+            new Dictionary<Measurement, List<JoistExtraSegment>>(),
             annotationBeforePoints,
             status,
             key);
@@ -181,6 +219,25 @@ public sealed partial class PdfViewport
         IReadOnlyDictionary<Measurement, List<SKPoint>> measurementBeforePoints,
         IReadOnlyDictionary<Measurement, List<List<SKPoint>>> measurementBeforeHoles,
         IReadOnlyDictionary<Measurement, double> measurementBeforeJoistDirections,
+        IReadOnlyDictionary<PageAnnotation, List<SKPoint>> annotationBeforePoints,
+        string status,
+        string key = "")
+    {
+        PushGeometryUndoSnapshotFromOriginals(
+            measurementBeforePoints,
+            measurementBeforeHoles,
+            measurementBeforeJoistDirections,
+            new Dictionary<Measurement, List<JoistExtraSegment>>(),
+            annotationBeforePoints,
+            status,
+            key);
+    }
+
+    private void PushGeometryUndoSnapshotFromOriginals(
+        IReadOnlyDictionary<Measurement, List<SKPoint>> measurementBeforePoints,
+        IReadOnlyDictionary<Measurement, List<List<SKPoint>>> measurementBeforeHoles,
+        IReadOnlyDictionary<Measurement, double> measurementBeforeJoistDirections,
+        IReadOnlyDictionary<Measurement, List<JoistExtraSegment>> measurementBeforeExtraJoists,
         IReadOnlyDictionary<PageAnnotation, List<SKPoint>> annotationBeforePoints,
         string status,
         string key = "")
@@ -201,7 +258,10 @@ public sealed partial class PdfViewport
                     : CloneHoles(pair.Key.Holes),
                 measurementBeforeJoistDirections.TryGetValue(pair.Key, out double direction)
                     ? direction
-                    : pair.Key.JoistDirectionDegrees))
+                    : pair.Key.JoistDirectionDegrees,
+                measurementBeforeExtraJoists.TryGetValue(pair.Key, out var extraJoists)
+                    ? CloneExtraJoists(extraJoists)
+                    : CloneExtraJoists(pair.Key.ExtraJoists)))
             .ToList();
         var annotationSnapshots = annotationBeforePoints
             .Where(pair => _annotations.Contains(pair.Key))
@@ -320,6 +380,25 @@ public sealed partial class PdfViewport
         string status,
         string key = "")
     {
+        PushMixedMeasurementUndo(
+            beforePoints,
+            beforeHoles,
+            new Dictionary<Measurement, List<JoistExtraSegment>>(),
+            removedMeasurements,
+            addedMeasurements,
+            status,
+            key);
+    }
+
+    private void PushMixedMeasurementUndo(
+        IReadOnlyDictionary<Measurement, List<SKPoint>> beforePoints,
+        IReadOnlyDictionary<Measurement, List<List<SKPoint>>> beforeHoles,
+        IReadOnlyDictionary<Measurement, List<JoistExtraSegment>> beforeExtraJoists,
+        IReadOnlyDictionary<Measurement, int> removedMeasurements,
+        IReadOnlyList<Measurement> addedMeasurements,
+        string status,
+        string key = "")
+    {
         if (_applyingViewportUndo)
             return;
 
@@ -331,7 +410,10 @@ public sealed partial class PdfViewport
                 beforeHoles.TryGetValue(pair.Key, out var holes)
                     ? CloneHoles(holes)
                     : CloneHoles(pair.Key.Holes),
-                pair.Key.JoistDirectionDegrees))
+                pair.Key.JoistDirectionDegrees,
+                beforeExtraJoists.TryGetValue(pair.Key, out var extraJoists)
+                    ? CloneExtraJoists(extraJoists)
+                    : CloneExtraJoists(pair.Key.ExtraJoists)))
             .ToList();
 
         var addedSnapshots = addedMeasurements
@@ -466,6 +548,7 @@ public sealed partial class PdfViewport
                 RestorePoints(snapshot.Target.Points, snapshot.Points);
                 RestoreHoles(snapshot.Target.Holes, snapshot.Holes);
                 snapshot.Target.JoistDirectionDegrees = snapshot.JoistDirectionDegrees;
+                RestoreExtraJoists(snapshot.Target.ExtraJoists, snapshot.ExtraJoists);
                 PruneMeasurementVertexSelection(snapshot.Target);
                 changedMeasurements.Add(snapshot.Target);
                 changed = true;
@@ -591,7 +674,8 @@ public sealed partial class PdfViewport
         Measurement Target,
         List<SKPoint> Points,
         List<List<SKPoint>> Holes,
-        double JoistDirectionDegrees);
+        double JoistDirectionDegrees,
+        List<JoistExtraSegment> ExtraJoists);
 
     private sealed record AnnotationPointUndo(PageAnnotation Target, List<SKPoint> Points, string Text);
 

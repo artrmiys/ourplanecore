@@ -34,6 +34,7 @@ public partial class MainWindow
         bool ShowLabels,
         bool DetailedLabels);
     private enum MeasurementPasteMode { SameTakeoffs, NewTakeoffs }
+    private sealed record JoistExtraClipboard(SKPoint Start, SKPoint End);
     private sealed record MeasurementJoistClipboard(
         bool Enabled,
         string JoistType,
@@ -45,7 +46,8 @@ public partial class MainWindow
         string Pitch,
         string LengthRounding,
         bool ShowLabels,
-        bool DetailedLabels);
+        bool DetailedLabels,
+        IReadOnlyList<JoistExtraClipboard> ExtraJoists);
     private sealed record TakeoffJoistClipboard(
         bool Enabled,
         string JoistType,

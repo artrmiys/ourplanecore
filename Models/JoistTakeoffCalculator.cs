@@ -6,7 +6,7 @@ using SkiaSharp;
 
 namespace OurPlanCore;
 
-public static class JoistTakeoffCalculator
+public static partial class JoistTakeoffCalculator
 {
     public const string RoundingNone = "None";
     public const string RoundingNearestFoot = "NearestFoot";
@@ -30,7 +30,7 @@ public static class JoistTakeoffCalculator
             ? measurement.ScaleMetersPerPt
             : fallbackScaleMetersPerPt;
 
-        return Calculate(
+        JoistLayoutResult layout = Calculate(
             measurement.Points,
             measurement.Holes,
             scale,
@@ -39,6 +39,11 @@ public static class JoistTakeoffCalculator
             measurement.JoistLengthRounding,
             measurement.JoistPitch,
             measurement.JoistAddEndJoist);
+        return IncludeExtraJoists(
+            layout,
+            measurement.ExtraJoists,
+            scale,
+            measurement.JoistLengthRounding);
     }
 
     public static JoistLayoutResult Calculate(
@@ -217,7 +222,7 @@ public static class JoistTakeoffCalculator
         if (!string.IsNullOrWhiteSpace(layout.Pitch))
             lines.Add($"Pitch {layout.Pitch}");
 
-        var allGroups = LengthGroups(layout, unitMode).ToList();
+        var allGroups = RegularLengthGroups(layout, unitMode).ToList();
         // Show every distinct length group on the canvas label. Previously the
         // list was hard-capped at 4 entries via Take(5), so a layout with five
         // or more rounded lengths silently dropped the rest. We now cap at a
@@ -236,6 +241,7 @@ public static class JoistTakeoffCalculator
             int hiddenPieces = allGroups.Skip(maxGroupLines).Sum(group => group.Count);
             lines.Add($"(+{hiddenGroups} more / {hiddenPieces} pcs)");
         }
+        AppendExtraLengthGroupLines(lines, ExtraLengthGroups(layout, unitMode), unitMode, detailedLabels);
         return string.Join("\n", lines);
     }
 
@@ -311,7 +317,8 @@ public static class JoistTakeoffCalculator
             FormatLegendAreaUnit(unitMode),
             $"{name} {FormatLegendLength(summary.TotalLengthMeters, unitMode)}",
         };
-        lines.AddRange(FormatLengthGroupLines(LengthGroups(measurementList, fallbackScaleMetersPerPt, unitMode), unitMode, detailedLabels));
+        lines.AddRange(FormatLengthGroupLines(RegularLengthGroups(measurementList, fallbackScaleMetersPerPt, unitMode), unitMode, detailedLabels));
+        AppendExtraLengthGroupLines(lines, ExtraLengthGroups(measurementList, fallbackScaleMetersPerPt, unitMode), unitMode, detailedLabels);
         return lines;
     }
 
@@ -767,14 +774,6 @@ public sealed record JoistLayoutSummary(
     double TotalRawLengthMeters,
     double TotalLengthMeters,
     double AreaMetersSquared);
-
-public sealed record JoistSegment(
-    SKPoint Start,
-    SKPoint End,
-    double FlatLengthMeters,
-    double RawLengthMeters,
-    double OrderLengthMeters,
-    double OrderLengthFeet);
 
 public sealed record JoistLengthGroup(
     int Count,

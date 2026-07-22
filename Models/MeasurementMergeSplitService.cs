@@ -192,6 +192,7 @@ public static class MeasurementMergeSplitService
                     Measurement survivor = ChooseMergeSurvivor(target, selectedArea, candidate);
                     Measurement removed = ReferenceEquals(survivor, selectedArea) ? candidate : selectedArea;
                     ApplyAreaGeometry(survivor, geometry);
+                    MergeExtraJoists(survivor, removed);
                     target.Measurements.Remove(removed);
                     ReplaceSelectedMeasurement(selected, removed, survivor);
                     coalesced++;
@@ -349,6 +350,31 @@ public static class MeasurementMergeSplitService
         area.Points.AddRange(geometry.Points.Select(ClonePoint));
         area.Holes.Clear();
         area.Holes.AddRange(geometry.Holes.Select(hole => hole.Select(ClonePoint).ToList()));
+    }
+
+    private static void MergeExtraJoists(Measurement survivor, Measurement removed)
+    {
+        var existingIds = new HashSet<string>(
+            survivor.ExtraJoists
+                .Where(extra => !string.IsNullOrWhiteSpace(extra.Id))
+                .Select(extra => extra.Id),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (JoistExtraSegment extra in removed.ExtraJoists)
+        {
+            string id = string.IsNullOrWhiteSpace(extra.Id)
+                ? Guid.NewGuid().ToString()
+                : extra.Id;
+            if (!existingIds.Add(id))
+                continue;
+
+            survivor.ExtraJoists.Add(new JoistExtraSegment
+            {
+                Id = id,
+                Start = ClonePoint(extra.Start),
+                End = ClonePoint(extra.End),
+            });
+        }
     }
 
     private static SKPoint ClonePoint(SKPoint point) =>

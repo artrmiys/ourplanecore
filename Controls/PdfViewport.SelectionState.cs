@@ -27,6 +27,12 @@ public sealed partial class PdfViewport
             ? primary
             : next.LastOrDefault();
 
+        if (_extraJoistPlacementMeasurement != null &&
+            !next.Contains(_extraJoistPlacementMeasurement))
+        {
+            CancelExtraJoistPlacement(postStatus: false);
+        }
+
         bool setChanged = _selectedMeasurements.Count != next.Count ||
                           next.Any(m => !_selectedMeasurements.Contains(m));
         bool primaryChanged = !ReferenceEquals(_selectedMeasurement, nextPrimary);
@@ -199,6 +205,7 @@ public sealed partial class PdfViewport
 
     private void ClearSelection()
     {
+        CancelExtraJoistPlacement(postStatus: false);
         bool changed = _selectedMeasurement != null ||
                        _selectedMeasurements.Count > 0 ||
                        _selectedAnnotation != null ||
@@ -218,14 +225,17 @@ public sealed partial class PdfViewport
         _dragAnnotationChanged = false;
         _dragMeasurementOriginalPoints.Clear();
         _dragMeasurementOriginalHoles.Clear();
+        _dragMeasurementOriginalExtraJoists.Clear();
         _dragMeasurementVertexOriginalPoints.Clear();
         _dragSelectionOriginalPoints.Clear();
         _dragSelectionOriginalHoles.Clear();
+        _dragSelectionOriginalExtraJoists.Clear();
         _dragAnnotationOriginalPoints.Clear();
         _dragAnnotationSelectionOriginalPoints.Clear();
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
         _transformMeasurementOriginalJoistDirections.Clear();
+        _transformMeasurementOriginalExtraJoists.Clear();
         _transformAnnotationOriginalPoints.Clear();
         if (changed)
         {
@@ -529,19 +539,25 @@ public sealed partial class PdfViewport
 
     private void ForgetMeasurementState(Measurement measurement)
     {
+        if (ReferenceEquals(_extraJoistPlacementMeasurement, measurement))
+            CancelExtraJoistPlacement(postStatus: false);
         _selectedMeasurements.Remove(measurement);
         _selectedMeasurementVertexIndices.Remove(measurement);
         _dragMeasurementVertexOriginalPoints.Remove(measurement);
         _dragSelectionOriginalPoints.Remove(measurement);
         _dragSelectionOriginalHoles.Remove(measurement);
+        _dragSelectionOriginalExtraJoists.Remove(measurement);
         _transformMeasurementOriginalPoints.Remove(measurement);
         _transformMeasurementOriginalHoles.Remove(measurement);
+        _transformMeasurementOriginalJoistDirections.Remove(measurement);
+        _transformMeasurementOriginalExtraJoists.Remove(measurement);
 
         if (ReferenceEquals(_selectedMeasurement, measurement))
         {
             _selectedMeasurement = null;
             _dragMeasurementOriginalPoints.Clear();
             _dragMeasurementOriginalHoles.Clear();
+            _dragMeasurementOriginalExtraJoists.Clear();
         }
     }
 

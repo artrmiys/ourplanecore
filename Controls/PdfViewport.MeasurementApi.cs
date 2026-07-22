@@ -170,6 +170,7 @@ public sealed partial class PdfViewport
     }
     public void SetMeasurements(IEnumerable<Measurement> measurements, bool clearUndoStack = true)
     {
+        CancelExtraJoistPlacement(postStatus: false);
         _measurements.Clear();
         _measurementSet.Clear();
         _measurementsByPage.Clear();

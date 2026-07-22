@@ -40,6 +40,7 @@ public sealed partial class PdfViewport
         Measurement baseArea = areas[0];
         var perTarget = new List<(Measurement Target, List<AreaBooleanGeometry> Geometries)>();
         var extras = new List<(Measurement Source, AreaBooleanGeometry Geometry)>();
+        IReadOnlyList<Measurement> mergedExtraSources = [];
         string status;
 
         switch (mode)
@@ -55,6 +56,7 @@ public sealed partial class PdfViewport
                 perTarget.Add((baseArea, geometries));
                 foreach (Measurement other in areas.Skip(1))
                     perTarget.Add((other, []));
+                mergedExtraSources = areas;
                 status = $"Combine union: {areas.Count} area(s) merged into {geometries.Count}.";
                 break;
             }
@@ -85,6 +87,7 @@ public sealed partial class PdfViewport
                 perTarget.Add((baseArea, geometries));
                 foreach (Measurement other in areas.Skip(1))
                     perTarget.Add((other, []));
+                mergedExtraSources = areas;
                 status = $"Combine intersect: kept {geometries.Count} overlap piece(s) of {areas.Count} area(s).";
                 break;
             }
@@ -140,16 +143,19 @@ public sealed partial class PdfViewport
         if (storedScalesDiffer)
             status += " Stored scales differed; result keeps the first area's scale.";
 
-        ApplyAreaCombineResult(perTarget, extras, status);
+        ApplyAreaCombineResult(perTarget, extras, mergedExtraSources, status);
     }
 
     private void ApplyAreaCombineResult(
         IReadOnlyList<(Measurement Target, List<AreaBooleanGeometry> Geometries)> perTarget,
         IReadOnlyList<(Measurement Source, AreaBooleanGeometry Geometry)> extras,
+        IReadOnlyList<Measurement> mergedExtraSources,
         string status)
     {
+        List<JoistExtraSegment> mergedExtraJoists = CloneDistinctExtraJoists(mergedExtraSources);
         var beforePoints = new Dictionary<Measurement, List<SKPoint>>();
         var beforeHoles = new Dictionary<Measurement, List<List<SKPoint>>>();
+        var beforeExtraJoists = new Dictionary<Measurement, List<JoistExtraSegment>>();
         var changed = new List<Measurement>();
         var removedIndexes = new Dictionary<Measurement, int>();
         var removed = new List<Measurement>();
@@ -161,6 +167,7 @@ public sealed partial class PdfViewport
             {
                 beforePoints[target] = target.Points.ToList();
                 beforeHoles[target] = CloneHoles(target.Holes);
+                beforeExtraJoists[target] = CloneExtraJoists(target.ExtraJoists);
                 ApplyAreaGeometry(target, geometries[0]);
                 changed.Add(target);
                 continue;
@@ -172,8 +179,9 @@ public sealed partial class PdfViewport
 
             removedIndexes[target] = index;
             removed.Add(target);
+            var claimedExtraJoists = new HashSet<JoistExtraSegment>();
             foreach (AreaBooleanGeometry geometry in geometries)
-                added.Add(CloneAreaMeasurement(target, geometry));
+                added.Add(CloneAreaMeasurement(target, geometry, claimedExtraJoists));
         }
 
         foreach ((Measurement source, AreaBooleanGeometry geometry) in extras)
@@ -200,15 +208,19 @@ public sealed partial class PdfViewport
             IndexMeasurementByPage(measurement);
         }
 
+        var resultSelection = changed.Concat(added).ToList();
+        if (mergedExtraSources.Count > 0)
+            RedistributeMergedExtraJoists(mergedExtraJoists, resultSelection);
+
         PushMixedMeasurementUndo(
             beforePoints,
             beforeHoles,
+            beforeExtraJoists,
             removedIndexes,
             added,
             "combine areas",
             "combine");
 
-        var resultSelection = changed.Concat(added).ToList();
         SetSelectedMeasurements(resultSelection, resultSelection.LastOrDefault(), -1);
 
         NotifyMeasurementsChanged(changed);
@@ -216,5 +228,39 @@ public sealed partial class PdfViewport
         NotifyMeasurementsAdded(added);
         RequestRepaint();
         PostStatus(status);
+    }
+
+    private static List<JoistExtraSegment> CloneDistinctExtraJoists(IEnumerable<Measurement> sources)
+    {
+        var result = new List<JoistExtraSegment>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Measurement source in sources)
+        {
+            foreach (JoistExtraSegment extra in source.ExtraJoists)
+            {
+                string id = (extra.Id ?? "").Trim();
+                if (id.Length > 0 && !ids.Add(id))
+                    continue;
+
+                result.Add(CloneExtraJoist(extra));
+            }
+        }
+
+        return result;
+    }
+
+    private static void RedistributeMergedExtraJoists(
+        IEnumerable<JoistExtraSegment> extras,
+        IReadOnlyList<Measurement> results)
+    {
+        foreach (Measurement result in results)
+            result.ExtraJoists.Clear();
+
+        foreach (JoistExtraSegment extra in extras)
+        {
+            SKPoint midpoint = ExtraJoistMidpoint(extra);
+            Measurement? owner = results.FirstOrDefault(result => PointInMeasurementFill(result, midpoint));
+            owner?.ExtraJoists.Add(CloneExtraJoist(extra));
+        }
     }
 }

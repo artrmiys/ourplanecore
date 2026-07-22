@@ -46,6 +46,7 @@ public sealed partial class PdfViewport
             return;
         }
 
+        CancelExtraJoistPlacement(postStatus: false);
         _tool = requestedTool;
         if (requestedTool is ViewerTool.Ruler or ViewerTool.DrawHighlight or ViewerTool.DrawLine or
             ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or
@@ -106,6 +107,7 @@ public sealed partial class PdfViewport
 
     public bool BeginJoistDirectionCapture(Measurement areaMeasurement)
     {
+        CancelExtraJoistPlacement(postStatus: false);
         if (OurPlanCoreJobStore.NormalizeMeasurementType(areaMeasurement.MType) != "area")
         {
             PostStatus("Joist direction can only be set on Area measurements.");

@@ -90,7 +90,10 @@ public partial class MainWindow
             _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
             _viewport.SelectMeasurements([area]);
             _pendingJoistDirectionApplyTargets = NormalizeJoistDirectionApplyTargets(item, applyTargets);
-            if (!BeginJoistDirectionCapture(item, area))
+            bool started = _pendingJoistDirectionApplyTargets == null
+                ? BeginJoistDirectionCapture(item, area)
+                : BeginJoistDirectionCapture(item, area, preservePendingApplyTargets: true);
+            if (!started)
                 _pendingJoistDirectionApplyTargets = null;
         }
 
@@ -164,8 +167,13 @@ public partial class MainWindow
         return null;
     }
 
-    private bool BeginJoistDirectionCapture(TakeoffItem item, Measurement area)
+    private bool BeginJoistDirectionCapture(
+        TakeoffItem item,
+        Measurement area,
+        bool preservePendingApplyTargets = false)
     {
+        if (!preservePendingApplyTargets)
+            _pendingJoistDirectionApplyTargets = null;
         item.IsJoistTakeoff = true;
         OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         bool started = _viewport.BeginJoistDirectionCapture(area);
@@ -182,6 +190,11 @@ public partial class MainWindow
 
     private void OnJoistDirectionCaptured(Measurement area, SKPoint start, SKPoint end)
     {
+        // Always consume this state first. A rejected/too-short guide must not
+        // leave a previous "apply to all" target list armed for a later Area.
+        List<Measurement>? applyTargets = _pendingJoistDirectionApplyTargets;
+        _pendingJoistDirectionApplyTargets = null;
+
         if (!EnsureCurrentJobWritable("change joist direction"))
             return;
 
@@ -194,9 +207,6 @@ public partial class MainWindow
             TxtStatus.Text = "Joist direction line is too short.";
             return;
         }
-
-        List<Measurement>? applyTargets = _pendingJoistDirectionApplyTargets;
-        _pendingJoistDirectionApplyTargets = null;
 
         item.IsJoistTakeoff = true;
         item.JoistDirectionDegrees = directionDegrees;
@@ -234,20 +244,52 @@ public partial class MainWindow
 
     private bool BeginNextPendingJoistDirectionCapture(TakeoffItem item, Measurement? skip = null)
     {
-        if (_currentPage == null || !item.IsJoistArea)
+        // This is always a one-Area capture. Clear any abandoned target list
+        // left by a cancelled Set Direction for All Areas operation.
+        _pendingJoistDirectionApplyTargets = null;
+        if (!item.IsJoistArea)
             return false;
 
-        Measurement? next = item.Measurements.FirstOrDefault(measurement =>
-            !ReferenceEquals(measurement, skip) &&
-            OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
-            IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath) &&
-            !measurement.JoistDirectionLocked);
+        List<Measurement> pending = item.Measurements
+            .Where(measurement =>
+                !ReferenceEquals(measurement, skip) &&
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+                !measurement.JoistDirectionLocked)
+            .ToList();
+        Measurement? next = pending.FirstOrDefault(measurement =>
+            _currentPage != null && IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
+            ?? pending.FirstOrDefault();
         if (next == null)
             return false;
 
-        if (!_viewport.BeginJoistDirectionCapture(next))
-            return false;
-        TxtStatus.Text = $"Set joist direction for next area in {item.Name}: click two points parallel to the joists.";
+        void StartCapture()
+        {
+            _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
+            _viewport.SelectMeasurements([next]);
+            if (!_viewport.BeginJoistDirectionCapture(next))
+                return;
+            int remaining = item.Measurements.Count(measurement =>
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+                !measurement.JoistDirectionLocked);
+            TxtStatus.Text = $"Set this Area segment's own joist direction in {item.Name} " +
+                             $"({remaining} remaining): click two points parallel to its joists.";
+        }
+
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, next.PageFolder))
+        {
+            PageInfo? page = OurPlanCoreJobStore.TryReadPage(next.PageFolder);
+            if (page == null)
+            {
+                TxtStatus.Text = "Cannot open the sheet for the next Joist Area segment.";
+                return false;
+            }
+
+            OpenPageInActiveTab(page);
+            Dispatcher.InvokeAsync(StartCapture);
+            return true;
+        }
+
+        StartCapture();
         return true;
     }
 

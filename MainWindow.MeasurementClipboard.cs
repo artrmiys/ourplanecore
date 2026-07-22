@@ -270,6 +270,14 @@ public partial class MainWindow
             JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(entry.MeasurementJoist.LengthRounding),
             JoistShowLabels = entry.MeasurementJoist.ShowLabels,
             JoistDetailedLabels = entry.MeasurementJoist.DetailedLabels,
+            ExtraJoists = entry.MeasurementJoist.ExtraJoists
+                .Select(extra => new JoistExtraSegment
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Start = new SKPoint(extra.Start.X + pasteOffset.X, extra.Start.Y + pasteOffset.Y),
+                    End = new SKPoint(extra.End.X + pasteOffset.X, extra.End.Y + pasteOffset.Y),
+                })
+                .ToList(),
         };
     }
 
@@ -348,6 +356,11 @@ public partial class MainWindow
         foreach (var hole in entry.Holes)
             foreach (SKPoint point in hole)
                 yield return point;
+        foreach (JoistExtraClipboard extra in entry.MeasurementJoist.ExtraJoists)
+        {
+            yield return extra.Start;
+            yield return extra.End;
+        }
     }
 
     private static string MeasurementClipboardTargetKey(MeasurementClipboardEntry entry)
@@ -370,7 +383,12 @@ public partial class MainWindow
             JoistTakeoffCalculator.NormalizePitch(measurement.JoistPitch),
             JoistTakeoffCalculator.NormalizeLengthRounding(measurement.JoistLengthRounding),
             measurement.JoistShowLabels,
-            measurement.JoistDetailedLabels);
+            measurement.JoistDetailedLabels,
+            measurement.ExtraJoists
+                .Select(extra => new JoistExtraClipboard(
+                    new SKPoint(extra.Start.X, extra.Start.Y),
+                    new SKPoint(extra.End.X, extra.End.Y)))
+                .ToList());
 
     private static TakeoffJoistClipboard CaptureTakeoffJoistClipboard(TakeoffItem? item, Measurement measurement)
     {

@@ -43,8 +43,16 @@ internal sealed class ProjectFile
         public bool         JoistDirectionLocked { get; set; }
         public bool         JoistDirectionFollowsAreaRotation { get; set; } = true;
         public bool         JoistAddEndJoist { get; set; } = true;
+        public List<ExtraJoistDto> ExtraJoists { get; set; } = [];
         public List<PtDto>  Points     { get; set; } = [];
         public List<List<PtDto>> Holes { get; set; } = [];
+    }
+
+    public sealed class ExtraJoistDto
+    {
+        public string Id { get; set; } = "";
+        public PtDto Start { get; set; } = new(0, 0);
+        public PtDto End { get; set; } = new(0, 0);
     }
 
     public sealed record PtDto(float X, float Y);
@@ -98,6 +106,9 @@ internal sealed class ProjectFile
                     JoistDirectionLocked = m.JoistDirectionLocked,
                     JoistDirectionFollowsAreaRotation = m.JoistDirectionFollowsAreaRotation,
                     JoistAddEndJoist = m.JoistAddEndJoist,
+                    ExtraJoists = (m.ExtraJoists ?? [])
+                        .Select(ToExtraJoistDto)
+                        .ToList(),
                     Points     = m.Points.Select(p => new PtDto(p.X, p.Y)).ToList(),
                     Holes      = m.Holes
                         .Where(hole => hole.Count >= 3)
@@ -167,6 +178,9 @@ internal sealed class ProjectFile
                     JoistDirectionLocked = md.JoistDirectionLocked,
                     JoistDirectionFollowsAreaRotation = md.JoistDirectionFollowsAreaRotation,
                     JoistAddEndJoist = md.JoistAddEndJoist,
+                    ExtraJoists = (md.ExtraJoists ?? [])
+                        .Select(ToExtraJoist)
+                        .ToList(),
                     Points     = md.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
                     Holes      = md.Holes
                         .Select(hole => hole.Select(p => new SKPoint(p.X, p.Y)).ToList())
@@ -179,6 +193,27 @@ internal sealed class ProjectFile
         }
         var unit = pf.UnitMode == "Imperial" ? OurPlanCore.UnitMode.Imperial : OurPlanCore.UnitMode.Metric;
         return (pf.Scale, unit, items);
+    }
+
+    private static JoistExtraSegment ToExtraJoist(ExtraJoistDto dto) =>
+        new()
+        {
+            Id = string.IsNullOrWhiteSpace(dto.Id) ? System.Guid.NewGuid().ToString() : dto.Id,
+            Start = new SKPoint(dto.Start.X, dto.Start.Y),
+            End = new SKPoint(dto.End.X, dto.End.Y),
+        };
+
+    private static ExtraJoistDto ToExtraJoistDto(JoistExtraSegment extra)
+    {
+        if (string.IsNullOrWhiteSpace(extra.Id))
+            extra.Id = System.Guid.NewGuid().ToString();
+
+        return new ExtraJoistDto
+        {
+            Id = extra.Id,
+            Start = new PtDto(extra.Start.X, extra.Start.Y),
+            End = new PtDto(extra.End.X, extra.End.Y),
+        };
     }
 
     private static string? ResolveExistingPath(string pdfPath)

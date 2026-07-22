@@ -75,6 +75,7 @@ public sealed partial class PdfViewport
 
         var beforeAreaPoints = new Dictionary<Measurement, List<SKPoint>>();
         var beforeAreaHoles = new Dictionary<Measurement, List<List<SKPoint>>>();
+        var beforeAreaExtraJoists = new Dictionary<Measurement, List<JoistExtraSegment>>();
         var changedAreas = new List<Measurement>();
         var removedAreaIndexes = new Dictionary<Measurement, int>();
         var removedAreas = new List<Measurement>();
@@ -92,6 +93,7 @@ public sealed partial class PdfViewport
             {
                 beforeAreaPoints[area] = area.Points.ToList();
                 beforeAreaHoles[area] = CloneHoles(area.Holes);
+                beforeAreaExtraJoists[area] = CloneExtraJoists(area.ExtraJoists);
                 ApplyAreaGeometry(area, geometries[0]);
                 changedAreas.Add(area);
                 continue;
@@ -103,8 +105,9 @@ public sealed partial class PdfViewport
 
             removedAreaIndexes[area] = index;
             removedAreas.Add(area);
+            var claimedExtraJoists = new HashSet<JoistExtraSegment>();
             foreach (AreaBooleanGeometry geometry in geometries)
-                addedAreas.Add(CloneAreaMeasurement(area, geometry));
+                addedAreas.Add(CloneAreaMeasurement(area, geometry, claimedExtraJoists));
         }
 
         var removedLineIndexes = new Dictionary<Measurement, int>();
@@ -175,6 +178,7 @@ public sealed partial class PdfViewport
         PushMixedMeasurementUndo(
             beforeAreaPoints,
             beforeAreaHoles,
+            beforeAreaExtraJoists,
             removedMeasurementIndexes,
             addedMeasurements,
             "cut measurements",
@@ -340,10 +344,23 @@ public sealed partial class PdfViewport
 
     private static void ApplyAreaGeometry(Measurement area, AreaBooleanGeometry geometry)
     {
+        List<JoistExtraSegment> retainedExtraJoists = area.ExtraJoists
+            .Where(extra => PointInAreaGeometry(ExtraJoistMidpoint(extra), geometry))
+            .Select(CloneExtraJoist)
+            .ToList();
         area.Points.Clear();
         area.Points.AddRange(geometry.Points.Select(ClonePoint));
         area.Holes.Clear();
         area.Holes.AddRange(geometry.Holes.Select(hole => hole.Select(ClonePoint).ToList()));
+        RestoreExtraJoists(area.ExtraJoists, retainedExtraJoists);
+    }
+
+    private static bool PointInAreaGeometry(SKPoint point, AreaBooleanGeometry geometry)
+    {
+        if (!PointInPolygon(point, geometry.Points))
+            return false;
+
+        return !geometry.Holes.Any(hole => hole.Count >= 3 && PointInPolygon(point, hole));
     }
 
     private static bool CanUseExactAreaCutHole(Measurement target, IReadOnlyList<SKPoint> cutShape)
@@ -661,8 +678,18 @@ public sealed partial class PdfViewport
             ScaleMetersPerPt = source.ScaleMetersPerPt,
         };
 
-    private static Measurement CloneAreaMeasurement(Measurement source, AreaBooleanGeometry geometry) =>
-        new()
+    private static Measurement CloneAreaMeasurement(
+        Measurement source,
+        AreaBooleanGeometry geometry,
+        ISet<JoistExtraSegment>? claimedExtraJoists = null)
+    {
+        List<JoistExtraSegment> extraJoists = source.ExtraJoists
+            .Where(extra => PointInAreaGeometry(ExtraJoistMidpoint(extra), geometry))
+            .Where(extra => claimedExtraJoists == null || claimedExtraJoists.Add(extra))
+            .Select(CloneExtraJoist)
+            .ToList();
+
+        return new Measurement
         {
             Name = source.Name,
             Notes = source.Notes,
@@ -685,7 +712,9 @@ public sealed partial class PdfViewport
             JoistLengthRounding = source.JoistLengthRounding,
             JoistShowLabels = source.JoistShowLabels,
             JoistDetailedLabels = source.JoistDetailedLabels,
+            ExtraJoists = extraJoists,
         };
+    }
 
     private static string FormatCutStatus(
         string shapeName,

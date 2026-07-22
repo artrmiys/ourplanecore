@@ -85,6 +85,7 @@ public sealed partial class PdfViewport
         {
             ApplyTransform(measurement.Points, transform);
             ApplyTransformToHoles(measurement.Holes, transform);
+            ApplyTransformToExtraJoists(measurement.ExtraJoists, transform);
             ApplyJoistDirectionRotation(measurement, rotationDegrees);
         }
         foreach (PageAnnotation annotation in annotations)
@@ -165,12 +166,14 @@ public sealed partial class PdfViewport
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
         _transformMeasurementOriginalJoistDirections.Clear();
+        _transformMeasurementOriginalExtraJoists.Clear();
         _transformAnnotationOriginalPoints.Clear();
         foreach (Measurement measurement in measurements)
         {
             _transformMeasurementOriginalPoints[measurement] = measurement.Points.ToList();
             _transformMeasurementOriginalHoles[measurement] = CloneHoles(measurement.Holes);
             _transformMeasurementOriginalJoistDirections[measurement] = measurement.JoistDirectionDegrees;
+            _transformMeasurementOriginalExtraJoists[measurement] = CloneExtraJoists(measurement.ExtraJoists);
         }
         foreach (PageAnnotation annotation in annotations)
             _transformAnnotationOriginalPoints[annotation] = annotation.Points.ToList();
@@ -226,6 +229,8 @@ public sealed partial class PdfViewport
 
             if (_transformMeasurementOriginalHoles.TryGetValue(measurement, out var originalHoles))
                 RestoreTransformedHoles(measurement.Holes, originalHoles, transform);
+            if (_transformMeasurementOriginalExtraJoists.TryGetValue(measurement, out var originalExtraJoists))
+                RestoreTransformedExtraJoists(measurement.ExtraJoists, originalExtraJoists, transform);
             ApplyJoistDirectionRotationFromOriginal(measurement, rotationDegrees);
         }
 
@@ -347,6 +352,7 @@ public sealed partial class PdfViewport
                 _transformMeasurementOriginalPoints,
                 _transformMeasurementOriginalHoles,
                 _transformMeasurementOriginalJoistDirections,
+                _transformMeasurementOriginalExtraJoists,
                 _transformAnnotationOriginalPoints,
                 "canvas transform",
                 "canvas-transform");
@@ -357,6 +363,7 @@ public sealed partial class PdfViewport
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
         _transformMeasurementOriginalJoistDirections.Clear();
+        _transformMeasurementOriginalExtraJoists.Clear();
         _transformAnnotationOriginalPoints.Clear();
         if (IsMouseCaptured)
             ReleaseMouseCapture();
@@ -378,7 +385,9 @@ public sealed partial class PdfViewport
                 _transformMeasurementOriginalHoles.TryGetValue(measurement, out var holes) &&
                 !SameHoles(measurement.Holes, holes) ||
                 _transformMeasurementOriginalJoistDirections.TryGetValue(measurement, out double direction) &&
-                Math.Abs(measurement.JoistDirectionDegrees - direction) > 0.0001)
+                Math.Abs(measurement.JoistDirectionDegrees - direction) > 0.0001 ||
+                _transformMeasurementOriginalExtraJoists.TryGetValue(measurement, out var extraJoists) &&
+                !SameExtraJoists(measurement.ExtraJoists, extraJoists))
             {
                 return true;
             }

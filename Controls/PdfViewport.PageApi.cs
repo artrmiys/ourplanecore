@@ -103,6 +103,7 @@ public sealed partial class PdfViewport
         RasterSheetSource? rasterSheet = null,
         bool hasSheetOverlayConfigured = false)
     {
+        CancelExtraJoistPlacement(postStatus: false);
         CancelTransientNavigationRenderWork();
         BeginFastNavigation();
         BeginPageSwitchDetailRenderHold();

@@ -24,6 +24,7 @@ public sealed partial class PdfViewport
     {
         DrawPdfLayerTraceOverlay(canvas);
         DrawEdgeSnapPreview(canvas);
+        DrawExtraJoistPlacementPreview(canvas);
 
         using var tempPaint = new SKPaint
         {

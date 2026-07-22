@@ -59,7 +59,7 @@ public partial class MainWindow
                 item.Name,
                 currentSheetOnly ? $"{TakeoffTypeDisplay(item)} / {_currentPage?.Name}" : TakeoffTypeDisplay(item),
                 scopedMeasurements.Count.ToString(CultureInfo.InvariantCulture),
-                currentSheetOnly ? SheetLegendQuantityText(item, scopedMeasurements) : QuantityText(item),
+                currentSheetOnly ? CurrentSheetEstimateQuantityText(item, scopedMeasurements) : QuantityText(item),
                 TakeoffUnitText(item),
                 UnitPriceText(item),
                 currentSheetOnly ? CostText(item, scopedMeasurements) : CostText(item),
@@ -87,6 +87,20 @@ public partial class MainWindow
         }
 
         return rows;
+    }
+
+    private string CurrentSheetEstimateQuantityText(
+        TakeoffItem item,
+        IReadOnlyList<Measurement> measurements)
+    {
+        if (!item.IsJoistArea)
+            return SheetLegendQuantityText(item, measurements);
+
+        double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
+            ? _currentPage.ScaleMetersPerPt
+            : _viewport.ScaleMetersPerPt;
+        double joistLengthMeters = measurements.Sum(measurement => measurement.Value(fallbackScale));
+        return QuantityText("line", joistLengthMeters);
     }
 
     private void RefreshEstimateTable()

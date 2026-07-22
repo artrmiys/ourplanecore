@@ -32,6 +32,7 @@ public sealed class Measurement
     public string         JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
     public bool           JoistShowLabels { get; set; }
     public bool           JoistDetailedLabels { get; set; } = true;
+    public List<JoistExtraSegment> ExtraJoists { get; set; } = [];
 
     public double Value(double scaleMetersPerPt)
     {
@@ -146,4 +147,11 @@ public sealed class Measurement
         return Math.Abs(area) / 2.0;
     }
 
+}
+
+public sealed class JoistExtraSegment
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public SKPoint Start { get; set; }
+    public SKPoint End { get; set; }
 }

@@ -116,6 +116,14 @@ public partial class MainWindow
                 isAreaSection,
                 () => CreateLineGridFromAreaSection(item, measurement)));
             menu.Items.Add(MakeMenuItem(
+                "Add Joists",
+                isAreaSection && item.IsJoistArea && IsCurrentJobWritable,
+                () => AddJoistsToAllAreas(item)));
+            menu.Items.Add(MakeMenuItem(
+                "Add Extra Joist",
+                isAreaSection && item.IsJoistArea && measurement.JoistDirectionLocked && IsCurrentJobWritable,
+                () => StartExtraJoistPlacement(item, measurement)));
+            menu.Items.Add(MakeMenuItem(
                 "Set / Reset Joist Direction",
                 isAreaSection,
                 () => SetJoistDirectionForSection(item, measurement)));

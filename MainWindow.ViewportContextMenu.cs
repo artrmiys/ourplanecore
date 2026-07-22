@@ -183,6 +183,23 @@ public partial class MainWindow
                 "edit joist properties",
                 () => EditViewportTakeoffProperties(item)));
             menu.Items.Add(MakeWritableViewportMenuItem(
+                "Add Joists",
+                hasItem && item.IsJoistArea,
+                "add joists",
+                () => AddJoistsToAllAreas(item)));
+            menu.Items.Add(MakeWritableViewportMenuItem(
+                "Add Extra Joist",
+                hasItem && item.IsJoistArea && measurement.JoistDirectionLocked,
+                "add an Extra Joist",
+                () => StartExtraJoistPlacement(item, measurement)));
+            menu.Items.Add(MakeWritableViewportMenuItem(
+                "Delete Nearest Extra Joist",
+                hasItem && item.IsJoistArea && measurement.ExtraJoists.Count > 0,
+                "delete an Extra Joist",
+                () => _viewport.DeleteNearestExtraJoist(
+                    measurement,
+                    new SKPoint((float)request.PdfX, (float)request.PdfY))));
+            menu.Items.Add(MakeWritableViewportMenuItem(
                 "Set / Reset Joist Direction",
                 hasItem,
                 "set a joist direction",

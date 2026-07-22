@@ -779,10 +779,31 @@ public partial class MainWindow
             Notes = source.Notes,
             MType = targetType,
             Points = source.Points.ToList(),
+            Holes = source.Holes.Select(hole => hole.ToList()).ToList(),
             Color = target.Color,
+            CountSymbol = source.CountSymbol,
             PageFolder = source.PageFolder,
             TakeoffFolder = target.FolderPath,
             ScaleMetersPerPt = source.ScaleMetersPerPt,
+            JoistEnabled = source.JoistEnabled,
+            JoistType = source.JoistType,
+            JoistSpacingInches = source.JoistSpacingInches,
+            JoistDirectionDegrees = source.JoistDirectionDegrees,
+            JoistDirectionLocked = source.JoistDirectionLocked,
+            JoistDirectionFollowsAreaRotation = source.JoistDirectionFollowsAreaRotation,
+            JoistAddEndJoist = source.JoistAddEndJoist,
+            JoistPitch = source.JoistPitch,
+            JoistLengthRounding = source.JoistLengthRounding,
+            JoistShowLabels = source.JoistShowLabels,
+            JoistDetailedLabels = source.JoistDetailedLabels,
+            ExtraJoists = source.ExtraJoists
+                .Select(extra => new JoistExtraSegment
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Start = extra.Start,
+                    End = extra.End,
+                })
+                .ToList(),
         };
 
     private static TakeoffItem? GetTakeoffSectionDropTarget(TreeViewItem? item) =>

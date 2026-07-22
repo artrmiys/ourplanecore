@@ -378,6 +378,9 @@ internal static class TakeoffStore
             JoistDirectionLocked = dto.JoistDirectionLocked,
             JoistDirectionFollowsAreaRotation = dto.JoistDirectionFollowsAreaRotation,
             JoistAddEndJoist = dto.JoistAddEndJoist,
+            ExtraJoists = (dto.ExtraJoists ?? [])
+                .Select(ToExtraJoist)
+                .ToList(),
             Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
             Holes = dto.HolesPdf
                 .Select(hole => hole.Select(p => new SKPoint(p.X, p.Y)).ToList())
@@ -401,12 +404,36 @@ internal static class TakeoffStore
             JoistDirectionLocked = measurement.JoistDirectionLocked,
             JoistDirectionFollowsAreaRotation = measurement.JoistDirectionFollowsAreaRotation,
             JoistAddEndJoist = measurement.JoistAddEndJoist,
+            ExtraJoists = (measurement.ExtraJoists ?? [])
+                .Select(ToExtraJoistDto)
+                .ToList(),
             PointsPdf = measurement.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
             HolesPdf = measurement.Holes
                 .Where(hole => hole.Count >= 3)
                 .Select(hole => hole.Select(p => new PointDto(p.X, p.Y)).ToList())
                 .ToList(),
         };
+
+    private static JoistExtraSegment ToExtraJoist(JoistExtraSegmentDto dto) =>
+        new()
+        {
+            Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id,
+            Start = new SKPoint(dto.StartPdf.X, dto.StartPdf.Y),
+            End = new SKPoint(dto.EndPdf.X, dto.EndPdf.Y),
+        };
+
+    private static JoistExtraSegmentDto ToExtraJoistDto(JoistExtraSegment extra)
+    {
+        if (string.IsNullOrWhiteSpace(extra.Id))
+            extra.Id = Guid.NewGuid().ToString();
+
+        return new JoistExtraSegmentDto
+        {
+            Id = extra.Id,
+            StartPdf = new PointDto(extra.Start.X, extra.Start.Y),
+            EndPdf = new PointDto(extra.End.X, extra.End.Y),
+        };
+    }
 
     private static List<MultiLineOffsetConfig> ParseMultiLineOffsets(string? value, string takeoffFolder)
     {

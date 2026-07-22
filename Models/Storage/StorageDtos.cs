@@ -61,6 +61,21 @@ internal sealed class MeasurementDto
 
     [JsonPropertyName("joist_add_end_joist")]
     public bool JoistAddEndJoist { get; set; } = true;
+
+    [JsonPropertyName("extra_joists")]
+    public List<JoistExtraSegmentDto> ExtraJoists { get; set; } = [];
+}
+
+internal sealed class JoistExtraSegmentDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("start_pdf")]
+    public PointDto StartPdf { get; set; } = new(0, 0);
+
+    [JsonPropertyName("end_pdf")]
+    public PointDto EndPdf { get; set; } = new(0, 0);
 }
 
 internal sealed class PageAnnotationDto

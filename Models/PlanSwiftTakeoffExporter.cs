@@ -286,19 +286,38 @@ public static class PlanSwiftTakeoffExporter
         if (!item.IsJoistArea)
             return [];
 
+        var measurements = item.Measurements
+            .Where(measurement =>
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+                measurement.JoistEnabled)
+            .ToList();
         var lines = new List<string>();
-        foreach (Measurement measurement in item.Measurements)
+        foreach (Measurement measurement in measurements)
         {
-            if (OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area" ||
-                !measurement.JoistEnabled)
-            {
-                continue;
-            }
-
             if (lines.Count > 0)
                 lines.Add("");
 
-            lines.AddRange(SplitLabelLines(measurement.Label(fallbackScaleMetersPerPt, unitMode)));
+            var measurementLines = SplitLabelLines(measurement.Label(fallbackScaleMetersPerPt, unitMode)).ToList();
+            int extraIndex = measurementLines.FindIndex(line =>
+                string.Equals(line.Trim(), "Extra", StringComparison.Ordinal));
+            lines.AddRange(extraIndex >= 0
+                ? measurementLines.Take(extraIndex)
+                : measurementLines);
+        }
+
+        IReadOnlyList<JoistLengthGroup> extraGroups = JoistTakeoffCalculator.ExtraLengthGroups(
+            measurements,
+            fallbackScaleMetersPerPt,
+            unitMode);
+        if (extraGroups.Count > 0)
+        {
+            if (lines.Count > 0)
+                lines.Add("");
+            lines.Add("Extra");
+            lines.AddRange(JoistTakeoffCalculator.FormatLengthGroupLines(
+                extraGroups,
+                unitMode,
+                item.JoistDetailedLabels));
         }
 
         return lines;

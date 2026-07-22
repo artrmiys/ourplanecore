@@ -101,6 +101,7 @@ public sealed partial class PdfViewport
 
     private void CancelMutableInteractionForReadOnly()
     {
+        CancelExtraJoistPlacement(postStatus: false);
         RestoreMeasurementDragOriginals();
         RestoreAnnotationDragOriginals();
         RestoreTransformOriginals();
@@ -131,7 +132,11 @@ public sealed partial class PdfViewport
         }
 
         foreach (var (measurement, points) in _dragSelectionOriginalPoints)
+        {
             RestoreMeasurementGeometry(measurement, points, _dragSelectionOriginalHoles.GetValueOrDefault(measurement));
+            if (_dragSelectionOriginalExtraJoists.TryGetValue(measurement, out var extraJoists))
+                RestoreExtraJoists(measurement.ExtraJoists, extraJoists);
+        }
 
         if (_dragSelectionOriginalPoints.Count == 0 &&
             _selectedMeasurement != null &&
@@ -141,6 +146,7 @@ public sealed partial class PdfViewport
                 _selectedMeasurement,
                 _dragMeasurementOriginalPoints,
                 _dragMeasurementOriginalHoles);
+            RestoreExtraJoists(_selectedMeasurement.ExtraJoists, _dragMeasurementOriginalExtraJoists);
         }
     }
 
@@ -167,6 +173,8 @@ public sealed partial class PdfViewport
                 _transformMeasurementOriginalHoles.GetValueOrDefault(measurement));
             if (_transformMeasurementOriginalJoistDirections.TryGetValue(measurement, out double direction))
                 measurement.JoistDirectionDegrees = direction;
+            if (_transformMeasurementOriginalExtraJoists.TryGetValue(measurement, out var extraJoists))
+                RestoreExtraJoists(measurement.ExtraJoists, extraJoists);
         }
 
         foreach (var (annotation, points) in _transformAnnotationOriginalPoints)

@@ -540,6 +540,7 @@ public sealed partial class PdfViewport : SKElement
 
     private void PdfViewport_Unloaded(object sender, RoutedEventArgs e)
     {
+        CancelExtraJoistPlacement(postStatus: false);
         _zoomRerenderTimer.Stop();
         _navigationIdleTimer.Stop();
         _pendingLayerRender = null;
@@ -556,14 +557,17 @@ public sealed partial class PdfViewport : SKElement
         _selectedMeasurementVertexIndices.Clear();
         _dragMeasurementOriginalPoints.Clear();
         _dragMeasurementOriginalHoles.Clear();
+        _dragMeasurementOriginalExtraJoists.Clear();
         _dragMeasurementVertexOriginalPoints.Clear();
         _dragSelectionOriginalPoints.Clear();
         _dragSelectionOriginalHoles.Clear();
+        _dragSelectionOriginalExtraJoists.Clear();
         _dragAnnotationSelectionOriginalPoints.Clear();
         ClearRasterSheetVisualSegments();
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
         _transformMeasurementOriginalJoistDirections.Clear();
+        _transformMeasurementOriginalExtraJoists.Clear();
         _transformAnnotationOriginalPoints.Clear();
         ClearViewportUndoStack();
     }
