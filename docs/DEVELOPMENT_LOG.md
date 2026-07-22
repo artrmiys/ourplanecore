@@ -1,5 +1,38 @@
 ﻿# Development Log
 
+## 2026-07-22 v2.2.5 High-Zoom Area Rendering
+
+- Replaced per-pointer resampling of the static sheet with a retained
+  screen-sized page frame. The fixed raster, tint, black PDF vector linework,
+  and ordinary Sheet Overlay are cached; measurements, Area rubber-band,
+  snaps, annotations, labels, and cursor UI remain live above it.
+- Preserved the `Black vector` display option and added async-content
+  invalidation, correct detached-sheet propagation, DPI-matrix-safe 1:1 replay,
+  trace/edit bypasses, page/unload disposal, and recoverable allocation failure.
+- Unified Area/Line/Scale/joist-direction pointer previews on a 16-ms
+  render-priority cadence with a trailing repaint; clicks and completion stay
+  immediate.
+- Made the static raster target exact: legacy `200 -> 150` and `144 -> 150`
+  pages migrate once, exact 150-DPI pages remain pinned, and static mode still
+  performs no live zoom-tile/detail loading.
+- Added an isolated `42 x 30 in` vector-sheet Area performance smoke. At zoom
+  `4.0` and `5.334`, both runs used a `6300 x 4500` 150-DPI raster plus 44 black
+  vector segments, produced 100% retained-frame hits, 0 miss/bypass, and p95
+  full-frame/page times of `1/0 ms`.
+- Verification: Release build `0 warnings / 0 errors`, C# harness `597/597`,
+  precise metadata Python suite `24/24`, and fresh installed runtime segment
+  with `0 ERROR`, `Loaded takeoffs`, and `Viewport` evidence.
+- Released source commit `ae35c42ed19bad4863a32395ea8c8bdc75e9f974`
+  as `ourplancore-v2.2.5-20260722-ae35c42`. Installed/public-latest EXE is
+  `171,825,374` bytes with SHA-256
+  `DCBD30986A276709C671212A90CDDAE73E2A4F6E3297E6F2655A4A5F9CA02109`.
+- Preserved rollback
+  `ourplancore.exe.bak-20260722-184032-73df3b45d9a6`, kept the Desktop shortcut
+  on the installed package, and independently matched the permanent latest
+  download against the installed hash.
+- Detailed handoff:
+  `docs/10-performance-render/HIGH_ZOOM_AREA_RENDER_2026_07_22.md`.
+
 ## 2026-07-22 F1, Sheet Speed, Overlay, and Project Storage
 
 - Expanded the modal, scrollable F1 shortcut map to the current reachable
