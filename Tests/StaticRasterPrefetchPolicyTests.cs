@@ -3,7 +3,26 @@ using SkiaSharp;
 
 internal static class StaticRasterPrefetchPolicyTests
 {
-    public static void ActiveNearTargetRasterSuppressesOnlySafePrefetch()
+    public static void ExactPinnedDpiRequiresOneTimeMigrationInEitherDirection()
+    {
+        AssertFalse(
+            StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(150, 150),
+            "an exact 150 DPI raster must stay pinned without another migration");
+        AssertTrue(
+            StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(200, 150),
+            "a legacy 200 DPI raster must migrate down once when the configured target is 150 DPI");
+        AssertTrue(
+            StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(144, 150),
+            "a near-target legacy raster must still migrate because static DPI is exact");
+        AssertTrue(
+            StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(150, 300),
+            "a genuinely higher configured target must still migrate upward");
+        AssertFalse(
+            StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(200, 0),
+            "an invalid target must never start a migration loop");
+    }
+
+    public static void ExactTargetRasterSuppressesOnlySafePrefetch()
     {
         string tempRoot = Path.Combine(Path.GetTempPath(), "onc_static_prefetch_tests", Guid.NewGuid().ToString("N"));
         bool previousEnabled = ViewportRenderPolicy.StaticRasterModeEnabled;
@@ -44,9 +63,9 @@ internal static class StaticRasterPrefetchPolicyTests
             ViewportRenderPolicy.StaticRasterModeEnabled = true;
             ViewportRenderPolicy.StaticRasterTargetDpi = 150;
             PdfLayerRenderService.PdfLayersEnabled = false;
-            AssertTrue(
+            AssertFalse(
                 StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page),
-                "the active 144 DPI raster should satisfy the 95% tolerance for a 150 DPI static target");
+                "a legacy 144 DPI raster must not suppress preparation of the exact 150 DPI static target");
 
             WriteRaster(Path.Combine(rasterFolder, "working-72dpi.webp"), 72);
             source.Image = Path.Combine(RasterSheetCacheService.CacheFolderName, "working-72dpi.webp");

@@ -5,6 +5,9 @@ namespace OurPlanCore;
 
 public static class StaticRasterPrefetchPolicy
 {
+    public static bool RequiresPinnedDpiMigration(int currentDpi, int targetDpi) =>
+        targetDpi > 0 && currentDpi != targetDpi;
+
     public static bool HasReadyPageOpenRaster(PageInfo page)
     {
         if (!ViewportRenderPolicy.StaticRasterModeEnabled ||
@@ -38,7 +41,7 @@ public static class StaticRasterPrefetchPolicy
 
         int targetDpi = ResolveEffectiveTargetDpi(source.WidthPt, source.HeightPt);
         int currentDpi = RasterSheetCacheService.RenderScaleToDpi(source.RenderScale);
-        if (currentDpi >= targetDpi * 0.95f)
+        if (!RequiresPinnedDpiMigration(currentDpi, targetDpi))
             return true;
 
         return RasterSheetCacheService.HasReadyReadableRaster(

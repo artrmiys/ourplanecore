@@ -35,6 +35,14 @@ public sealed partial class PdfViewport
         if (_pageBitmap == null)
         {
             DrawBlankPageLoadingSurface(canvas, (float)e.Info.Width, (float)e.Info.Height);
+            frameWatch.Stop();
+            ViewportPerformanceRecorder.RecordPaintFrame(
+                _pageFolder,
+                _zoom,
+                "blank",
+                frameWatch.ElapsedMilliseconds,
+                frameWatch.ElapsedMilliseconds,
+                0);
             return;
         }
 
@@ -50,6 +58,7 @@ public sealed partial class PdfViewport
         IReadOnlyList<Measurement> activeMeasurements = ActivePageMeasurements();
         bool previousFastFrame = _renderNavigationFastFrame;
         _renderNavigationFastFrame = IsFastNavigationFrame(activeMeasurements.Count);
+        StaticPageFramePaintResult pageFrame = StaticPageFramePaintResult.Bypassed;
         try
         {
             ClearPaintJoistLayoutCache();
@@ -62,48 +71,7 @@ public sealed partial class PdfViewport
             // bitmap pixel (bx,by) → screen pixel:
             //   sx = bx * zoom/bitmapScale - panX*zoom
             long sectionStart = frameWatch.ElapsedMilliseconds;
-            {
-                bool detailCoversVisiblePage = DetailRenderCoversVisibleViewForPaint();
-                (SKBitmap paintBitmap, float paintScale) = detailCoversVisiblePage
-                    ? (_pageBitmap, _bitmapScale)
-                    : SelectPageBitmapForPaint();
-                if (paintScale <= 0)
-                    paintScale = _bitmapScale;
-
-                using var bitmapPaint = new SKPaint
-                {
-                    IsAntialias = false,
-                    FilterQuality = CurrentPageBitmapFilterQuality(),
-                };
-                // Mip bitmaps are already near screen resolution; bilinear is enough.
-                if (paintBitmap != _pageBitmap)
-                    bitmapPaint.FilterQuality = SKFilterQuality.Low;
-
-                float visibleW = ViewportCanvasWidth / Math.Max(_zoom, 0.001f);
-                float visibleH = ViewportCanvasHeight / Math.Max(_zoom, 0.001f);
-                float srcLeft = Math.Clamp(_panX * paintScale, 0, paintBitmap.Width);
-                float srcTop = Math.Clamp(_panY * paintScale, 0, paintBitmap.Height);
-                float srcRight = Math.Clamp((_panX + visibleW) * paintScale, 0, paintBitmap.Width);
-                float srcBottom = Math.Clamp((_panY + visibleH) * paintScale, 0, paintBitmap.Height);
-
-                if (srcRight > srcLeft && srcBottom > srcTop)
-                {
-                    var src = new SKRect(srcLeft, srcTop, srcRight, srcBottom);
-                    var dst = new SKRect(
-                        (srcLeft / paintScale - _panX) * _zoom,
-                        (srcTop / paintScale - _panY) * _zoom,
-                        (srcRight / paintScale - _panX) * _zoom,
-                        (srcBottom / paintScale - _panY) * _zoom);
-                    DrawPagePaperUnderlay(canvas, dst);
-                    if (!detailCoversVisiblePage)
-                        canvas.DrawBitmap(paintBitmap, src, dst, bitmapPaint);
-                    DrawDetailRenderTile(canvas);
-                    DrawPageBackgroundTint(canvas, dst);
-                    DrawPdfLayerTraceGhost(canvas, dst);
-                    DrawLowZoomLineOverlay(canvas, visiblePdf);
-                    DrawBlackVectorInkOverlay(canvas, visiblePdf);
-                }
-            }
+            pageFrame = DrawPageFrame(canvas, e.Info, canvas.TotalMatrix, visiblePdf);
             pageBitmapMs += frameWatch.ElapsedMilliseconds - sectionStart;
 
             if (_showingPreviousPageDuringSwitch)
@@ -122,7 +90,8 @@ public sealed partial class PdfViewport
                 // Preserve the SKElement DPI matrix; replacing it causes laptop-scale cursor offsets.
                 canvas.Concat(ref measMtx);
                 sectionStart = frameWatch.ElapsedMilliseconds;
-                if (ViewportRenderPolicy.ShouldDrawSheetOverlay(_renderNavigationFastFrame, IsSheetOverlayPointEditing))
+                if (!pageFrame.IncludesSheetOverlay &&
+                    ViewportRenderPolicy.ShouldDrawSheetOverlay(_renderNavigationFastFrame, IsSheetOverlayPointEditing))
                 {
                     long sheetOverlayStart = frameWatch.ElapsedMilliseconds;
                     DrawSheetOverlay(canvas, visiblePdf);
@@ -166,6 +135,13 @@ public sealed partial class PdfViewport
             frameWatch.Stop();
             if (paintedCurrentPage)
                 MarkCurrentPagePainted();
+            ViewportPerformanceRecorder.RecordPaintFrame(
+                _pageFolder,
+                _zoom,
+                pageFrame.State,
+                frameWatch.ElapsedMilliseconds,
+                pageBitmapMs,
+                inProgressMs);
             ReportSlowViewportFrame(
                 frameWatch.ElapsedMilliseconds,
                 activeMeasurements.Count,
@@ -177,7 +153,8 @@ public sealed partial class PdfViewport
                 markupMs,
                 inProgressMs,
                 labelMs,
-                screenOverlayMs);
+                screenOverlayMs,
+                pageFrame.State);
             _renderNavigationFastFrame = previousFastFrame;
         }
     }
@@ -193,7 +170,8 @@ public sealed partial class PdfViewport
         long markupMs,
         long inProgressMs,
         long labelMs,
-        long screenOverlayMs)
+        long screenOverlayMs,
+        string pageFrameState)
     {
         if (elapsedMs < ViewportRenderPolicy.SlowFrameLogMs)
             return;
@@ -224,7 +202,7 @@ public sealed partial class PdfViewport
         AppLog.Info(
             $"Viewport slow frame {elapsedMs}ms; zoom={_zoom:0.###}; fast={_renderNavigationFastFrame}; " +
             $"page='{_pageFolder}'; activeMeasurements={activeMeasurementCount}; visibleMeasurements={visibleMeasurementCount}; " +
-            $"renderedScale={_renderedScale:0.###}; overlay={(_sheetOverlayBitmap != null)}; " +
+            $"renderedScale={_renderedScale:0.###}; overlay={(_sheetOverlayBitmap != null)}; pageFrame={pageFrameState}; " +
             $"timings=page:{pageBitmapMs} overlay:{overlayMs} sheetOverlay:{sheetOverlayPaintMs} " +
             $"measurements:{measurementMs} markups:{markupMs} " +
             $"inProgress:{inProgressMs} labels:{labelMs} chrome:{screenOverlayMs}ms");

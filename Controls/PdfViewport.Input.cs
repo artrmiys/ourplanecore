@@ -34,6 +34,7 @@ public sealed partial class PdfViewport
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         Focus();
+        CancelScheduledPointerMoveRepaint();
         var pos = ViewPointToCanvas(e.GetPosition(this));
 
         if (e.RightButton == MouseButtonState.Pressed && _pageBitmap != null)
@@ -536,23 +537,24 @@ public sealed partial class PdfViewport
 
         if (_joistDirectionMeasurement != null)
         {
-            pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
+            pointerPdf = ResolveDigitizerPoint(
+                pointerPdf,
+                updatePreview: true,
+                deferPreviewRepaint: true);
             _lastPointerPdf = pointerPdf;
             if (_joistDirectionPts.Count > 0)
-            {
                 _joistDirectionRubberEnd = pointerPdf;
-                RequestRepaint();
-            }
             PostStatus(_joistDirectionPts.Count == 0
                 ? "Joist direction: click the first point."
                 : "Joist direction: click the second point.");
+            RequestPointerMoveRepaint();
             e.Handled = true;
             return;
         }
 
         if (_pdfLayerTraceEnabled)
         {
-            SetSnapPreview(null);
+            SetSnapPreview(null, deferRepaint: true);
             UpdatePdfLayerTraceHover(pointerPdf);
             e.Handled = true;
             return;
@@ -569,24 +571,26 @@ public sealed partial class PdfViewport
             _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut &&
             !IsMissingScaleForLinearArea())
         {
-            pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
+            pointerPdf = ResolveDigitizerPoint(
+                pointerPdf,
+                updatePreview: true,
+                deferPreviewRepaint: true);
             _lastPointerPdf = pointerPdf;
             if (HasActiveOrthoConstraint())
-                ClearEdgeSnapPreview();
+                ClearEdgeSnapPreview(deferRepaint: true);
             else
-                UpdateEdgeSnapPreview(rawPointerPdf);
+                UpdateEdgeSnapPreview(rawPointerPdf, deferRepaint: true);
         }
         else
         {
-            SetSnapPreview(null);
-            ClearEdgeSnapPreview();
+            SetSnapPreview(null, deferRepaint: true);
+            ClearEdgeSnapPreview(deferRepaint: true);
         }
 
         // Rubber-band
         if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.AreaCut)
         {
             _rubberEnd = pointerPdf;
-            RequestRepaint();
         }
 
         if (IsMissingScaleForLinearArea())
@@ -600,15 +604,68 @@ public sealed partial class PdfViewport
     private void RequestPointerMoveRepaint()
     {
         DateTime now = DateTime.UtcNow;
-        if ((now - _lastPointerRepaintAt).TotalMilliseconds < ViewportRenderPolicy.PointerMoveRepaintMinIntervalMs)
+        TimeSpan cadence = TimeSpan.FromMilliseconds(ViewportRenderPolicy.PointerMoveRepaintMinIntervalMs);
+        TimeSpan elapsed = now - _lastPointerRepaintAt;
+        if (elapsed < cadence)
+        {
+            SchedulePointerMoveRepaint(cadence - elapsed);
+            return;
+        }
+
+        CancelScheduledPointerMoveRepaint();
+        _lastPointerRepaintAt = now;
+        RequestRepaint();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _pointerMoveRepaintTimer;
+
+    private void SchedulePointerMoveRepaint(TimeSpan delay)
+    {
+        _pointerMoveRepaintTimer ??= CreatePointerMoveRepaintTimer();
+        if (_pointerMoveRepaintTimer.IsEnabled)
             return;
 
-        _lastPointerRepaintAt = now;
+        _pointerMoveRepaintTimer.Interval = delay > TimeSpan.Zero
+            ? delay
+            : TimeSpan.FromMilliseconds(1);
+        _pointerMoveRepaintTimer.Start();
+    }
+
+    private System.Windows.Threading.DispatcherTimer CreatePointerMoveRepaintTimer()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Render,
+            Dispatcher);
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _lastPointerRepaintAt = DateTime.UtcNow;
+            RequestRepaint();
+        };
+        return timer;
+    }
+
+    private void CancelScheduledPointerMoveRepaint()
+    {
+        _pointerMoveRepaintTimer?.Stop();
+    }
+
+    private void RequestInputPreviewRepaint(bool deferRepaint)
+    {
+        if (deferRepaint)
+        {
+            RequestPointerMoveRepaint();
+            return;
+        }
+
+        CancelScheduledPointerMoveRepaint();
+        _lastPointerRepaintAt = DateTime.UtcNow;
         RequestRepaint();
     }
 
     protected override void OnMouseLeave(MouseEventArgs e)
     {
+        CancelScheduledPointerMoveRepaint();
         _cursorGuideVisible = false;
         _extraJoistPlacementPreview = null;
         ClearSheetOverlayPointEditSnapPreview();

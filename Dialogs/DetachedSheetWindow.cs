@@ -92,6 +92,7 @@ public sealed class DetachedSheetWindow : Window
         _viewport.ShowAreaLabels = settings.ShowAreaLabels;
         _viewport.ShowJoistLabels = settings.ShowJoistLabels;
         _viewport.ShowCountLabels = settings.ShowCountLabels;
+        _viewport.ShowBlackVectorOverlay = settings.BlackVectorOverlayEnabled;
         _viewport.MeasurementLabelScale = ClampScale(settings.MeasurementLabelScale);
         _viewport.MeasurementStrokeScale = ClampScale(settings.ViewportMeasurementStrokeScale);
         _viewport.RulerStrokeWidth = Math.Clamp(settings.ViewportRulerStrokeWidth, 0.5, 6.0);

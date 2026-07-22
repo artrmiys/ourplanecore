@@ -10,19 +10,14 @@ public static class ViewportPerformanceRecorder
 {
     private const int MaxRenderSamples = 600;
     private const int MaxSlowFrameSamples = 300;
+    private const int MaxPaintFrameSamples = 1200;
     private const int MaxQueueSamples = 400;
     private const int MaxDecodeSamples = 300;
     private static readonly object Gate = new();
     private static ViewportPerformanceRun? _activeRun;
+    private static volatile bool _isActive;
 
-    public static bool IsActive
-    {
-        get
-        {
-            lock (Gate)
-                return _activeRun != null;
-        }
-    }
+    public static bool IsActive => _isActive;
 
     public static void BeginRun(string jobPath, string scenario)
     {
@@ -34,6 +29,7 @@ public static class ViewportPerformanceRecorder
                 Scenario = scenario,
                 StartedUtc = DateTime.UtcNow,
             };
+            _isActive = true;
         }
     }
 
@@ -45,10 +41,69 @@ public static class ViewportPerformanceRecorder
             {
                 StartedUtc = DateTime.UtcNow,
             };
+            _isActive = false;
             _activeRun = null;
             run.FinishedUtc = DateTime.UtcNow;
             run.Summary = BuildSummary(run);
             return run;
+        }
+    }
+
+    public static void RecordPaintFrame(
+        string pageFolder,
+        float zoom,
+        string pageFrameState,
+        long elapsedMs,
+        long pageBitmapMs,
+        long inProgressMs)
+    {
+        // This runs for every SKElement paint. Keep the normal production path
+        // to one volatile read and avoid taking the recorder lock when inactive.
+        if (!_isActive)
+            return;
+
+        lock (Gate)
+        {
+            if (_activeRun == null)
+                return;
+
+            var sample = new ViewportPaintFrameSample
+            {
+                PageFolder = pageFolder,
+                Zoom = Math.Round(zoom, 4),
+                PageFrameState = pageFrameState,
+                ElapsedMs = elapsedMs,
+                PageBitmapMs = pageBitmapMs,
+                InProgressMs = inProgressMs,
+                Utc = DateTime.UtcNow,
+            };
+
+            _activeRun.TotalPaintFrameCount++;
+            if (_activeRun.PaintFrames.Count < MaxPaintFrameSamples)
+                _activeRun.PaintFrames.Add(sample);
+        }
+    }
+
+    public static int CapturePaintFrameCursor()
+    {
+        if (!_isActive)
+            return 0;
+
+        lock (Gate)
+            return _activeRun?.PaintFrames.Count ?? 0;
+    }
+
+    public static IReadOnlyList<ViewportPaintFrameSample> SnapshotPaintFramesSince(int cursor)
+    {
+        if (!_isActive)
+            return [];
+
+        lock (Gate)
+        {
+            if (_activeRun == null || cursor < 0 || cursor >= _activeRun.PaintFrames.Count)
+                return [];
+
+            return _activeRun.PaintFrames.Skip(cursor).ToArray();
         }
     }
 
@@ -229,6 +284,7 @@ public static class ViewportPerformanceRecorder
         using Process process = Process.GetCurrentProcess();
         List<ViewportRenderProfileSample> renders = run.RenderProfiles;
         List<ViewportSlowFrameSample> slowFrames = run.SlowFrames;
+        List<ViewportPaintFrameSample> paintFrames = run.PaintFrames;
         List<ViewportRenderQueueSample> queues = run.RenderQueues;
         List<ViewportBitmapDecodeSample> decodes = run.BitmapDecodes;
 
@@ -243,6 +299,13 @@ public static class ViewportPerformanceRecorder
                 : Math.Round((double)run.CacheHitCount / run.TotalRenderProfileCount, 4),
             SlowFrameCount = run.TotalSlowFrameCount,
             StoredSlowFrameCount = slowFrames.Count,
+            PaintFrameCount = run.TotalPaintFrameCount,
+            StoredPaintFrameCount = paintFrames.Count,
+            MaxPaintFrameMs = paintFrames.Count == 0 ? 0 : paintFrames.Max(sample => sample.ElapsedMs),
+            AveragePaintFrameMs = paintFrames.Count == 0
+                ? 0
+                : Math.Round(paintFrames.Average(sample => sample.ElapsedMs), 2),
+            MaxInProgressPaintMs = paintFrames.Count == 0 ? 0 : paintFrames.Max(sample => sample.InProgressMs),
             MaxRenderMs = renders.Count == 0 ? 0 : renders.Max(sample => sample.ElapsedMs),
             MaxSlowFrameMs = slowFrames.Count == 0 ? 0 : slowFrames.Max(sample => sample.ElapsedMs),
             MaxPageBitmapPaintMs = slowFrames.Count == 0 ? 0 : slowFrames.Max(sample => sample.PageBitmapMs),
@@ -293,6 +356,10 @@ public static class ViewportPerformanceRecorder
                     group => group.Key,
                     group => Math.Round(group.Average(sample => sample.ElapsedMs), 2),
                     StringComparer.OrdinalIgnoreCase),
+            PaintFrameCountByState = paintFrames
+                .GroupBy(sample => sample.PageFrameState, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase),
             WorkingSetMb = process.WorkingSet64 / (1024 * 1024),
             ManagedMemoryMb = GC.GetTotalMemory(forceFullCollection: false) / (1024 * 1024),
         };
@@ -308,6 +375,7 @@ public sealed class ViewportPerformanceRun
     public int TotalRenderProfileCount { get; set; }
     public int CacheHitCount { get; set; }
     public int TotalSlowFrameCount { get; set; }
+    public int TotalPaintFrameCount { get; set; }
     public int RepaintRequestCount { get; set; }
     public int RepaintCoalescedCount { get; set; }
     public int CrossThreadRepaintRequestCount { get; set; }
@@ -319,6 +387,7 @@ public sealed class ViewportPerformanceRun
     public long TotalBitmapDecodeMs { get; set; }
     public List<ViewportRenderProfileSample> RenderProfiles { get; set; } = [];
     public List<ViewportSlowFrameSample> SlowFrames { get; set; } = [];
+    public List<ViewportPaintFrameSample> PaintFrames { get; set; } = [];
     public List<ViewportRenderQueueSample> RenderQueues { get; set; } = [];
     public List<ViewportBitmapDecodeSample> BitmapDecodes { get; set; } = [];
     public ViewportPerformanceSummary Summary { get; set; } = new();
@@ -333,6 +402,11 @@ public sealed class ViewportPerformanceSummary
     public double CacheHitRate { get; set; }
     public int SlowFrameCount { get; set; }
     public int StoredSlowFrameCount { get; set; }
+    public int PaintFrameCount { get; set; }
+    public int StoredPaintFrameCount { get; set; }
+    public long MaxPaintFrameMs { get; set; }
+    public double AveragePaintFrameMs { get; set; }
+    public long MaxInProgressPaintMs { get; set; }
     public long MaxRenderMs { get; set; }
     public long MaxSlowFrameMs { get; set; }
     public long MaxPageBitmapPaintMs { get; set; }
@@ -356,8 +430,20 @@ public sealed class ViewportPerformanceSummary
     public Dictionary<string, int> RenderQueueCountByKind { get; set; } = [];
     public Dictionary<string, int> BitmapDecodeCountByKind { get; set; } = [];
     public Dictionary<string, double> AverageBitmapDecodeMsByKind { get; set; } = [];
+    public Dictionary<string, int> PaintFrameCountByState { get; set; } = [];
     public long WorkingSetMb { get; set; }
     public long ManagedMemoryMb { get; set; }
+}
+
+public sealed class ViewportPaintFrameSample
+{
+    public string PageFolder { get; set; } = "";
+    public double Zoom { get; set; }
+    public string PageFrameState { get; set; } = "";
+    public long ElapsedMs { get; set; }
+    public long PageBitmapMs { get; set; }
+    public long InProgressMs { get; set; }
+    public DateTime Utc { get; set; }
 }
 
 public sealed class ViewportRenderProfileSample

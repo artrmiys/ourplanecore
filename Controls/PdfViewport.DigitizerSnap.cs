@@ -18,19 +18,27 @@ namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private SKPoint ResolveDigitizerPoint(SKPoint rawPdf, bool updatePreview)
+    private SKPoint ResolveDigitizerPoint(
+        SKPoint rawPdf,
+        bool updatePreview,
+        bool deferPreviewRepaint = false)
     {
         SKPoint? anchor = !ShouldPreviewAsBox() && TryGetOrthoAnchor(out SKPoint orthoAnchor)
             ? orthoAnchor
             : null;
-        return ResolveConstrainedPoint(rawPdf, anchor, updatePreview);
+        return ResolveConstrainedPoint(
+            rawPdf,
+            anchor,
+            updatePreview,
+            deferPreviewRepaint: deferPreviewRepaint);
     }
 
     private SKPoint ResolveConstrainedPoint(
         SKPoint rawPdf,
         SKPoint? orthoAnchor,
         bool updatePreview,
-        Func<SKPoint, bool>? rejectSnap = null)
+        Func<SKPoint, bool>? rejectSnap = null,
+        bool deferPreviewRepaint = false)
     {
         bool applyOrtho = orthoAnchor.HasValue && IsOrthoActive();
         SKPoint constrained = applyOrtho
@@ -43,12 +51,12 @@ public sealed partial class PdfViewport
             if (applyOrtho)
                 snapped = ProjectSnapToOrthoAxis(orthoAnchor!.Value, constrained, snapped);
             if (updatePreview)
-                SetSnapPreview(snapped, snapKind);
+                SetSnapPreview(snapped, snapKind, deferPreviewRepaint);
             return snapped;
         }
 
         if (updatePreview)
-            SetSnapPreview(null);
+            SetSnapPreview(null, deferRepaint: deferPreviewRepaint);
 
         return constrained;
     }
@@ -358,7 +366,10 @@ public sealed partial class PdfViewport
             $"snapPoints={consideredSnapPoints}; segments={segmentCandidateCount}; found={found}; pdfSnap={PdfSnapEnabled}");
     }
 
-    private void SetSnapPreview(SKPoint? point, string kind = "")
+    private void SetSnapPreview(
+        SKPoint? point,
+        string kind = "",
+        bool deferRepaint = false)
     {
         bool changed = (_snapPreview.HasValue != point.HasValue) ||
                        (_snapPreview.HasValue && point.HasValue &&
@@ -367,7 +378,7 @@ public sealed partial class PdfViewport
         _snapPreview = point;
         _snapPreviewKind = point.HasValue ? kind : "";
         if (changed)
-            RequestRepaint();
+            RequestInputPreviewRepaint(deferRepaint);
     }
 
     private static SKPoint Midpoint(SKPoint a, SKPoint b) =>

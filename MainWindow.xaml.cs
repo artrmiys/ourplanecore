@@ -458,6 +458,8 @@ public partial class MainWindow : Window
         {
             TryOpenLastJobFromSettings();
             await TryRunGuideScreenshotCaptureAsync();
+            if (await TryRunViewportAreaPreviewSmokeAsync())
+                return;
             await TryRunViewportPageStressSmokeAsync();
             await TryRunTakeoffsMoveSmokeAsync();
         }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);

@@ -553,6 +553,7 @@ public sealed partial class PdfViewport : SKElement
         _usingRasterSheetOverviewRender = false;
         _pageBitmap?.Dispose();
         _pageBitmap = null;
+        ClearStaticPageFrameCache();
         ClearSheetOverlay();
         _selectedMeasurementVertexIndices.Clear();
         _dragMeasurementOriginalPoints.Clear();

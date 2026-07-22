@@ -26,17 +26,20 @@ public sealed partial class PdfViewport
     private const float PdfSnapDirectionalLateralFactor = 0.35f;
     private const int PdfSnapMaxChainSegments = 256;
 
-    private bool UpdateEdgeSnapPreview(SKPoint rawPdf, bool resetModeForNewCandidate = true)
+    private bool UpdateEdgeSnapPreview(
+        SKPoint rawPdf,
+        bool resetModeForNewCandidate = true,
+        bool deferRepaint = false)
     {
         if (!CanUseEdgeSnapPreview())
         {
-            ClearEdgeSnapPreview();
+            ClearEdgeSnapPreview(deferRepaint);
             return false;
         }
 
         if (!TryFindEdgeSnapCandidate(rawPdf, out EdgeSnapCandidate? candidate) || candidate == null)
         {
-            ClearEdgeSnapPreview();
+            ClearEdgeSnapPreview(deferRepaint);
             return false;
         }
 
@@ -50,13 +53,13 @@ public sealed partial class PdfViewport
         if (_edgeSnapCycleMode == EdgeSnapModeVertices)
         {
             _edgeSnapPreview = null;
-            RequestRepaint();
+            RequestInputPreviewRepaint(deferRepaint);
             return true;
         }
 
         _edgeSnapPreview = BuildEdgeSnapPreview(candidate, _edgeSnapCycleMode);
-        SetSnapPreview(null);
-        RequestRepaint();
+        SetSnapPreview(null, deferRepaint: deferRepaint);
+        RequestInputPreviewRepaint(deferRepaint);
         return true;
     }
 
@@ -148,7 +151,7 @@ public sealed partial class PdfViewport
         !IsMissingScaleForLinearArea() &&
         _tool is ViewerTool.Line or ViewerTool.Area;
 
-    private void ClearEdgeSnapPreview()
+    private void ClearEdgeSnapPreview(bool deferRepaint = false)
     {
         if (_edgeSnapCandidate == null && _edgeSnapPreview == null && _edgeSnapCycleMode == EdgeSnapModeVertices)
             return;
@@ -156,7 +159,7 @@ public sealed partial class PdfViewport
         _edgeSnapCandidate = null;
         _edgeSnapPreview = null;
         _edgeSnapCycleMode = EdgeSnapModeVertices;
-        RequestRepaint();
+        RequestInputPreviewRepaint(deferRepaint);
     }
 
     private bool TryFindEdgeSnapCandidate(SKPoint rawPdf, out EdgeSnapCandidate? candidate)

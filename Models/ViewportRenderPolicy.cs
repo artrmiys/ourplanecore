@@ -101,7 +101,9 @@ public static class ViewportRenderPolicy
     public const int RasterSheetMotionWarmupMinIntervalMs = 650;
     public const int RasterSheetMotionQualityRestoreQuietMs = 450;
     public const int RasterSheetPageOpenImmediateWarmMaxDpi = 144;
-    public const int PointerMoveRepaintMinIntervalMs = 33;
+    // Keep live digitizer previews responsive without repainting the full
+    // viewport for every raw mouse event (high-rate mice can exceed 500 Hz).
+    public const int PointerMoveRepaintMinIntervalMs = 16;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.35f;
     public const float ColdPageSwitchPreviewRenderScale = 0.20f;

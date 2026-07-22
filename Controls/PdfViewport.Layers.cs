@@ -1224,6 +1224,7 @@ public sealed partial class PdfViewport
         _pagePaintGeneration = 0;
         _pagePaintedPageFolder = "";
         ClearPageBitmapMip();
+        ClearStaticPageFrameCache();
     }
 
     private void ClearPageBitmapIdentity()
@@ -1235,6 +1236,7 @@ public sealed partial class PdfViewport
         _pagePaintGeneration = 0;
         _pagePaintedPageFolder = "";
         ClearPageBitmapMip();
+        ClearStaticPageFrameCache();
     }
 
     private void MarkCurrentPagePainted()

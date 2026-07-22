@@ -10,8 +10,9 @@ public sealed partial class PdfViewport
 {
     // PlanSwift-style fixed resolution: in static mode ensure the displayed raster
     // is at the user-chosen DPI (default 150, up to 300). Rendered once to the disk
-    // cache, then pinned. We only ever raise DPI toward the target — an existing
-    // higher-DPI raster is kept as-is (never rebuilt to downgrade).
+    // cache, then pinned. A legacy raster at a different DPI is migrated once in
+    // either direction so the persisted source and displayed bitmap match the
+    // effective setting exactly. Static mode suppresses later live DPI swaps.
     private void QueueStaticRasterDpiApplyIfNeeded()
     {
         if (!IsStaticRasterDisplayActive() ||
@@ -26,11 +27,7 @@ public sealed partial class PdfViewport
 
         int targetDpi = SafeStaticRasterTargetDpi();
         int currentDpi = RasterSheetCacheService.RenderScaleToDpi(_bitmapScale);
-        // Accept a raster already within ~5% of target as-is. This keeps existing
-        // jobs from needlessly rebuilding near-identical DPIs on first open (e.g. a
-        // 144 DPI page under the default 150 target) while still upgrading genuine
-        // gaps (100→150) and real resolution bumps (150→300).
-        if (targetDpi <= 0 || currentDpi >= targetDpi * 0.95f)
+        if (!StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(currentDpi, targetDpi))
             return;
 
         PageInfo page = CurrentRasterSheetPageInfo();
@@ -110,7 +107,9 @@ public sealed partial class PdfViewport
                 if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath) ||
                     !IsStaticRasterDisplayActive() ||
                     targetDpi != SafeStaticRasterTargetDpi() ||
-                    RasterSheetCacheService.RenderScaleToDpi(_bitmapScale) >= targetDpi)
+                    !StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(
+                        RasterSheetCacheService.RenderScaleToDpi(_bitmapScale),
+                        targetDpi))
                 {
                     return;
                 }

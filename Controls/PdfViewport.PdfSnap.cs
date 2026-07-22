@@ -18,6 +18,7 @@ public sealed partial class PdfViewport
     private bool _pdfSnapReloadPending;
     private int _pdfSnapLoadVersion;
     private int _rasterSheetVisualSegmentVersion;
+    private int _rasterSheetVisualContentGeneration;
     private string _overlayPdfSnapPath = "";
     private int _overlayPdfSnapPageIndex;
     private string _overlayPdfSnapName = "";
@@ -336,6 +337,7 @@ public sealed partial class PdfViewport
     {
         _rasterSheetVisualSegments = [];
         _rasterSheetVisualSegmentVersion++;
+        _rasterSheetVisualContentGeneration++;
     }
 
     private void QueueRasterSheetVisualSegmentsLoad(
@@ -345,6 +347,7 @@ public sealed partial class PdfViewport
         RasterSheetSource? rasterSheet)
     {
         _rasterSheetVisualSegments = [];
+        _rasterSheetVisualContentGeneration++;
         int version = ++_rasterSheetVisualSegmentVersion;
         _ = LoadRasterSheetVisualSegmentsAsync(version, pageFolder, pdfPath, pdfIndex, rasterSheet?.Clone());
     }
@@ -375,6 +378,7 @@ public sealed partial class PdfViewport
             }
 
             _rasterSheetVisualSegments = read.Ok ? read.SnapIndex.Segments : [];
+            _rasterSheetVisualContentGeneration++;
             RequestRepaint();
         }
         catch (Exception ex)

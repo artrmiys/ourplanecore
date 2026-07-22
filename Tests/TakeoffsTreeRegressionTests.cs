@@ -225,9 +225,11 @@ internal static class TakeoffsTreeRegressionTests
             staticRasterPrefetchPolicy.Contains("RasterSheetCacheService.UseAsPageOpenRaster(source)", StringComparison.Ordinal) &&
             staticRasterPrefetchPolicy.Contains("PdfLayerRenderService.PdfLayersEnabled", StringComparison.Ordinal) &&
             staticRasterPrefetchPolicy.Contains("HasExistingSourceImageOverview", StringComparison.Ordinal) &&
-            staticRasterPrefetchPolicy.Contains("currentDpi >= targetDpi * 0.95f", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("RequiresPinnedDpiMigration(int currentDpi, int targetDpi)", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("targetDpi > 0 && currentDpi != targetDpi;", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("if (!RequiresPinnedDpiMigration(currentDpi, targetDpi))", StringComparison.Ordinal) &&
             staticRasterPrefetchPolicy.Contains("RasterSheetCacheService.HasReadyReadableRaster", StringComparison.Ordinal),
-            "nearby page prefetch should warm live PDF previews only when a page-open static raster is unavailable, while still warming the saved bitmap and preserving fallback rendering");
+            "nearby page prefetch should accept only the exact pinned static DPI (or its ready replacement), while still warming the saved bitmap and preserving fallback rendering");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()
@@ -1957,9 +1959,10 @@ internal static class TakeoffsTreeRegressionTests
             "edge snap should search existing measurement segments and support edge/adjacent/contour previews");
         AssertTrue(
             input.Contains("TryCommitEdgeSnapPreview(rawPdf)", StringComparison.Ordinal) &&
-            input.Contains("UpdateEdgeSnapPreview(rawPointerPdf)", StringComparison.Ordinal) &&
+            input.Contains("UpdateEdgeSnapPreview(rawPointerPdf, deferRepaint: true)", StringComparison.Ordinal) &&
+            edge.Contains("bool deferRepaint = false", StringComparison.Ordinal) &&
             input.Contains("key == Key.Tab && TryCycleEdgeSnapPreview()", StringComparison.Ordinal),
-            "edge snap must hook hover, click commit, and Tab cycle in the viewport input path");
+            "edge snap must hook throttled hover plus immediate click commit and Tab cycle in the viewport input path");
         AssertTrue(
             live.Contains("DrawEdgeSnapPreview(canvas)", StringComparison.Ordinal) &&
             edge.Contains("FinalizeDrawing();", StringComparison.Ordinal),
@@ -2125,6 +2128,7 @@ internal static class TakeoffsTreeRegressionTests
         string viewTransform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
         string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        string staticPageFrame = ReadRepoFile("Controls/PdfViewport.StaticPageFrameCache.cs");
         string rasterSheetViewport = ReadRepoFile("Controls/PdfViewport.RasterSheet.cs");
         string rasterSheetDpiUpgrade = ReadRepoFile("Controls/PdfViewport.RasterSheetDpiUpgrade.cs");
         string rasterSheetPageOpenDpi = ReadRepoFile("Controls/PdfViewport.RasterSheetPageOpenDpi.cs");
@@ -2182,7 +2186,8 @@ internal static class TakeoffsTreeRegressionTests
             !detailRender.Contains("_usingRasterSheetRender ||", StringComparison.Ordinal),
             "raster sheet mode must allow delayed clipped PDF detail renders");
         AssertTrue(
-            rendering.Contains("FilterQuality = CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
+            rendering.Contains("DrawPageFrame(canvas, e.Info, canvas.TotalMatrix, visiblePdf)", StringComparison.Ordinal) &&
+            staticPageFrame.Contains("FilterQuality = CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
             rendering.Contains("private SKFilterQuality CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
             rendering.Contains("ShouldUseSharperSourceImageRasterSampling()", StringComparison.Ordinal) &&
             rendering.Contains("ShouldUseFastFarZoomRasterSheetSampling()", StringComparison.Ordinal) &&
@@ -2673,7 +2678,7 @@ internal static class TakeoffsTreeRegressionTests
             pdfSnap.Contains("version != _rasterSheetVisualSegmentVersion", StringComparison.Ordinal) &&
             pdfSnap.Contains("RequestRepaint();", StringComparison.Ordinal) &&
             layers.Contains("QueueRasterSheetVisualSegmentsLoad(pageFolder, pdfPath, pdfIndex, rasterSheet)", StringComparison.Ordinal) &&
-            rendering.Contains("DrawLowZoomLineOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
+            staticPageFrame.Contains("DrawLowZoomLineOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
             rendering.Contains("LowZoomVisualSegments()", StringComparison.Ordinal) &&
             rendering.Contains("_renderNavigationFastFrame", StringComparison.Ordinal) &&
             rendering.Contains("_pdfSnapEnabled && IsPdfSnapCacheCurrent()", StringComparison.Ordinal) &&
@@ -2718,6 +2723,7 @@ internal static class TakeoffsTreeRegressionTests
         string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        string staticPageFrame = ReadRepoFile("Controls/PdfViewport.StaticPageFrameCache.cs");
         string staticRasterPrefetchPolicy = ReadRepoFile("Models/StaticRasterPrefetchPolicy.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
@@ -2759,7 +2765,8 @@ internal static class TakeoffsTreeRegressionTests
             "static raster mode must skip motion-warmup renders and the whole-job raster refresh cadence");
 
         AssertTrue(
-            rendering.Contains("DrawBlackVectorInkOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
+            staticPageFrame.Contains("DrawBlackVectorInkOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
+            staticPageFrame.Contains("ShowBlackVectorOverlay", StringComparison.Ordinal) &&
             rendering.Contains("private void DrawBlackVectorInkOverlay(SKCanvas canvas, SKRect visiblePdf)", StringComparison.Ordinal) &&
             rendering.Contains("if (!ShowBlackVectorOverlay || _zoom <= 0)", StringComparison.Ordinal) &&
             rendering.Contains("ViewportRenderPolicy.BlackVectorOverlayFastFrameSegmentCap", StringComparison.Ordinal),
@@ -2784,14 +2791,15 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             rasterSheetDpiUpgrade.Contains("private void QueueStaticRasterDpiApplyIfNeeded()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("private int SafeStaticRasterTargetDpi()", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("currentDpi >= targetDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(currentDpi, targetDpi)", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("targetDpi > 0 && currentDpi != targetDpi;", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("StaticRasterPrefetchPolicy.ResolveEffectiveTargetDpi(_pdfW, _pdfH)", StringComparison.Ordinal) &&
             staticRasterPrefetchPolicy.Contains("ViewportRenderPolicy.ResponsiveMaxRenderPixels", StringComparison.Ordinal) &&
             staticRasterPrefetchPolicy.Contains("ResolveEffectiveTargetDpi(source.WidthPt, source.HeightPt)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.BuildAndEnable(buildPage, targetScale)", StringComparison.Ordinal) &&
             layers.Contains("QueueStaticRasterDpiApplyIfNeeded()", StringComparison.Ordinal) &&
             pageApi.Contains("buildMissingDpis: !ViewportRenderPolicy.StaticRasterModeEnabled", StringComparison.Ordinal),
-            "static DPI apply must build once at the pixel-budget-clamped target, only raise DPI toward it, and skip the python zoom-ladder warmup on page open in static mode");
+            "static DPI apply must migrate once in either direction to the exact pixel-budget-clamped target and skip the python zoom-ladder warmup on page open in static mode");
 
         AssertTrue(
             immediateRepaintDpiMethod.Contains("if (IsStaticRasterDisplayActive())", StringComparison.Ordinal) &&
@@ -3287,6 +3295,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void PdfDetailClipRenderIsWired()
     {
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        string staticPageFrame = ReadRepoFile("Controls/PdfViewport.StaticPageFrameCache.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string detail = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string detailPrefetch = ReadRepoFile("Controls/PdfViewport.DetailPrefetch.cs");
@@ -3340,12 +3349,15 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("CurrentRenderScale()", StringComparison.Ordinal),
             "interactive page opens should keep PDF layers lazy, use readable base renders at restored work zoom, then use clipped detail instead of launching an immediate full-sheet layer render");
         AssertTrue(
-            rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
-            rendering.Contains("DetailRenderCoversVisibleViewForPaint()", StringComparison.Ordinal) &&
-            rendering.Contains("DrawDetailRenderTile(canvas)", StringComparison.Ordinal),
+            rendering.Contains("DrawPageFrame(canvas, e.Info, canvas.TotalMatrix, visiblePdf)", StringComparison.Ordinal) &&
+            staticPageFrame.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
+            staticPageFrame.Contains("DetailRenderCoversVisibleViewForPaint()", StringComparison.Ordinal) &&
+            staticPageFrame.Contains("if (!detailCoversVisiblePage)", StringComparison.Ordinal) &&
+            staticPageFrame.Contains("DrawDetailRenderTile(canvas)", StringComparison.Ordinal),
             "paint should use cheap bitmap sampling during responsive navigation and skip the heavy base bitmap when a high-DPI detail tile covers the view");
         AssertFalse(
-            rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal),
+            rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal) ||
+            staticPageFrame.Contains("SKFilterQuality.High", StringComparison.Ordinal),
             "main PDF bitmap paint must not use high-quality sampling on the interactive path");
         AssertTrue(
             transform.Contains("ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
