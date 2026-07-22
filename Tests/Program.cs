@@ -554,6 +554,8 @@ var tests = new List<(string Name, Action Run)>
     ("openai response parser extracts output text", OpenAiResponseParserExtractsOutputText),
     ("openai response parser reports incomplete max tokens", OpenAiResponseParserReportsIncompleteMaxTokens),
     ("keyboard shortcut keys use english display text", KeyboardShortcutKeysUseEnglishDisplayText),
+    ("F1 shortcut catalog covers reachable contexts", KeyboardShortcutCatalogTests.CoversReachableShortcutContexts),
+    ("F1 shortcut help is scrollable and modal", KeyboardShortcutCatalogTests.UsesScrollableModalF1Surface),
     ("transform rotation snap uses fifteen degree steps", TransformRotationSnapUsesFifteenDegreeSteps),
     ("pdf metadata needs fallback when scale is unresolved", PdfMetadataNeedsFallbackWhenScaleUnresolved),
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),

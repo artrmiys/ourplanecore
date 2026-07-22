@@ -16,21 +16,38 @@ public partial class MainWindow
 
     private void MainWindow_GlobalPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.IsRepeat || e.Handled)
+        if (e.Handled)
             return;
 
         Key key = KeyboardShortcutKeys.EffectiveKey(e);
+
+        // Keep F1 modal: commands must not run in the hidden workspace while
+        // the shortcut guide covers it.
+        if (ShortcutsOverlay is { Visibility: Visibility.Visible })
+        {
+            if ((key == Key.F1 && Keyboard.Modifiers == ModifierKeys.None) ||
+                key == Key.Escape)
+            {
+                ShortcutsOverlay.Visibility = Visibility.Collapsed;
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (e.IsRepeat)
+        {
+            // The first D starts continuous Extra Joists. Do not let key-repeat
+            // fall through to the viewport and switch the tool to Draw Line.
+            if (key == Key.D && _viewport.IsExtraJoistPlacementActive)
+                e.Handled = true;
+            return;
+        }
 
         // F1 toggles the shortcuts overlay; Esc closes it (works regardless of focus).
         if (key == Key.F1 && Keyboard.Modifiers == ModifierKeys.None)
         {
             ToggleShortcutsOverlay();
-            e.Handled = true;
-            return;
-        }
-        if (key == Key.Escape && ShortcutsOverlay is { Visibility: Visibility.Visible })
-        {
-            ShortcutsOverlay.Visibility = Visibility.Collapsed;
             e.Handled = true;
             return;
         }

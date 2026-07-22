@@ -92,7 +92,7 @@ public partial class MainWindow
         Add("tool.scale", "Scale Tool", "Tools", Shortcut("s"), "Draw a calibration line for sheet scale.");
         Add("tool.ruler", "Ruler Tool", "Tools", Shortcut("r"), "Measure a temporary distance without creating a takeoff.");
         Add("tool.highlight", "Highlighter Tool", "Tools", Shortcut("h"), "Draw a transparent highlighter markup.");
-        Add("tool.drawLine", "Draw Line Tool", "Tools", Shortcut("d"), "Draw a page annotation line.");
+        Add("tool.drawLine", "Draw Line / Extra Joists", "Tools", Shortcut("d"), "D toggles continuous Extra Joists for one selected Joist Area segment; otherwise it selects Draw Line.");
         Add("tool.drawBox", "Draw Box Tool", "Tools", "", "Draw a page annotation box.");
         Add("tool.note", "Note Tool", "Tools", Shortcut("n"), "Write a text note on the active sheet.", hasPage, "Select a page first.");
         Add("tool.count", "Count Tool", "Tools", Shortcut("p"), "Record count marks into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");

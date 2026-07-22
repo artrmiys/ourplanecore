@@ -4006,6 +4006,7 @@ internal static class TakeoffsTreeRegressionTests
         string callbacks = ReadRepoFile("MainWindow.ViewportCallbacks.cs");
         string pageSetup = ReadRepoFile("MainWindow.PageSetup.cs");
         string shortcuts = ReadRepoFile("MainWindow.Shortcuts.cs");
+        string shortcutCatalog = ReadRepoFile("Models/KeyboardShortcutCatalog.cs");
         string palette = ReadRepoFile("MainWindow.CommandPalette.cs");
         string xaml = ReadRepoFile("MainWindow.xaml");
         string pageSetupWindow = ReadRepoFile("Dialogs/PageSetupWindow.cs");
@@ -4043,8 +4044,8 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("Click=\"BtnAutoScalePdf_Click\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Name+Scale\"", StringComparison.Ordinal) &&
             xaml.Contains("Click=\"BtnAutoRenameScalePdf_Click\"", StringComparison.Ordinal) &&
-            xaml.Contains("Text=\"F4\"", StringComparison.Ordinal) &&
-            xaml.Contains("Text=\"F5\"", StringComparison.Ordinal) &&
+            shortcutCatalog.Contains("Item(\"F4\", \"Set scale on selected sheet(s)\")", StringComparison.Ordinal) &&
+            shortcutCatalog.Contains("Item(\"F5\", \"Open Name / Scale\")", StringComparison.Ordinal) &&
             palette.Contains("\"pages.setScale\", \"Set Scale\", \"Pages\", \"F4\"", StringComparison.Ordinal) &&
             palette.Contains("\"pages.nameScaleSetup\", \"Name / Scale Setup\", \"Pages\", \"F5\"", StringComparison.Ordinal),
             "Pages must expose the aligned bottom Name, Scale, and Name+Scale buttons and document F4/F5 in the shortcut surfaces");
