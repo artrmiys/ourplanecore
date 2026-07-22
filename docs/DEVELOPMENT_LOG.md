@@ -1,5 +1,36 @@
 ﻿# Development Log
 
+## 2026-07-22 F1, Sheet Speed, Overlay, and Project Storage
+
+- Expanded the modal, scrollable F1 shortcut map to the current reachable
+  command set, including context-sensitive continuous Extra Joists on `D`.
+- Removed redundant Docnet/readable/clean/work-zoom prefetch for pages that
+  already have a usable static page-open raster. Kept live fallbacks for PDF
+  Layers, missing/stale/low-resolution rasters, and missing source-image
+  overviews. Shared the 96 MP effective-DPI cap with static lazy builds.
+- Reduced full-sheet raster cache accounting from a possible 2.56 GB to an
+  adaptive 256–768 MB. On the same copied 241-page Carillon stress job, working
+  set fell from 3,275 MB to 1,264 MB, initial settle improved 691→635 ms, and
+  worst step improved 1,303→962 ms while all 3 overlay checks still passed.
+- Bounded overlay bitmaps to 8 entries / 96–384 MB, skipped redundant reload
+  after a synchronous hit, and retained overlay decode/paint diagnostics.
+- Added `8 Settings > Project Storage`: read-only portable/rebuildable/recovery/
+  source classification, reference-aware duplicate findings, external
+  dependency warnings, and an exact safe compact preview.
+- Added confirmed formatting-only compaction for valid
+  `Pages/**/raster/snap.json`. It uses cancellation, reparse/junction refusal,
+  timestamp/length/SHA checks, shared raster-writer locking, atomic replace,
+  and never deletes project files.
+- Real read-only analysis found about 189.5 MiB of safe `snap.json` whitespace
+  savings in Primrose and about 15.5 MiB in Meadowview. No real job was changed.
+- A copied Meadowview compact smoke processed 13/13 files, saved 16,238,475
+  bytes, reported 0 issues, and verified semantic JSON equality before the
+  temporary copy was removed.
+- Version advanced to `2.2.4`. Debug build passes with `0 warnings / 0 errors`;
+  the full harness passes `588/588`; Carillon viewport/overlay smoke passes.
+- Detailed ownership, safety rules, measurements, and release gate:
+  `docs/10-performance-render/F1_VIEWPORT_OVERLAY_PROJECT_STORAGE_2026_07_22.md`.
+
 ## 2026-07-22 Point Split and Joist Area Completion
 
 - Completed Point Split in commit `5b24718`. A whole Count section or only
