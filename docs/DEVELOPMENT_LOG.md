@@ -1,5 +1,41 @@
 ﻿# Development Log
 
+## 2026-07-22 Point Split and Joist Area Completion
+
+- Completed Point Split in commit `5b24718`. A whole Count section or only
+  selected Count markers can be moved to an existing/new takeoff; selected
+  marker vertices take precedence over stale whole-section state, metadata and
+  point order survive, and all source owners are updated through the normal
+  persistence path.
+- Added `Add Joists` on the toolbar and Joist context menus. Selecting one Area
+  Segment resolves its owning Joist Takeoff and refreshes every Area Segment in
+  that item while preserving each locked segment's own direction.
+- Applied `Add End Joist` to every Area Segment before calculation, so each
+  segment receives its own far-edge joist when the option is enabled. Missing
+  directions are captured one segment at a time, including across sheets.
+- Added one-shot `Add Extra Joist`: a bright parallel ghost follows the mouse
+  inside the selected filled area, one click places it, `Esc` cancels, and
+  `Ctrl+Z` removes it. Right-click near an extra exposes an undoable nearest
+  delete command.
+- Plain `D` now starts Extra Joist only when exactly one Joist Area Segment is
+  selected; otherwise its existing Draw Line shortcut remains unchanged.
+- Extra joists stay inside the same takeoff, are explicit persisted endpoints,
+  and contribute to count, ordered LF, totals, and current-sheet estimating.
+  Labels and takeoff export list regular groups first, then one `Extra`
+  separator and extra groups.
+- Preserved extras through JSON/legacy storage, copy/paste, Ctrl-drag copy,
+  movement and transforms, undo, Area Cut, Area Combine, and area coalescing.
+- Verification passed with `0 warnings / 0 errors` and `575/575` tests.
+  Implementation commits are `26cdbb9` and `6e1d8ed`.
+- Deployed compressed single-file ProductVersion
+  `2.2.3+6e1d8ed62fd915493ee29fad3e45620a7dda484e` (`174,283,003` bytes,
+  SHA-256 `9EB040712F2E642F5371D51450FAA5C6D13B27CFD04FC160243CF9926E09382B`).
+  A fresh installed-package session loaded 3 takeoffs, rendered the viewport,
+  logged 0 `ERROR` entries, closed with exit 0, and released its job lease.
+- Detailed behavior, ownership, rollback names, and the explicit importer
+  boundary are in
+  `docs/30-takeoffs-measurements/JOIST_ADD_AND_EXTRA_JOISTS_HANDOFF_2026_07_22.md`.
+
 ## 2026-07-22 PlanSwift-Style Static Raster Page Mode
 
 - Made the default non-layer page display a pinned static raster once a raster
