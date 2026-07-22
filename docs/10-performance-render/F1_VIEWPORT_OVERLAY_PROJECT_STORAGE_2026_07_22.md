@@ -181,8 +181,14 @@ static-mode disable, and black-vector options.
 - A copied Meadowview job compacted 13/13 eligible `snap.json` files, saved
   16,238,475 bytes, reported 0 issues, and passed semantic JSON equality for
   every file. The verified temporary copy was then removed.
-- A user-launched Debug process remained untouched during development; release
-  deployment waits for it to close because it owns the Debug apphost.
+- The installed v2.2.4 startup segment in `app-20260722-1.log` contains
+  `Loaded takeoffs` and `Viewport`, contains `0 ERROR`, and ends with
+  `Application exit 0`.
+- A packaged smoke using a copied Meadowview job opened 14 pages, returned to 6
+  samples, exercised 5 new tabs, passed every opacity probe, reported 100%
+  render-cache hits, 0 slow frames, 1,116 MB working set, 251 ms initial page
+  settle, and a 1,070 ms worst complete step. Report:
+  `cache/perf_baseline/packaged-v2.2.4-88a1f7f-meadowview.json`.
 
 ## Ownership
 
@@ -203,9 +209,29 @@ static-mode disable, and black-vector options.
 
 ## Release gate
 
-Before publishing, commit only the explicitly touched files, preserve the
-untracked `docs/60-ux-ui/` user work, close the installed process after the user
-has saved, and run the repository release script with `-PublishGitHub`. The
-script must preserve the existing `.bak`, validate the installed log after the
-last `Application startup.` marker, publish a compressed single-file EXE, and
-verify both pinned and permanent latest URLs by anonymous SHA-256 download.
+Completed on 2026-07-22:
+
+- source commit:
+  `88a1f7f1d7f982bcef0868372809e80f425a5fb0`;
+- public latest tag:
+  `ourplancore-v2.2.4-20260722-88a1f7f`;
+- release page:
+  `https://github.com/artrmiys/ourplanecore/releases/tag/ourplancore-v2.2.4-20260722-88a1f7f`;
+- installed compressed single-file ProductVersion:
+  `2.2.4+88a1f7f1d7f982bcef0868372809e80f425a5fb0`;
+- EXE length: `171,809,721` bytes;
+- EXE SHA-256:
+  `73DF3B45D9A6A8D19A6BF264D199F5CF239ABE647D0C60E8054466710697B469`;
+- sanitized release template SHA-256:
+  `A8AEE59CA9D125213317B413416C14E325F0254BDE7FAA8128E4D9B364C0DADF`;
+- local rollback preserved as
+  `ourplancore.exe.bak-20260722-153952-2002e138953e`;
+- Desktop shortcut target and working directory both point to
+  `Desktop\updates\OurPlanCore`;
+- GitHub release is latest, non-draft, and non-prerelease;
+- GitHub asset metadata and independent anonymous pinned/latest downloads all
+  match the installed EXE length and SHA-256.
+
+Permanent application URL:
+
+`https://github.com/artrmiys/ourplanecore/releases/latest/download/ourplancore.exe`

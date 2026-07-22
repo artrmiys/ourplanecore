@@ -37,6 +37,21 @@
 - Version advanced to `2.2.4`. The isolated Debug build passes with
   `0 warnings / 0 errors`; the full harness passes `592/592`, including four
   Cut Area / Extra Joist regressions; Carillon viewport/overlay smoke passes.
+- Published public latest release
+  `ourplancore-v2.2.4-20260722-88a1f7f` from source commit
+  `88a1f7f1d7f982bcef0868372809e80f425a5fb0`. The compressed single-file EXE
+  is `171,809,721` bytes with SHA-256
+  `73DF3B45D9A6A8D19A6BF264D199F5CF239ABE647D0C60E8054466710697B469`.
+- Deployed the same EXE to `Desktop\updates\OurPlanCore`, preserved the prior
+  package as timestamped `.bak`, and kept the Desktop shortcut pointed at the
+  installed package. The final packaged startup loaded takeoffs and viewport,
+  logged `0 ERROR`, and exited cleanly.
+- A second installed-package smoke on a temporary Meadowview copy opened 14
+  sheets, passed every opacity probe, reported 100% render-cache hits, 0 slow
+  frames, 1,116 MB working set, and a 1,070 ms worst complete step.
+- Anonymous pinned and permanent `latest` downloads both reproduced the local
+  EXE length and SHA-256. Permanent download:
+  `https://github.com/artrmiys/ourplanecore/releases/latest/download/ourplancore.exe`.
 - Detailed ownership, safety rules, measurements, and release gate:
   `docs/10-performance-render/F1_VIEWPORT_OVERLAY_PROJECT_STORAGE_2026_07_22.md`.
 
