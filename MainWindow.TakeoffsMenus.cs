@@ -47,11 +47,11 @@ public partial class MainWindow
                     singleSelection,
                     () => EditTakeoffItemProperties(tvi, item)),
                 MakeMenuItem(
-                    "Add Joists",
+                    "Refresh Regular Joists in All Area Segments",
                     singleSelection && item.IsJoistArea && IsCurrentJobWritable,
                     () => AddJoistsToAllAreas(item)),
                 MakeMenuItem(
-                    "Add Extra Joist",
+                    "Start Extra Joists Mode (D)",
                     singleSelection && selectedJoistArea?.JoistDirectionLocked == true && IsCurrentJobWritable,
                     () => StartExtraJoistPlacement(item, selectedJoistArea!)),
                 MakeMenuItem("Set / Reset Joist Direction", singleSelection, () => SetJoistDirectionFromSelectedLine(tvi, item)),

@@ -34,6 +34,12 @@ public partial class MainWindow
             e.Handled = true;
             return;
         }
+        if (key == Key.Escape && _viewport.IsExtraJoistPlacementActive)
+        {
+            _viewport.CancelExtraJoistPlacement();
+            e.Handled = true;
+            return;
+        }
 
         if (ShouldSkipTakeoffShortcut(e.OriginalSource as DependencyObject))
             return;

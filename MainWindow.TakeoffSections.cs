@@ -116,11 +116,11 @@ public partial class MainWindow
                 isAreaSection,
                 () => CreateLineGridFromAreaSection(item, measurement)));
             menu.Items.Add(MakeMenuItem(
-                "Add Joists",
+                "Refresh Regular Joists in All Area Segments",
                 isAreaSection && item.IsJoistArea && IsCurrentJobWritable,
                 () => AddJoistsToAllAreas(item)));
             menu.Items.Add(MakeMenuItem(
-                "Add Extra Joist",
+                "Start Extra Joists Mode (D)",
                 isAreaSection && item.IsJoistArea && measurement.JoistDirectionLocked && IsCurrentJobWritable,
                 () => StartExtraJoistPlacement(item, measurement)));
             menu.Items.Add(MakeMenuItem(

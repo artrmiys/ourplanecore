@@ -183,12 +183,12 @@ public partial class MainWindow
                 "edit joist properties",
                 () => EditViewportTakeoffProperties(item)));
             menu.Items.Add(MakeWritableViewportMenuItem(
-                "Add Joists",
+                "Refresh Regular Joists in All Area Segments",
                 hasItem && item.IsJoistArea,
                 "add joists",
                 () => AddJoistsToAllAreas(item)));
             menu.Items.Add(MakeWritableViewportMenuItem(
-                "Add Extra Joist",
+                "Start Extra Joists Mode (D)",
                 hasItem && item.IsJoistArea && measurement.JoistDirectionLocked,
                 "add an Extra Joist",
                 () => StartExtraJoistPlacement(item, measurement)));

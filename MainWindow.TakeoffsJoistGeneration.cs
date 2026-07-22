@@ -1,25 +1,9 @@
 using System.Linq;
-using System.Windows;
-using System.Windows.Controls;
 
 namespace OurPlanCore;
 
 public partial class MainWindow
 {
-    private void BtnAddJoists_Click(object sender, RoutedEventArgs e)
-    {
-        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Add Joists"))
-            return;
-
-        if (!TryResolveSelectedJoistTakeoff(out TakeoffItem item, out string message))
-        {
-            TxtStatus.Text = message;
-            return;
-        }
-
-        AddJoistsToAllAreas(item);
-    }
-
     private void AddJoistsToAllAreas(TakeoffItem item)
     {
         if (!EnsureCurrentJobWritable("add joists to the selected Joist Area"))
@@ -27,7 +11,7 @@ public partial class MainWindow
 
         if (!item.IsJoistArea)
         {
-            TxtStatus.Text = "Select a Joist Area takeoff before using Add Joists.";
+            TxtStatus.Text = "Select a Joist Area takeoff before refreshing regular joists.";
             return;
         }
 
@@ -64,7 +48,7 @@ public partial class MainWindow
         int pending = areas.Count(area => !area.JoistDirectionLocked);
         if (pending > 0)
         {
-            TxtStatus.Text = $"Add Joists refreshed {areas.Count} Area segment(s); {pending} still need their own direction.";
+            TxtStatus.Text = $"Regular joists refreshed in {areas.Count} Area segment(s); {pending} still need their own direction.";
             BeginNextPendingJoistDirectionCapture(item);
             return;
         }
@@ -73,49 +57,7 @@ public partial class MainWindow
         string endStatus = item.JoistAddEndJoist
             ? "Add End Joist is applied to every Area segment."
             : "Add End Joist is off for every Area segment.";
-        TxtStatus.Text = $"Joists refreshed for all {areas.Count} Area segment(s) in {item.Name}: " +
+        TxtStatus.Text = $"Regular joists refreshed for all {areas.Count} Area segment(s) in {item.Name}: " +
                          $"{JoistTakeoffCalculator.FormatSummary(summary, _viewport.UnitMode)}. {endStatus}";
-    }
-
-    private bool TryResolveSelectedJoistTakeoff(out TakeoffItem item, out string message)
-    {
-        IReadOnlyList<Measurement> selected = _viewport.GetSelectedMeasurements();
-        if (selected.Count > 0)
-        {
-            List<TakeoffItem> selectedItems = selected
-                .Select(FindTakeoffItemForMeasurement)
-                .Where(candidate => candidate != null)
-                .Select(candidate => candidate!)
-                .Distinct()
-                .ToList();
-            if (selectedItems.Count == 1 && selectedItems[0].IsJoistArea)
-            {
-                item = selectedItems[0];
-                message = "";
-                return true;
-            }
-
-            item = null!;
-            message = "Select Area segments from one Joist Area takeoff before using Add Joists.";
-            return false;
-        }
-
-        TakeoffItem? treeItem = TakeoffsTree.SelectedItem switch
-        {
-            TreeViewItem { Tag: TakeoffItem takeoff } => takeoff,
-            TreeViewItem { Tag: TakeoffMeasurementNode node } => node.Item,
-            _ => null,
-        };
-        TakeoffItem? candidate = treeItem ?? _activeItem;
-        if (candidate?.IsJoistArea == true)
-        {
-            item = candidate;
-            message = "";
-            return true;
-        }
-
-        item = null!;
-        message = "Select a Joist Area takeoff or one of its Area segments before using Add Joists.";
-        return false;
     }
 }

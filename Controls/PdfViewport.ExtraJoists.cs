@@ -54,7 +54,7 @@ public sealed partial class PdfViewport
         _extraJoistPlacementMeasurement = areaMeasurement;
         _extraJoistPlacementPreview = null;
         Cursor = Cursors.Cross;
-        PostStatus("Extra Joist: move inside the area and click once to place. Esc cancels.");
+        PostStatus("Extra Joists mode: move inside the area and click to place. Click repeatedly; D or Esc exits.");
         RequestRepaint();
         return true;
     }
@@ -118,7 +118,7 @@ public sealed partial class PdfViewport
         _extraJoistPlacementPreview = null;
         UpdateCursor();
         if (postStatus)
-            PostStatus("Extra Joist placement cancelled.");
+            PostStatus("Extra Joists mode off.");
         RequestRepaint();
         return true;
     }
@@ -167,11 +167,19 @@ public sealed partial class PdfViewport
 
         PushGeometryUndoSnapshot([area], [], "remove added Extra Joist", "extra-joist-add");
         area.ExtraJoists.Add(CloneExtraJoist(segment));
-        _extraJoistPlacementMeasurement = null;
-        _extraJoistPlacementPreview = null;
-        UpdateCursor();
+        _extraJoistPlacementPreview = CloneExtraJoist(segment);
+        Cursor = Cursors.Cross;
         NotifyMeasurementsChanged([area]);
-        PostStatus("Added Extra Joist. Ctrl+Z removes it.");
+        if (ReferenceEquals(_extraJoistPlacementMeasurement, area) &&
+            IsExtraJoistPlacementTargetCurrent(area))
+        {
+            PostStatus("Added Extra Joist. Click again to add another; D or Esc exits. Ctrl+Z removes the last one.");
+        }
+        else
+        {
+            CancelExtraJoistPlacement(postStatus: false);
+            PostStatus("Added Extra Joist. Extra Joists mode stopped because the owning area changed.");
+        }
         RequestRepaint();
         return true;
     }

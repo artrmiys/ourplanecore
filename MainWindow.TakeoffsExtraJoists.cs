@@ -1,5 +1,4 @@
 using System.Linq;
-using System.Windows;
 using System.Windows.Controls;
 
 namespace OurPlanCore;
@@ -8,6 +7,12 @@ public partial class MainWindow
 {
     private bool TryStartExtraJoistShortcut()
     {
+        if (_viewport.IsExtraJoistPlacementActive)
+        {
+            _viewport.CancelExtraJoistPlacement();
+            return true;
+        }
+
         if (!TryResolveSelectedExtraJoistTarget(
                 out TakeoffItem item,
                 out Measurement area,
@@ -16,28 +21,11 @@ public partial class MainWindow
             return false;
         }
 
-        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Add Extra Joist"))
+        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Extra Joists Mode"))
             return true;
 
         StartExtraJoistPlacement(item, area);
         return true;
-    }
-
-    private void BtnAddExtraJoist_Click(object sender, RoutedEventArgs e)
-    {
-        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Add Extra Joist"))
-            return;
-
-        if (!TryResolveSelectedExtraJoistTarget(
-                out TakeoffItem item,
-                out Measurement area,
-                out string message))
-        {
-            TxtStatus.Text = message;
-            return;
-        }
-
-        StartExtraJoistPlacement(item, area);
     }
 
     private bool TryResolveSelectedExtraJoistTarget(
@@ -112,7 +100,7 @@ public partial class MainWindow
         }
 
         // Stop Record and any abandoned multi-Area direction operation before
-        // entering the one-shot cursor placement mode.
+        // entering the continuous cursor placement mode.
         SetTool("select");
         _pendingJoistDirectionApplyTargets = null;
         OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);

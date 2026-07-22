@@ -801,28 +801,6 @@
                     <TextBlock Text="Split" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            <Button x:Name="BtnAddJoists"
-                    Click="BtnAddJoists_Click"
-                    ToolTip="Refresh joists in every Area segment, preserving each segment's own direction and applying Add End Joist to every segment"
-                    Style="{StaticResource ToolBtn}"
-                    MinWidth="72"
-                    Padding="6,2">
-                <StackPanel Orientation="Horizontal">
-                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconJoistArea}" Width="13" Height="13" Margin="0,0,4,0"/>
-                    <TextBlock Text="Add Joists" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Button x:Name="BtnAddExtraJoist"
-                    Click="BtnAddExtraJoist_Click"
-                    ToolTip="Place one Extra Joist parallel to the selected Joist Area segment (D when one segment is selected)"
-                    Style="{StaticResource ToolBtn}"
-                    MinWidth="102"
-                    Padding="6,2">
-                <StackPanel Orientation="Horizontal">
-                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconJoistArea}" Width="13" Height="13" Margin="0,0,4,0"/>
-                    <TextBlock Text="Add Extra Joist" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
             <Button x:Name="BtnCombineAreas"
                     Click="DropdownButton_Click"
                     ToolTip="Boolean-combine two or more selected Areas: union, subtract, intersect, remove overlap, divide"

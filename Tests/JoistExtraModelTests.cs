@@ -161,25 +161,74 @@ internal static class JoistExtraModelTests
         AssertTrue(survivor.ExtraJoists.Any(extra => extra.Id == "moved-only"), "removed area extra survives union");
     }
 
-    public static void DShortcutKeepsExtraLocalAndAddJoistsUsesTheWholeTakeoff()
+    public static void ExtraJoistModeContinuesUntilDOrEscapeAndRegularJoistsStayDistinct()
     {
         string shortcuts = ReadRepoFile("MainWindow.Shortcuts.cs");
         string extraCommands = ReadRepoFile("MainWindow.TakeoffsExtraJoists.cs");
         string generation = ReadRepoFile("MainWindow.TakeoffsJoistGeneration.cs");
         string viewportInput = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
+        string viewportExtra = ReadRepoFile(Path.Combine("Controls", "PdfViewport.ExtraJoists.cs"));
+        string mainWindowXaml = ReadRepoFile("MainWindow.xaml");
+
+        int toggle = extraCommands.IndexOf(
+            "if (_viewport.IsExtraJoistPlacementActive)",
+            StringComparison.Ordinal);
+        int resolve = extraCommands.IndexOf(
+            "if (!TryResolveSelectedExtraJoistTarget",
+            StringComparison.Ordinal);
+        AssertTrue(
+            toggle >= 0 && toggle < resolve &&
+            extraCommands.Contains("_viewport.CancelExtraJoistPlacement();", StringComparison.Ordinal),
+            "D should stop the active Extra Joists mode before resolving a new target");
 
         AssertTrue(
             shortcuts.Contains("case Key.D:", StringComparison.Ordinal) &&
             shortcuts.Contains("TryStartExtraJoistShortcut()", StringComparison.Ordinal),
-            "D should route through the selected Joist Area shortcut first");
+            "D should route through the Extra Joists mode toggle first");
         AssertTrue(
-            extraCommands.Contains("TryResolveSelectedExtraJoistTarget", StringComparison.Ordinal) &&
-            extraCommands.Contains("StartExtraJoistPlacement(item, area)", StringComparison.Ordinal),
-            "D should place an Extra only in the resolved Area segment");
+            shortcuts.Contains(
+                "key == Key.Escape && _viewport.IsExtraJoistPlacementActive",
+                StringComparison.Ordinal),
+            "Esc should stop Extra Joists mode regardless of viewport focus");
+
+        int clickStart = viewportExtra.IndexOf(
+            "private bool HandleExtraJoistPlacementClick",
+            StringComparison.Ordinal);
+        int clickEnd = clickStart < 0
+            ? -1
+            : viewportExtra.IndexOf(
+                "private bool IsExtraJoistPlacementTargetCurrent",
+                clickStart,
+                StringComparison.Ordinal);
+        AssertTrue(clickStart >= 0 && clickEnd > clickStart, "Extra Joist click handler should be present");
+        string clickHandler = viewportExtra[clickStart..clickEnd];
+        AssertFalse(
+            clickHandler.Contains("_extraJoistPlacementMeasurement = null", StringComparison.Ordinal),
+            "a successful click must not end Extra Joists mode");
         AssertTrue(
-            generation.Contains("TryResolveSelectedJoistTakeoff", StringComparison.Ordinal) &&
+            clickHandler.Contains("_extraJoistPlacementPreview = CloneExtraJoist(segment)", StringComparison.Ordinal) &&
+            clickHandler.Contains("Click again to add another; D or Esc exits", StringComparison.Ordinal),
+            "a successful click should keep the ghost and explain continuous placement");
+
+        AssertTrue(
             generation.Contains("List<Measurement> areas = item.Measurements", StringComparison.Ordinal),
-            "Add Joists should expand one selected segment to every Area in its takeoff");
+            "regular joist refresh should include every Area in the takeoff");
+        foreach (string menuSource in new[]
+                 {
+                     ReadRepoFile("MainWindow.ViewportContextMenu.cs"),
+                     ReadRepoFile("MainWindow.TakeoffSections.cs"),
+                     ReadRepoFile("MainWindow.TakeoffsMenus.cs"),
+                 })
+        {
+            AssertTrue(
+                menuSource.Contains("Refresh Regular Joists in All Area Segments", StringComparison.Ordinal) &&
+                menuSource.Contains("Start Extra Joists Mode (D)", StringComparison.Ordinal),
+                "all Joist context menus should distinguish regular refresh from Extra mode");
+        }
+        AssertFalse(
+            mainWindowXaml.Contains("BtnAddJoists", StringComparison.Ordinal) ||
+            mainWindowXaml.Contains("BtnAddExtraJoist", StringComparison.Ordinal),
+            "Joist commands should not occupy the main toolbar");
         AssertTrue(
             viewportInput.Contains("case Key.D: ToolChanged?.Invoke(\"drawline\")", StringComparison.Ordinal),
             "D should remain the Draw Line fallback when no Joist Area segment is selected");

@@ -261,8 +261,6 @@ public partial class MainWindow
         SetVisible(BtnAreaCut, advanced);
         SetVisible(BtnMergeSelectedMeasurements, advanced);
         SetVisible(BtnSplitSelectedMeasurements, advanced);
-        SetVisible(BtnAddJoists, advanced);
-        SetVisible(BtnAddExtraJoist, advanced);
         SetVisible(BtnCombineAreas, advanced);
         if (!IsToolAllowedByModules(_activeTool))
             ApplyToolSelection("select");
