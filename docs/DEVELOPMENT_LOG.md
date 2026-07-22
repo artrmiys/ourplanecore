@@ -7,18 +7,22 @@
   marker vertices take precedence over stale whole-section state, metadata and
   point order survive, and all source owners are updated through the normal
   persistence path.
-- Added `Add Joists` on the toolbar and Joist context menus. Selecting one Area
-  Segment resolves its owning Joist Takeoff and refreshes every Area Segment in
-  that item while preserving each locked segment's own direction.
+- Added `Refresh Regular Joists in All Area Segments` to the Joist context
+  menus. Selecting one Area Segment resolves its owning Joist Takeoff and
+  refreshes every Area Segment in that item while preserving each locked
+  segment's own direction. The temporary Joist commands were removed from the
+  main toolbar so regular generation is not confused with manual extras.
 - Applied `Add End Joist` to every Area Segment before calculation, so each
   segment receives its own far-edge joist when the option is enabled. Missing
   directions are captured one segment at a time, including across sheets.
-- Added one-shot `Add Extra Joist`: a bright parallel ghost follows the mouse
-  inside the selected filled area, one click places it, `Esc` cancels, and
-  `Ctrl+Z` removes it. Right-click near an extra exposes an undoable nearest
-  delete command.
-- Plain `D` now starts Extra Joist only when exactly one Joist Area Segment is
-  selected; otherwise its existing Draw Line shortcut remains unchanged.
+- Added continuous `Extra Joists` placement: a bright parallel ghost follows
+  the mouse inside the selected filled area, every click places another extra,
+  and the ghost remains active for the next placement. `D` toggles the mode,
+  `Esc` exits it globally, and each click has its own `Ctrl+Z` undo step.
+  Right-click near an extra exposes an undoable nearest delete command.
+- Plain `D` starts Extra Joists mode only when exactly one Joist Area Segment is
+  selected, toggles it off while active, and otherwise keeps its existing Draw
+  Line shortcut.
 - Extra joists stay inside the same takeoff, are explicit persisted endpoints,
   and contribute to count, ordered LF, totals, and current-sheet estimating.
   Labels and takeoff export list regular groups first, then one `Extra`
@@ -26,10 +30,10 @@
 - Preserved extras through JSON/legacy storage, copy/paste, Ctrl-drag copy,
   movement and transforms, undo, Area Cut, Area Combine, and area coalescing.
 - Verification passed with `0 warnings / 0 errors` and `575/575` tests.
-  Implementation commits are `26cdbb9` and `6e1d8ed`.
+  Implementation commits are `26cdbb9`, `6e1d8ed`, and `2f418f8`.
 - Deployed compressed single-file ProductVersion
-  `2.2.3+6e1d8ed62fd915493ee29fad3e45620a7dda484e` (`174,283,003` bytes,
-  SHA-256 `9EB040712F2E642F5371D51450FAA5C6D13B27CFD04FC160243CF9926E09382B`).
+  `2.2.3+2f418f8b07df7266369baad208a3c3d7c51f1ac3` (`174,282,183` bytes,
+  SHA-256 `2002E138953EBB9E442FF155522A206144173FFFAC063208B9BF35C9843FD310`).
   A fresh installed-package session loaded 3 takeoffs, rendered the viewport,
   logged 0 `ERROR` entries, closed with exit 0, and released its job lease.
 - Detailed behavior, ownership, rollback names, and the explicit importer

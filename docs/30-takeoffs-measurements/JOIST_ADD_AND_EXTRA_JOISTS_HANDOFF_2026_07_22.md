@@ -5,8 +5,9 @@
 The desktop WPF app now treats a Joist Area takeoff as one item containing
 multiple independent Area Segments:
 
-- Selecting one Area Segment and running `Add Joists` refreshes every Area
-  Segment in the owning Joist Takeoff.
+- Selecting one Area Segment and running
+  `Refresh Regular Joists in All Area Segments` refreshes every Area Segment in
+  the owning Joist Takeoff.
 - Every locked segment keeps its own saved joist direction. The command does
   not replace all directions with the selected segment's angle.
 - The takeoff-level `Add End Joist` value is copied to every Area Segment
@@ -17,16 +18,20 @@ multiple independent Area Segments:
 
 ## Extra Joist interaction
 
-- `Add Extra Joist` is available on the top toolbar and in the Joist takeoff,
-  Area Segment, and viewport context menus.
-- Plain `D` starts the same command when exactly one Joist Area Segment is
-  selected. Without that selection, `D` keeps its previous Draw Line behavior.
-- The command is one-shot. A bright white/yellow ghost joist stays parallel to
+- `Start Extra Joists Mode (D)` is available in the Joist takeoff, Area
+  Segment, and viewport context menus. Joist commands are intentionally absent
+  from the main toolbar so regular refresh and manual extras stay distinct.
+- Plain `D` starts the same mode when exactly one Joist Area Segment is
+  selected, and pressing `D` again turns the active mode off. Without that
+  selection, `D` keeps its previous Draw Line behavior.
+- The mode is continuous. A bright white/yellow ghost joist stays parallel to
   the selected segment's saved direction and follows the raw mouse position.
 - The ghost is clipped to the filled local interval of the selected area.
   Outside the area or inside a cutout is invalid and does not end the command.
-- One left click stores the joist and exits placement. `Esc` cancels. Immediate
-  `Ctrl+Z` removes an added joist.
+- Every valid left click stores one joist and immediately keeps the ghost ready
+  for another placement. The mode continues until `D` or `Esc`; global `Esc`
+  also works before the viewport receives focus. Each click has its own
+  `Ctrl+Z` undo step.
 - Right-click near an existing extra and choose `Delete Nearest Extra Joist`;
   the delete is also undoable.
 - Extra joists belong only to the selected Area Segment and remain inside the
@@ -73,7 +78,7 @@ multiple independent Area Segments:
 - Viewport workflow: `Controls/PdfViewport.ExtraJoists.cs` plus the focused
   input, rendering, transform, undo, Area Cut, and Area Combine partials.
 - Main-window commands: `MainWindow.TakeoffsJoistGeneration.cs`,
-  `MainWindow.TakeoffsExtraJoists.cs`, `MainWindow.Shortcuts.cs`, toolbar and
+  `MainWindow.TakeoffsExtraJoists.cs`, `MainWindow.Shortcuts.cs`, and the three
   context-menu partials.
 - Regression coverage: `Tests/JoistExtraModelTests.cs`.
 
@@ -86,24 +91,26 @@ multiple independent Area Segments:
 - Feature commits:
   - `26cdbb9` — `Add Joist area extra workflow`.
   - `6e1d8ed` — `Add Extra Joist D shortcut`.
+  - `2f418f8` — `Keep Extra Joists placement active`.
 - Installed compressed single-file package:
   `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`.
 - ProductVersion:
-  `2.2.3+6e1d8ed62fd915493ee29fad3e45620a7dda484e`.
-- Size: `174,283,003` bytes.
+  `2.2.3+2f418f8b07df7266369baad208a3c3d7c51f1ac3`.
+- Size: `174,282,183` bytes.
 - SHA-256:
-  `9EB040712F2E642F5371D51450FAA5C6D13B27CFD04FC160243CF9926E09382B`.
+  `2002E138953EBB9E442FF155522A206144173FFFAC063208B9BF35C9843FD310`.
 - Desktop shortcut target and working directory both point to the installed
   `updates\OurPlanCore` package.
 - Runtime proof used a process-only settings override and `Sample Job`, leaving
   the operator's real settings untouched. The fresh log session starting at
-  `2026-07-22T07:19:59-03:00` stayed alive, loaded 3 takeoff items, rendered the
+  `2026-07-22T07:42:00-03:00` stayed alive, loaded 3 takeoff items, rendered the
   viewport, and contained 0 `ERROR` entries. The app then closed normally with
   `Application exit 0`, and its Sample Job lease was released.
 - Preserved rollbacks:
   - `ourplancore.exe.bak` (unchanged),
   - `ourplancore.exe.bak-20260722-before-joist-extra`,
-  - `ourplancore.exe.bak-20260722-before-extra-d-shortcut`.
+  - `ourplancore.exe.bak-20260722-before-extra-d-shortcut`,
+  - `ourplancore.exe.bak-20260722-before-extra-continuous-mode`.
 
 ## Other work completed the same day
 
