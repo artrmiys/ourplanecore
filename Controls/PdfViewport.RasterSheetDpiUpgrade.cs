@@ -410,6 +410,13 @@ public sealed partial class PdfViewport
 
     private bool TryPrepareRasterSheetBitmapForImmediateRepaint()
     {
+        // Static raster mode pins the selected page bitmap. Immediate repaint is
+        // allowed to reuse it, but must never enter the responsive DPI path: at
+        // low zoom that path replaces the pinned target-DPI image with a 72-DPI
+        // preview and the static apply immediately raises it again.
+        if (IsStaticRasterDisplayActive())
+            return false;
+
         if (!_usingRasterSheetRender ||
             _rasterSheetSource?.Enabled != true ||
             _pdfLayersLoadedForPage ||

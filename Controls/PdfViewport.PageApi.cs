@@ -36,7 +36,8 @@ public sealed partial class PdfViewport
 
     public bool IsPageDetailRenderReady(string pageFolder) =>
         IsPageRenderReady(pageFolder) &&
-        (!ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale) ||
+        (IsStaticRasterDisplayActive() ||
+         !ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale) ||
          DetailRenderCoversVisibleViewForPaint()) &&
         string.Equals(_pageFolder, pageFolder, StringComparison.OrdinalIgnoreCase);
 

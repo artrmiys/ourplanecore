@@ -2710,6 +2710,12 @@ internal static class TakeoffsTreeRegressionTests
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string rasterSheetDpiUpgrade = ReadRepoFile("Controls/PdfViewport.RasterSheetDpiUpgrade.cs");
+        string immediateRepaintDpiMethod = SliceMethod(
+            rasterSheetDpiUpgrade,
+            "private bool TryPrepareRasterSheetBitmapForImmediateRepaint()");
+        string detailReadyMethod = SliceMethod(
+            pageApi,
+            "public bool IsPageDetailRenderReady(string pageFolder) =>");
         string displaySettings = ReadRepoFile("MainWindow.DisplaySettings.cs");
         string measurementSizing = ReadRepoFile("MainWindow.DisplaySettings.MeasurementSizing.cs");
         string xaml = ReadRepoFile("MainWindow.xaml");
@@ -2772,6 +2778,17 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("QueueStaticRasterDpiApplyIfNeeded()", StringComparison.Ordinal) &&
             pageApi.Contains("buildMissingDpis: !ViewportRenderPolicy.StaticRasterModeEnabled", StringComparison.Ordinal),
             "static DPI apply must build once at the pixel-budget-clamped target, only raise DPI toward it, and skip the python zoom-ladder warmup on page open in static mode");
+
+        AssertTrue(
+            immediateRepaintDpiMethod.Contains("if (IsStaticRasterDisplayActive())", StringComparison.Ordinal) &&
+            immediateRepaintDpiMethod.IndexOf("if (IsStaticRasterDisplayActive())", StringComparison.Ordinal) <
+            immediateRepaintDpiMethod.IndexOf("_zoom < ViewportRenderPolicy.RasterSheetDisplayExitZoom", StringComparison.Ordinal),
+            "static raster immediate repaint must stop before the low-zoom responsive preview can downgrade the pinned bitmap");
+        AssertTrue(
+            detailReadyMethod.Contains("IsStaticRasterDisplayActive() ||", StringComparison.Ordinal) &&
+            detailReadyMethod.IndexOf("IsStaticRasterDisplayActive() ||", StringComparison.Ordinal) <
+            detailReadyMethod.IndexOf("ViewportRenderPolicy.ShouldUseDetailRender", StringComparison.Ordinal),
+            "high-zoom smoke readiness must treat the pinned static raster as final instead of waiting for a suppressed detail tile");
 
         AssertTrue(
             displaySettings.Contains("ViewportRenderPolicy.StaticRasterTargetDpi = _settings.StaticPageRenderDpi", StringComparison.Ordinal) &&
