@@ -1,5 +1,7 @@
 param(
     [string]$ProjectRoot = "",
+    [string]$ExePath = "",
+    [string]$SettingsPath = "",
     [Parameter(Mandatory)] [string]$JobPath,
     [switch]$CopyJob,
     [int]$TimeoutSeconds = 180,
@@ -9,6 +11,9 @@ param(
     [int]$OpenCount = 0,
     [double]$TargetZoom = 0,
     [int]$PanSteps = 4,
+    [ValidateRange(72, 300)] [int]$StaticRasterDpi = 150,
+    [switch]$DisableStaticRaster,
+    [switch]$BlackVectorOverlay,
     [string]$ReportPath = "",
     [switch]$IncludeTreeOps,
     [switch]$UseVerifyBuild,
@@ -50,17 +55,16 @@ function Copy-SmokeJob {
 function Set-SmokeSettings {
     param(
         [Parameter(Mandatory)] [string]$SmokeJobPath,
-        [Parameter(Mandatory)] [string]$FirstPagePath
+        [Parameter(Mandatory)] [string]$FirstPagePath,
+        [Parameter(Mandatory)] [string]$SettingsPath
     )
 
-    $settingsPath = $env:OURPLANCORE_SETTINGS_PATH
-    if ([string]::IsNullOrWhiteSpace($settingsPath)) {
-        $settingsPath = Join-Path (Join-Path $env:APPDATA "OurPlanCore") "settings.json"
-    }
+    $settingsPath = $SettingsPath
     $settingsDir = Split-Path -Parent $settingsPath
-    $backupPath = "$settingsPath.viewport-page-stress-smoke.bak"
+    $backupPath = "$settingsPath.viewport-page-stress-smoke.$([guid]::NewGuid().ToString('N')).bak"
     New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
-    if (Test-Path -LiteralPath $settingsPath) {
+    $existed = Test-Path -LiteralPath $settingsPath
+    if ($existed) {
         Copy-Item -LiteralPath $settingsPath -Destination $backupPath -Force
     }
 
@@ -78,6 +82,9 @@ function Set-SmokeSettings {
         ShowCountLabels = $false
         ShowSheetLegend = $true
         SimplifyViewportNavigation = $false
+        StaticPageRenderEnabled = -not [bool]$DisableStaticRaster
+        StaticPageRenderDpi = $StaticRasterDpi
+        BlackVectorOverlayEnabled = [bool]$BlackVectorOverlay
         RecentJobs = @()
     }
     $settings | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
@@ -85,6 +92,7 @@ function Set-SmokeSettings {
     [pscustomobject]@{
         Path = $settingsPath
         Backup = $backupPath
+        Existed = $existed
     }
 }
 
@@ -94,6 +102,8 @@ function Restore-SmokeSettings {
     if (Test-Path -LiteralPath $State.Backup) {
         Copy-Item -LiteralPath $State.Backup -Destination $State.Path -Force
         Remove-Item -LiteralPath $State.Backup -Force
+    } elseif (-not $State.Existed -and (Test-Path -LiteralPath $State.Path)) {
+        Remove-Item -LiteralPath $State.Path -Force
     }
 }
 
@@ -121,6 +131,7 @@ function Summarize-Results {
     }
 
     Write-Host "Viewport page stress smoke report:" -ForegroundColor Cyan
+    Write-Host ("  static raster: {0}, dpi {1}, black vector {2}" -f (-not [bool]$DisableStaticRaster), $StaticRasterDpi, [bool]$BlackVectorOverlay)
     Write-Host "  pages opened: $($Report.PageCount)"
     if (-not [string]::IsNullOrWhiteSpace($Report.InitialPageName)) {
         Write-Host "  initial page settle: $($Report.InitialPageSettleMs) ms ($($Report.InitialPageName))"
@@ -156,6 +167,13 @@ function Summarize-Results {
 }
 
 $resolvedJob = (Resolve-Path -LiteralPath $JobPath).Path
+$resolvedExe = if ([string]::IsNullOrWhiteSpace($ExePath)) { "" } else { (Resolve-Path -LiteralPath $ExePath).Path }
+$settingsPathWasProvided = -not [string]::IsNullOrWhiteSpace($SettingsPath)
+$smokeSettingsPath = if ($settingsPathWasProvided) {
+    [System.IO.Path]::GetFullPath($SettingsPath)
+} else {
+    Join-Path $env:TEMP ("onc_viewport_page_stress_settings_" + [guid]::NewGuid().ToString("N") + ".json")
+}
 $jobState = $null
 $settingsState = $null
 $proc = $null
@@ -170,6 +188,7 @@ $oldOpen = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT
 $oldZoom = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM
 $oldPan = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_PAN_STEPS
 $oldTreeOps = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TREE_OPS
+$oldSettingsPath = $env:OURPLANCORE_SETTINGS_PATH
 $stdoutPath = Join-Path $env:TEMP ("onc_viewport_page_stress_stdout_" + [guid]::NewGuid().ToString("N") + ".txt")
 $stderrPath = Join-Path $env:TEMP ("onc_viewport_page_stress_stderr_" + [guid]::NewGuid().ToString("N") + ".txt")
 
@@ -186,7 +205,8 @@ try {
         throw "No page folders with source.json were found under $smokeJob."
     }
 
-    $settingsState = Set-SmokeSettings -SmokeJobPath $smokeJob -FirstPagePath $pages[0]
+    $env:OURPLANCORE_SETTINGS_PATH = $smokeSettingsPath
+    $settingsState = Set-SmokeSettings -SmokeJobPath $smokeJob -FirstPagePath $pages[0] -SettingsPath $smokeSettingsPath
     $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_SMOKE = "1"
     $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_REPORT = $reportPath
     $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS = [string]$PageTimeoutMs
@@ -206,7 +226,9 @@ try {
     }
 
     $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplancore.dll"
-    if ($UseVerifyBuild -and (Test-Path -LiteralPath $appDll)) {
+    if (-not [string]::IsNullOrWhiteSpace($resolvedExe)) {
+        $proc = Start-Process -FilePath $resolvedExe -WorkingDirectory (Split-Path -Parent $resolvedExe) -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+    } elseif ($UseVerifyBuild -and (Test-Path -LiteralPath $appDll)) {
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     } else {
         $projectPath = Join-Path $ProjectRoot "ourplancore.csproj"
@@ -266,6 +288,7 @@ finally {
     $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_PAN_STEPS = $oldPan
     $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TREE_OPS = $oldTreeOps
     Restore-SmokeSettings $settingsState
+    $env:OURPLANCORE_SETTINGS_PATH = $oldSettingsPath
     if ($jobState -ne $null -and -not $KeepAppOpen) {
         Remove-Item -LiteralPath $jobState.Root -Recurse -Force -ErrorAction SilentlyContinue
     }

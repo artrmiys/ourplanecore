@@ -3967,6 +3967,29 @@ internal static class TakeoffsTreeRegressionTests
             script.Contains("tree ops takeoffs detail", StringComparison.Ordinal),
             "viewport stress smoke should optionally exercise reversible single/bulk selection and move operations in Pages and Takeoffs trees, including section/count row drops that jump to the measurement page");
         AssertTrue(
+            script.Contains("[string]$ExePath = \"\"", StringComparison.Ordinal) &&
+            script.Contains("$resolvedExe = if ([string]::IsNullOrWhiteSpace($ExePath))", StringComparison.Ordinal) &&
+            script.Contains("if (-not [string]::IsNullOrWhiteSpace($resolvedExe))", StringComparison.Ordinal) &&
+            script.Contains("Start-Process -FilePath $resolvedExe", StringComparison.Ordinal) &&
+            script.Contains("-WorkingDirectory (Split-Path -Parent $resolvedExe)", StringComparison.Ordinal),
+            "viewport stress smoke should be able to launch a packaged executable directly from its own working directory");
+        AssertTrue(
+            script.Contains("[string]$SettingsPath = \"\"", StringComparison.Ordinal) &&
+            script.Contains("onc_viewport_page_stress_settings_", StringComparison.Ordinal) &&
+            script.Contains("$oldSettingsPath = $env:OURPLANCORE_SETTINGS_PATH", StringComparison.Ordinal) &&
+            script.Contains("$env:OURPLANCORE_SETTINGS_PATH = $smokeSettingsPath", StringComparison.Ordinal) &&
+            script.Contains("$env:OURPLANCORE_SETTINGS_PATH = $oldSettingsPath", StringComparison.Ordinal) &&
+            script.Contains("elseif (-not $State.Existed -and (Test-Path -LiteralPath $State.Path))", StringComparison.Ordinal),
+            "viewport stress smoke should isolate temporary settings from the user's settings and restore or remove them after the run");
+        AssertTrue(
+            script.Contains("[ValidateRange(72, 300)] [int]$StaticRasterDpi = 150", StringComparison.Ordinal) &&
+            script.Contains("[switch]$DisableStaticRaster", StringComparison.Ordinal) &&
+            script.Contains("[switch]$BlackVectorOverlay", StringComparison.Ordinal) &&
+            script.Contains("StaticPageRenderEnabled = -not [bool]$DisableStaticRaster", StringComparison.Ordinal) &&
+            script.Contains("StaticPageRenderDpi = $StaticRasterDpi", StringComparison.Ordinal) &&
+            script.Contains("BlackVectorOverlayEnabled = [bool]$BlackVectorOverlay", StringComparison.Ordinal),
+            "viewport stress smoke should expose deterministic static-raster DPI, disable-static-raster, and black-vector-overlay settings");
+        AssertTrue(
             source.Contains("ViewportPerformanceRecorder.BeginRun", StringComparison.Ordinal) &&
             source.Contains("ViewportPerformanceRecorder.EndRun", StringComparison.Ordinal) &&
             source.Contains("AI_Context", StringComparison.Ordinal) &&
