@@ -814,7 +814,7 @@
             </Button>
             <Button x:Name="BtnAddExtraJoist"
                     Click="BtnAddExtraJoist_Click"
-                    ToolTip="Place one Extra Joist parallel to the selected Joist Area segment"
+                    ToolTip="Place one Extra Joist parallel to the selected Joist Area segment (D when one segment is selected)"
                     Style="{StaticResource ToolBtn}"
                     MinWidth="102"
                     Padding="6,2">

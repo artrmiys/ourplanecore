@@ -6,6 +6,23 @@ namespace OurPlanCore;
 
 public partial class MainWindow
 {
+    private bool TryStartExtraJoistShortcut()
+    {
+        if (!TryResolveSelectedExtraJoistTarget(
+                out TakeoffItem item,
+                out Measurement area,
+                out _))
+        {
+            return false;
+        }
+
+        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Add Extra Joist"))
+            return true;
+
+        StartExtraJoistPlacement(item, area);
+        return true;
+    }
+
     private void BtnAddExtraJoist_Click(object sender, RoutedEventArgs e)
     {
         if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Add Extra Joist"))

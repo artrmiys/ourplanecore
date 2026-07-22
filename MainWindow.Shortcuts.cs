@@ -58,6 +58,10 @@ public partial class MainWindow
 
         switch (key)
         {
+            case Key.D:
+                if (TryStartExtraJoistShortcut())
+                    e.Handled = true;
+                break;
             case Key.F4:
                 if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("set sheet scale"))
                 {

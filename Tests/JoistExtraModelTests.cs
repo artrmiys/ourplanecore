@@ -161,6 +161,30 @@ internal static class JoistExtraModelTests
         AssertTrue(survivor.ExtraJoists.Any(extra => extra.Id == "moved-only"), "removed area extra survives union");
     }
 
+    public static void DShortcutKeepsExtraLocalAndAddJoistsUsesTheWholeTakeoff()
+    {
+        string shortcuts = ReadRepoFile("MainWindow.Shortcuts.cs");
+        string extraCommands = ReadRepoFile("MainWindow.TakeoffsExtraJoists.cs");
+        string generation = ReadRepoFile("MainWindow.TakeoffsJoistGeneration.cs");
+        string viewportInput = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
+
+        AssertTrue(
+            shortcuts.Contains("case Key.D:", StringComparison.Ordinal) &&
+            shortcuts.Contains("TryStartExtraJoistShortcut()", StringComparison.Ordinal),
+            "D should route through the selected Joist Area shortcut first");
+        AssertTrue(
+            extraCommands.Contains("TryResolveSelectedExtraJoistTarget", StringComparison.Ordinal) &&
+            extraCommands.Contains("StartExtraJoistPlacement(item, area)", StringComparison.Ordinal),
+            "D should place an Extra only in the resolved Area segment");
+        AssertTrue(
+            generation.Contains("TryResolveSelectedJoistTakeoff", StringComparison.Ordinal) &&
+            generation.Contains("List<Measurement> areas = item.Measurements", StringComparison.Ordinal),
+            "Add Joists should expand one selected segment to every Area in its takeoff");
+        AssertTrue(
+            viewportInput.Contains("case Key.D: ToolChanged?.Invoke(\"drawline\")", StringComparison.Ordinal),
+            "D should remain the Draw Line fallback when no Joist Area segment is selected");
+    }
+
     private static TakeoffItem JoistItem(string name = "Joists") =>
         new()
         {
@@ -234,6 +258,21 @@ internal static class JoistExtraModelTests
             {
             }
         }
+    }
+
+    private static string ReadRepoFile(string relativePath)
+    {
+        DirectoryInfo? current = new(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            string projectPath = Path.Combine(current.FullName, "ourplancore.csproj");
+            string candidate = Path.Combine(current.FullName, relativePath);
+            if (File.Exists(projectPath) && File.Exists(candidate))
+                return File.ReadAllText(candidate);
+            current = current.Parent;
+        }
+
+        throw new FileNotFoundException($"Repository file not found: {relativePath}");
     }
 
     private static void AssertPoint(SKPoint expected, SKPoint actual, string message)

@@ -489,6 +489,7 @@ var tests = new List<(string Name, Action Run)>
     ("end joist applies per area without overwriting directions", JoistExtraModelTests.AddEndJoistAppliesPerAreaWithoutOverwritingDirections),
     ("extra joists persist through current and legacy storage", JoistExtraModelTests.MeasurementsAndLegacyProjectFileRoundTripExtras),
     ("area coalesce preserves and deduplicates extra joists", JoistExtraModelTests.AreaCoalescePreservesAndDeduplicatesExtras),
+    ("D keeps extra local while Add Joists uses the whole takeoff", JoistExtraModelTests.DShortcutKeepsExtraLocalAndAddJoistsUsesTheWholeTakeoff),
     ("joist pitch length applies slope factor", JoistPitchLengthAppliesSlopeFactor),
     ("joist pitch rounding applies per segment", JoistPitchRoundingAppliesPerSegment),
     ("joist pitch label shows indicator", JoistPitchLabelShowsIndicator),
