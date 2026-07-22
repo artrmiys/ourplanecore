@@ -32,6 +32,16 @@ public sealed class AppSettings
     public bool SimplifyViewportNavigation { get; set; } = false;
     public string ViewportRenderQuality { get; set; } = ViewportRenderPolicy.HighQualityMode;
     public bool PdfLayersEnabled { get; set; } = false;
+    // PlanSwift-style default: show each page as one static 150 DPI raster image
+    // rendered once to disk, with none of the live zoom/pan re-render machinery.
+    // Turning on PdfLayers (the live PyMuPDF pipeline) overrides this per page.
+    public bool StaticPageRenderEnabled { get; set; } = true;
+    // Optional crisp black vector linework drawn on top of the static raster
+    // (uses the already-built page snap index; resolution-independent, no re-renders).
+    public bool BlackVectorOverlayEnabled { get; set; } = false;
+    // Resolution the static page image is rendered at. 150 by default; higher
+    // stays sharper when zoomed in at the cost of memory/disk. Editable up to 300.
+    public int StaticPageRenderDpi { get; set; } = AppSettingsStore.StaticPageRenderDpiDefault;
     public bool BuildRasterCacheOnPdfImport { get; set; } = true;
     public int PdfImportRasterDefaultsVersion { get; set; }
     public bool AutoCleanRasterCacheOnClose { get; set; } = true;
@@ -126,6 +136,9 @@ public static class AppSettingsStore
     public const double ViewportZoomWheelFactorDefault = 2.0;
     public const double ViewportZoomWheelFactorMin = 1.05;
     public const double ViewportZoomWheelFactorMax = 2.5;
+    public const int StaticPageRenderDpiDefault = 150;
+    public const int StaticPageRenderDpiMin = 72;
+    public const int StaticPageRenderDpiMax = 300;
     public const int SimilarCountSettingsCurrentVersion = 3;
     public const double SimilarCountThresholdDefault = 0.94;
     public const double SimilarCountThresholdMin = 0.55;
@@ -194,6 +207,7 @@ public static class AppSettingsStore
         NormalizeTakeoffDefaults(settings);
         NormalizeSimilarCountSettings(settings);
         NormalizePdfImportRasterSettings(settings);
+        NormalizeStaticRenderSettings(settings);
         string? dir = Path.GetDirectoryName(settingsPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
@@ -217,6 +231,7 @@ public static class AppSettingsStore
             NormalizeTakeoffDefaults(settings);
             NormalizeSimilarCountSettings(settings);
             NormalizePdfImportRasterSettings(settings);
+            NormalizeStaticRenderSettings(settings);
             return true;
         }
         catch (Exception ex)
@@ -542,6 +557,19 @@ public static class AppSettingsStore
             settings.BuildRasterCacheOnPdfImport = true;
             settings.PdfImportRasterDefaultsVersion = 1;
         }
+    }
+
+    public static void NormalizeStaticRenderSettings(AppSettings settings)
+    {
+        settings.StaticPageRenderDpi = NormalizeStaticPageRenderDpi(settings.StaticPageRenderDpi);
+    }
+
+    public static int NormalizeStaticPageRenderDpi(int dpi)
+    {
+        if (dpi <= 0)
+            return StaticPageRenderDpiDefault;
+
+        return Math.Clamp(dpi, StaticPageRenderDpiMin, StaticPageRenderDpiMax);
     }
 
     public static void NormalizeJobsRoots(AppSettings settings)

@@ -309,6 +309,9 @@ public sealed partial class PdfViewport
         CancelPendingDocnetRenderForAppliedBitmap();
         ApplyInitialPreviewView(restoreView, fitAfter);
         QueueDetailRenderOverRasterSheetIfNeeded(force: false);
+        // Static mode: if the applied raster is below the chosen render DPI, build
+        // and pin the chosen DPI once (no-op at the default 150 for imported pages).
+        QueueStaticRasterDpiApplyIfNeeded();
         AppLog.Info(
             $"Viewport raster sheet {(usingOverview ? "overview " : "")}cache hit; page='{pageFolder}'; " +
             $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={raster.BitmapScale:0.###}; " +

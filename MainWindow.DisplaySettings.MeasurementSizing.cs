@@ -367,6 +367,45 @@ public partial class MainWindow
         TxtStatus.Text = $"Mouse-wheel zoom step: {_settings.ViewportZoomWheelFactor:0.##}x per notch.";
     }
 
+    private void TxtStaticRasterDpi_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyStaticRasterDpiFromText();
+        e.Handled = true;
+    }
+
+    private void TxtStaticRasterDpi_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyStaticRasterDpiFromText();
+
+    private void ApplyStaticRasterDpiFromText()
+    {
+        if (_isApplyingSettings)
+            return;
+
+        string raw = TxtStaticRasterDpi.Text.Trim().TrimEnd('d', 'D', 'p', 'P', 'i', 'I', ' ');
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int dpi) ||
+            dpi < AppSettingsStore.StaticPageRenderDpiMin ||
+            dpi > AppSettingsStore.StaticPageRenderDpiMax)
+        {
+            TxtStaticRasterDpi.Text = _settings.StaticPageRenderDpi.ToString(CultureInfo.InvariantCulture);
+            TxtStatus.Text =
+                $"Static image resolution must be {AppSettingsStore.StaticPageRenderDpiMin} - {AppSettingsStore.StaticPageRenderDpiMax} DPI.";
+            return;
+        }
+
+        int normalized = AppSettingsStore.NormalizeStaticPageRenderDpi(dpi);
+        bool changed = normalized != _settings.StaticPageRenderDpi;
+        _settings.StaticPageRenderDpi = normalized;
+        TxtStaticRasterDpi.Text = normalized.ToString(CultureInfo.InvariantCulture);
+        ApplyDisplaySettingsToViewport();
+        if (changed)
+            _viewport.RefreshStaticRasterDpi();
+        SaveAppSettings();
+        TxtStatus.Text = $"Static image resolution: {normalized} DPI.";
+    }
+
     private void SldZoomWheelFactor_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!IsInitialized || _isApplyingSettings)

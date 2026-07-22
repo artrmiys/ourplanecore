@@ -140,6 +140,11 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
+    // Re-render the current page at the newly chosen static DPI (if higher than
+    // what is displayed). Cheap no-op when the page is already at or above target.
+    public void RefreshStaticRasterDpi() =>
+        QueueStaticRasterDpiApplyIfNeeded();
+
     public void ZoomIn()  => ApplyZoom(1.25f, ViewportCanvasWidth / 2f, ViewportCanvasHeight / 2f);
     public void ZoomOut() => ApplyZoom(0.80f, ViewportCanvasWidth / 2f, ViewportCanvasHeight / 2f);
 }

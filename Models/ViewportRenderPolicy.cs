@@ -15,6 +15,18 @@ public static class ViewportRenderPolicy
     public const float ResponsiveMaxRenderPixels = 96_000_000f;
     public const float ZoomRefreshMinZoom = 0.55f;
     public const bool DetailRenderEnabled = true;
+    // PlanSwift-style static page mode: when enabled the page is shown as one
+    // fixed raster bitmap and all live zoom/pan/cadence re-render machinery is
+    // suppressed. Runtime display preference (mirrors AppSettings.StaticPageRenderEnabled);
+    // it never overrides the live-layer pipeline (that gate wins when layers are loaded).
+    public static bool StaticRasterModeEnabled = true;
+    // Resolution the static page image targets (mirrors AppSettings.StaticPageRenderDpi).
+    // The page is rendered once at this DPI to disk, then pinned. Pixel-budget
+    // clamped per page so very large sheets can't exhaust memory.
+    public static int StaticRasterTargetDpi = 150;
+    // Above this visible black-vector segment count the overlay is skipped on
+    // fast-navigation frames so paging/panning of dense sheets stays smooth.
+    public const int BlackVectorOverlayFastFrameSegmentCap = 20_000;
     public const float DetailRenderMinZoom = 0.75f;
     public const float DetailRenderMinScaleGain = 1.04f;
     public const float DetailRenderMaxScale = 16.0f;

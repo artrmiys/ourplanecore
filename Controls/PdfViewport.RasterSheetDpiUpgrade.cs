@@ -8,6 +8,296 @@ namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    // PlanSwift-style fixed resolution: in static mode ensure the displayed raster
+    // is at the user-chosen DPI (default 150, up to 300). Rendered once to the disk
+    // cache, then pinned. We only ever raise DPI toward the target — an existing
+    // higher-DPI raster is kept as-is (never rebuilt to downgrade).
+    private void QueueStaticRasterDpiApplyIfNeeded()
+    {
+        if (!IsStaticRasterDisplayActive() ||
+            _bitmapScale <= 0 ||
+            _rasterSheetSource?.Enabled != true ||
+            RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+            string.IsNullOrWhiteSpace(_pageFolder) ||
+            string.IsNullOrWhiteSpace(_pdfPath))
+        {
+            return;
+        }
+
+        int targetDpi = SafeStaticRasterTargetDpi();
+        int currentDpi = RasterSheetCacheService.RenderScaleToDpi(_bitmapScale);
+        // Accept a raster already within ~5% of target as-is. This keeps existing
+        // jobs from needlessly rebuilding near-identical DPIs on first open (e.g. a
+        // 144 DPI page under the default 150 target) while still upgrading genuine
+        // gaps (100→150) and real resolution bumps (150→300).
+        if (targetDpi <= 0 || currentDpi >= targetDpi * 0.95f)
+            return;
+
+        PageInfo page = CurrentRasterSheetPageInfo();
+        string rebuildKey = $"{RasterSheetDpiUpgradeKey(_pdfPath, _pdfIndex, _pageFolder, targetDpi)}|static";
+        lock (_rasterSheetRebuildGate)
+        {
+            if (!_rasterSheetRebuildsInFlight.Add(rebuildKey))
+                return;
+        }
+
+        AppLog.Info(
+            $"Viewport static raster DPI build queued; dpi={targetDpi}; currentDpi={currentDpi}; " +
+            $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
+        PostStatus($"Rendering page at {targetDpi} DPI: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
+        _ = BuildStaticRasterDpiForCurrentPageAsync(rebuildKey, page, targetDpi);
+    }
+
+    // Clamp the chosen DPI so a single page bitmap never exceeds the render pixel
+    // budget — 300 DPI on an E-size sheet would otherwise allocate ~0.5 GB.
+    private int SafeStaticRasterTargetDpi()
+    {
+        int chosen = AppSettingsStore.NormalizeStaticPageRenderDpi(ViewportRenderPolicy.StaticRasterTargetDpi);
+        if (_pdfW <= 0 || _pdfH <= 0)
+            return chosen;
+
+        float pagePoints = _pdfW * _pdfH;
+        if (pagePoints <= 0)
+            return chosen;
+
+        float budgetScale = MathF.Sqrt(ViewportRenderPolicy.ResponsiveMaxRenderPixels / pagePoints);
+        int budgetDpi = RasterSheetCacheService.RenderScaleToDpi(budgetScale);
+        if (budgetDpi <= 0)
+            return chosen;
+
+        // Honor the pixel budget even when it falls below the UI minimum (72): on a
+        // huge sheet clamping back up to 72 would rebuild the very ~0.5 GB bitmap the
+        // budget exists to prevent. Returning the true budget DPI instead makes the
+        // caller keep the existing raster (its DPI already meets the budget).
+        return Math.Max(1, Math.Min(chosen, budgetDpi));
+    }
+
+    private async Task BuildStaticRasterDpiForCurrentPageAsync(
+        string rebuildKey,
+        PageInfo queuedPage,
+        int targetDpi)
+    {
+        RasterSheetBitmapResult preparedBitmap = new(new SkiaSharp.SKBitmap(), 0, 0, 0, "");
+        bool hasPreparedBitmap = false;
+        bool preparedBitmapApplied = false;
+        try
+        {
+            if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath))
+                return;
+
+            await RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
+            RasterSheetBuildResult result;
+            try
+            {
+                if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath))
+                    return;
+
+                PageInfo buildPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
+                if (buildPage.RasterSheet?.Enabled != true)
+                    return;
+
+                float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
+                result = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(buildPage, targetScale))
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                RasterSheetRefreshPrefetchSemaphore.Release();
+            }
+
+            if (!result.Ok || result.Source == null)
+            {
+                AppLog.Warn(
+                    $"Viewport static raster DPI build failed; dpi={targetDpi}; error='{result.Error}'; " +
+                    $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
+                return;
+            }
+            RememberReadyRasterSheetSource(queuedPage, targetDpi, result.Source);
+
+            hasPreparedBitmap = TryPrepareRasterSheetBitmapForUiApply(
+                queuedPage,
+                result.Source,
+                preferOverview: false,
+                out preparedBitmap);
+            if (!hasPreparedBitmap)
+                return;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath) ||
+                    !IsStaticRasterDisplayActive() ||
+                    targetDpi != SafeStaticRasterTargetDpi() ||
+                    RasterSheetCacheService.RenderScaleToDpi(_bitmapScale) >= targetDpi)
+                {
+                    return;
+                }
+
+                if (ApplyPreparedRasterSheetDpiUpgradeResult(
+                        result.Source,
+                        preparedBitmap,
+                        targetDpi,
+                        "static-dpi",
+                        CaptureViewState(),
+                        fitAfter: false))
+                {
+                    preparedBitmapApplied = true;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport static raster DPI build crashed for {queuedPage.Name}");
+        }
+        finally
+        {
+            if (hasPreparedBitmap && !preparedBitmapApplied)
+                preparedBitmap.Bitmap.Dispose();
+
+            lock (_rasterSheetRebuildGate)
+                _rasterSheetRebuildsInFlight.Remove(rebuildKey);
+        }
+    }
+
+    // PlanSwift-style lazy migration: a page that opened with NO raster sheet
+    // (older jobs, pages never rastered) still uses the live re-rendering path and
+    // looks blurry / re-renders on zoom. In static mode, build its raster once at
+    // the chosen DPI in the background, then switch the page to the pinned static
+    // bitmap. After this the page opens straight to static on every future visit.
+    private void QueueStaticRasterLazyBuildIfNeeded(
+        string pdfPath,
+        int pageIndex,
+        string pageFolder,
+        RasterSheetSource? rasterSheet)
+    {
+        if (!ViewportRenderPolicy.StaticRasterModeEnabled ||
+            _usingRasterSheetRender ||
+            _usingLayerRenderer ||
+            _pdfLayersLoadedForPage ||
+            rasterSheet?.Enabled == true ||
+            string.IsNullOrWhiteSpace(pageFolder) ||
+            string.IsNullOrWhiteSpace(pdfPath) ||
+            !File.Exists(pdfPath))
+        {
+            return;
+        }
+
+        int targetDpi = AppSettingsStore.NormalizeStaticPageRenderDpi(ViewportRenderPolicy.StaticRasterTargetDpi);
+        PageInfo page = new()
+        {
+            Name = string.IsNullOrWhiteSpace(pageFolder) ? $"Page {pageIndex + 1}" : Path.GetFileName(pageFolder),
+            FolderPath = pageFolder,
+            PdfPath = pdfPath,
+            PdfPage = pageIndex,
+            PdfLayersCached = _cachedLayers != null,
+            PdfLayers = _cachedLayers ?? Array.Empty<PdfLayerInfo>(),
+        };
+
+        string rebuildKey = $"{RasterSheetRebuildKey(pdfPath, pageIndex, pageFolder)}|static-lazy";
+        lock (_rasterSheetRebuildGate)
+        {
+            if (!_rasterSheetRebuildsInFlight.Add(rebuildKey))
+                return;
+        }
+
+        AppLog.Info(
+            $"Viewport static raster lazy build queued; dpi={targetDpi}; " +
+            $"page='{pageFolder}'; pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pageIndex + 1}");
+        PostStatus($"Rendering page at {targetDpi} DPI: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
+        _ = BuildStaticRasterLazyForPageAsync(rebuildKey, page, targetDpi);
+    }
+
+    private async Task BuildStaticRasterLazyForPageAsync(
+        string rebuildKey,
+        PageInfo queuedPage,
+        int targetDpi)
+    {
+        RasterSheetBitmapResult preparedBitmap = new(new SkiaSharp.SKBitmap(), 0, 0, 0, "");
+        bool hasPreparedBitmap = false;
+        bool preparedBitmapApplied = false;
+        try
+        {
+            if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath))
+                return;
+
+            await RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
+            RasterSheetBuildResult result;
+            try
+            {
+                if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath))
+                    return;
+
+                PageInfo buildPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
+                float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
+                result = await Task.Run(() =>
+                {
+                    RasterSheetBuildResult built = RasterSheetCacheService.BuildAndEnable(buildPage, targetScale);
+                    if (built.Ok && built.Source != null)
+                    {
+                        // Land future opens straight on this raster (static, no responsive downgrade).
+                        PageInfo enabledPage = OurPlanCoreJobStore.TryReadPage(buildPage.FolderPath) ?? buildPage;
+                        RasterSheetCacheService.TrySetUseAsPageOpenRaster(enabledPage, true, out _, out _);
+                    }
+                    return built;
+                }).ConfigureAwait(false);
+            }
+            finally
+            {
+                RasterSheetRefreshPrefetchSemaphore.Release();
+            }
+
+            if (!result.Ok || result.Source == null)
+            {
+                AppLog.Warn(
+                    $"Viewport static raster lazy build failed; dpi={targetDpi}; error='{result.Error}'; " +
+                    $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
+                return;
+            }
+
+            hasPreparedBitmap = TryPrepareRasterSheetBitmapForUiApply(
+                queuedPage,
+                result.Source,
+                preferOverview: false,
+                out preparedBitmap);
+            if (!hasPreparedBitmap)
+                return;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath) ||
+                    !ViewportRenderPolicy.StaticRasterModeEnabled ||
+                    _usingRasterSheetRender ||
+                    _usingLayerRenderer ||
+                    _pdfLayersLoadedForPage)
+                {
+                    return;
+                }
+
+                if (ApplyPreparedRasterSheetDpiUpgradeResult(
+                        result.Source,
+                        preparedBitmap,
+                        targetDpi,
+                        "static-lazy",
+                        CaptureViewState(),
+                        fitAfter: false))
+                {
+                    preparedBitmapApplied = true;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport static raster lazy build crashed for {queuedPage.Name}");
+        }
+        finally
+        {
+            if (hasPreparedBitmap && !preparedBitmapApplied)
+                preparedBitmap.Bitmap.Dispose();
+
+            lock (_rasterSheetRebuildGate)
+                _rasterSheetRebuildsInFlight.Remove(rebuildKey);
+        }
+    }
+
     private bool TryUpgradeRasterSheetToReadyDpiForCurrentZoom()
     {
         if (!_usingRasterSheetRender ||

@@ -355,6 +355,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf snap duplicate load guard is wired", TakeoffsTreeRegressionTests.PdfSnapDuplicateLoadGuardIsWired),
     ("raster snap strict black lines only is wired", TakeoffsTreeRegressionTests.RasterSnapStrictBlackLinesOnlyIsWired),
     ("raster sheet render skips delayed pdf zoom refresh", TakeoffsTreeRegressionTests.RasterSheetRenderSkipsDelayedPdfZoomRefresh),
+    ("static raster mode suppresses live re-renders", TakeoffsTreeRegressionTests.StaticRasterModeSuppressesLiveReRenders),
     ("pdf sheet metadata parses dotted sheet numbers for suffix rules", TakeoffsTreeRegressionTests.PdfSheetMetadataParsesDottedSheetNumbersForSuffixRules),
     ("pdf raster edge snap preview is wired", TakeoffsTreeRegressionTests.PdfRasterEdgeSnapPreviewIsWired),
     ("pages tree selected sheet scale menu is wired", TakeoffsTreeRegressionTests.PagesTreeSelectedSheetScaleMenuIsWired),

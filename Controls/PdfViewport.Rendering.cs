@@ -100,6 +100,7 @@ public sealed partial class PdfViewport
                     DrawPageBackgroundTint(canvas, dst);
                     DrawPdfLayerTraceGhost(canvas, dst);
                     DrawLowZoomLineOverlay(canvas, visiblePdf);
+                    DrawBlackVectorInkOverlay(canvas, visiblePdf);
                 }
             }
             pageBitmapMs += frameWatch.ElapsedMilliseconds - sectionStart;
@@ -222,6 +223,22 @@ public sealed partial class PdfViewport
 
     private SKFilterQuality CurrentPageBitmapFilterQuality()
     {
+        // Static raster is pinned and never re-rendered, so sample it for the
+        // sharpest still image the interactive path allows:
+        //  - motion: Low — cheap and clean; avoids the None nearest-neighbour
+        //    shimmer the down-scaled high-res raster shows while zooming/panning.
+        //  - at rest, zoomed IN past native resolution: None — nearest-neighbour
+        //    keeps edges crisp instead of the soft Medium upscale (no shimmer on
+        //    magnification since the image is not being minified).
+        //  - at rest, at or below native: Medium — smooth minification.
+        if (IsStaticRasterDisplayActive())
+        {
+            if (_renderNavigationFastFrame)
+                return SKFilterQuality.Low;
+
+            return _zoom > _bitmapScale ? SKFilterQuality.None : SKFilterQuality.Medium;
+        }
+
         if (_renderNavigationFastFrame)
             return SKFilterQuality.None;
 
@@ -335,6 +352,11 @@ public sealed partial class PdfViewport
 
     private void DrawLowZoomLineOverlay(SKCanvas canvas, SKRect visiblePdf)
     {
+        // The black vector overlay already draws these same segments crisply at all
+        // zooms; skip the faint low-zoom pass to avoid a redundant second iteration.
+        if (ShowBlackVectorOverlay)
+            return;
+
         IReadOnlyList<PdfGeometrySnapSegment> segments = LowZoomVisualSegments();
         if (_renderNavigationFastFrame ||
             segments.Count == 0 ||
@@ -362,6 +384,56 @@ public sealed partial class PdfViewport
 
             canvas.DrawLine(PdfToScreen(segment.Start), PdfToScreen(segment.End), stroke);
         }
+    }
+
+    // Crisp black vector linework over the static raster (PlanSwift-style). Uses
+    // the already-loaded page snap segments, so it is resolution-independent and
+    // triggers no re-render: thin source lines stay razor-sharp at any zoom even
+    // though the raster underneath softens above ~200%.
+    private void DrawBlackVectorInkOverlay(SKCanvas canvas, SKRect visiblePdf)
+    {
+        if (!ShowBlackVectorOverlay || _zoom <= 0)
+            return;
+
+        IReadOnlyList<PdfGeometrySnapSegment> segments = LowZoomVisualSegments();
+        if (segments.Count == 0)
+            return;
+
+        // On motion frames of very dense sheets, skip so paging/panning stays smooth.
+        if (_renderNavigationFastFrame &&
+            segments.Count > ViewportRenderPolicy.BlackVectorOverlayFastFrameSegmentCap)
+        {
+            return;
+        }
+
+        SKRect searchRect = visiblePdf;
+        searchRect.Inflate(ScreenToPdfDistance(8f), ScreenToPdfDistance(8f));
+
+        using var path = new SKPath();
+        bool any = false;
+        foreach (PdfGeometrySnapSegment segment in segments)
+        {
+            if (!RectsIntersect(SegmentBounds(segment), searchRect))
+                continue;
+
+            path.MoveTo(PdfToScreen(segment.Start));
+            path.LineTo(PdfToScreen(segment.End));
+            any = true;
+        }
+
+        if (!any)
+            return;
+
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            StrokeWidth = Math.Clamp(_zoom * 0.6f, 1.0f, 3.0f),
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeCap = SKStrokeCap.Round,
+            StrokeJoin = SKStrokeJoin.Round,
+        };
+        canvas.DrawPath(path, stroke);
     }
 
     private IReadOnlyList<PdfGeometrySnapSegment> LowZoomVisualSegments()

@@ -160,6 +160,14 @@ public sealed partial class PdfViewport
 
     private void QueueDetailRenderIfNeeded(bool force, bool immediate = false)
     {
+        // Static raster mode never sharpens with detail tiles — the fixed bitmap
+        // is the whole image. Safety net for any caller reaching this path.
+        if (IsStaticRasterDisplayActive())
+        {
+            DetailRenderDiag("static-raster");
+            return;
+        }
+
         if (ShouldHoldDetailRender(force))
         {
             DetailRenderDiag("hold");

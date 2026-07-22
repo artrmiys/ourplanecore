@@ -59,7 +59,9 @@ public sealed partial class PdfViewport
         _rasterSheetQualityRestoreVersion++;
         _rasterSheetQualityRestoreQueuedVersion = 0;
         PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs);
-        QueueCurrentRasterSheetMotionWarmup();
+        // Static raster mode does no motion-warmup renders — the bitmap is fixed.
+        if (!IsStaticRasterDisplayActive())
+            QueueCurrentRasterSheetMotionWarmup();
         _navigationIdleTimer.Stop();
         _navigationIdleTimer.Start();
     }
@@ -94,6 +96,15 @@ public sealed partial class PdfViewport
         _navigationIdleTimer.Stop();
         _isFastNavigating = false;
         MaybeRequestSheetOverlayRenderScaleRefresh();
+
+        // Static raster mode: no DPI upgrade or detail tile after motion — the
+        // fixed bitmap is the final image. Just repaint at full sampling quality.
+        if (IsStaticRasterDisplayActive())
+        {
+            RequestRepaint();
+            return;
+        }
+
         PageInfo rasterPage = CurrentRasterSheetPageInfo();
         int targetDpi = TargetRasterSheetDpiForCurrentZoom();
         if (ShouldHoldHeavyRasterSheetDpiAfterMotion(targetDpi))
@@ -185,9 +196,22 @@ public sealed partial class PdfViewport
             : desired;
     }
 
+    // PlanSwift-style static page mode: the page is one fixed raster bitmap and
+    // every live zoom/pan/cadence re-render is suppressed. Only active once a
+    // raster sheet is actually displayed and the live PDF-layer pipeline is off
+    // (loading layers, or a raster-less legacy page, keeps today's dynamic path).
+    private bool IsStaticRasterDisplayActive() =>
+        ViewportRenderPolicy.StaticRasterModeEnabled &&
+        _usingRasterSheetRender &&
+        !_usingLayerRenderer &&
+        !_pdfLayersLoadedForPage;
+
     private void RerenderForZoomIfNeeded(bool force)
     {
         if (string.IsNullOrWhiteSpace(_pdfPath) || _pdfW <= 0 || _pdfH <= 0)
+            return;
+
+        if (IsStaticRasterDisplayActive())
             return;
 
         if (_showingPreviousPageDuringSwitch && !_usingLayerRenderer)
@@ -278,6 +302,9 @@ public sealed partial class PdfViewport
 
     private void QueueDetailRenderOverRasterSheetIfNeeded(bool force)
     {
+        if (IsStaticRasterDisplayActive())
+            return;
+
         // Detail tiles are the sharpness layer for the visible region: they may
         // paint over any pdf-backed base — the raster sheet, its low-dpi
         // overview, or a plain preview bitmap while a higher-dpi sheet is still
@@ -305,6 +332,11 @@ public sealed partial class PdfViewport
     private void ScheduleRerenderForZoom(bool force)
     {
         if (string.IsNullOrWhiteSpace(_pdfPath) || _pdfW <= 0 || _pdfH <= 0)
+            return;
+
+        // Static raster mode: never arm the zoom re-render timer — zoom/pan is a
+        // pure bitmap scale. ApplyZoom already repaints; nothing else to schedule.
+        if (IsStaticRasterDisplayActive())
             return;
 
         if (_usingRasterSheetRender)

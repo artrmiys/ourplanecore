@@ -2699,6 +2699,94 @@ internal static class TakeoffsTreeRegressionTests
             "legacy or stale raster sheets should rebuild in current-page and prefetch background paths, while old oversized image rasters get overview-only rebuilds, then apply only to the still-current non-layer page");
     }
 
+    public static void StaticRasterModeSuppressesLiveReRenders()
+    {
+        string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
+        string settings = ReadRepoFile("Models/AppSettingsStore.cs");
+        string viewTransform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
+        string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
+        string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
+        string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
+        string rasterSheetDpiUpgrade = ReadRepoFile("Controls/PdfViewport.RasterSheetDpiUpgrade.cs");
+        string displaySettings = ReadRepoFile("MainWindow.DisplaySettings.cs");
+        string measurementSizing = ReadRepoFile("MainWindow.DisplaySettings.MeasurementSizing.cs");
+        string xaml = ReadRepoFile("MainWindow.xaml");
+
+        AssertTrue(
+            policy.Contains("public static bool StaticRasterModeEnabled = true", StringComparison.Ordinal) &&
+            policy.Contains("BlackVectorOverlayFastFrameSegmentCap", StringComparison.Ordinal) &&
+            settings.Contains("public bool StaticPageRenderEnabled { get; set; } = true", StringComparison.Ordinal) &&
+            settings.Contains("public bool BlackVectorOverlayEnabled { get; set; } = false", StringComparison.Ordinal),
+            "static raster mode should default on and expose a black vector overlay setting defaulting off");
+
+        AssertTrue(
+            viewTransform.Contains("private bool IsStaticRasterDisplayActive() =>", StringComparison.Ordinal) &&
+            viewTransform.Contains("ViewportRenderPolicy.StaticRasterModeEnabled &&", StringComparison.Ordinal) &&
+            viewTransform.Contains("_usingRasterSheetRender &&", StringComparison.Ordinal) &&
+            viewTransform.Contains("!_usingLayerRenderer &&", StringComparison.Ordinal) &&
+            viewTransform.Contains("!_pdfLayersLoadedForPage;", StringComparison.Ordinal),
+            "static raster gate must require an active raster sheet with the live layer pipeline off");
+
+        AssertTrue(
+            viewTransform.Contains("if (IsStaticRasterDisplayActive())", StringComparison.Ordinal) &&
+            detailRender.Contains("if (IsStaticRasterDisplayActive())", StringComparison.Ordinal) &&
+            detailRender.Contains("DetailRenderDiag(\"static-raster\")", StringComparison.Ordinal),
+            "static raster mode must short-circuit the zoom re-render and detail tile entry points");
+
+        AssertTrue(
+            viewTransform.Contains("if (!IsStaticRasterDisplayActive())", StringComparison.Ordinal) &&
+            renderCache.Contains("if (ViewportRenderPolicy.StaticRasterModeEnabled)", StringComparison.Ordinal),
+            "static raster mode must skip motion-warmup renders and the whole-job raster refresh cadence");
+
+        AssertTrue(
+            rendering.Contains("DrawBlackVectorInkOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
+            rendering.Contains("private void DrawBlackVectorInkOverlay(SKCanvas canvas, SKRect visiblePdf)", StringComparison.Ordinal) &&
+            rendering.Contains("if (!ShowBlackVectorOverlay || _zoom <= 0)", StringComparison.Ordinal) &&
+            rendering.Contains("ViewportRenderPolicy.BlackVectorOverlayFastFrameSegmentCap", StringComparison.Ordinal),
+            "black vector overlay must draw over the raster from loaded snap segments, gated by its toggle");
+
+        AssertTrue(
+            displaySettings.Contains("ViewportRenderPolicy.StaticRasterModeEnabled = _settings.StaticPageRenderEnabled", StringComparison.Ordinal) &&
+            displaySettings.Contains("_viewport.ShowBlackVectorOverlay = _settings.BlackVectorOverlayEnabled", StringComparison.Ordinal) &&
+            displaySettings.Contains("_viewport.RefreshRenderQuality()", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"ChkDisplayStaticRaster\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"ChkDisplayBlackVector\"", StringComparison.Ordinal),
+            "display ribbon must expose and wire the static image and black vector toggles");
+
+        AssertTrue(
+            settings.Contains("public int StaticPageRenderDpi { get; set; }", StringComparison.Ordinal) &&
+            settings.Contains("StaticPageRenderDpiDefault = 150", StringComparison.Ordinal) &&
+            settings.Contains("StaticPageRenderDpiMax = 300", StringComparison.Ordinal) &&
+            settings.Contains("public static int NormalizeStaticPageRenderDpi(int dpi)", StringComparison.Ordinal) &&
+            policy.Contains("public static int StaticRasterTargetDpi = 150", StringComparison.Ordinal),
+            "static page render DPI should be a clamped setting defaulting to 150 with a 300 ceiling");
+
+        AssertTrue(
+            rasterSheetDpiUpgrade.Contains("private void QueueStaticRasterDpiApplyIfNeeded()", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("private int SafeStaticRasterTargetDpi()", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("currentDpi >= targetDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.ResponsiveMaxRenderPixels", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.BuildAndEnable(buildPage, targetScale)", StringComparison.Ordinal) &&
+            layers.Contains("QueueStaticRasterDpiApplyIfNeeded()", StringComparison.Ordinal) &&
+            pageApi.Contains("buildMissingDpis: !ViewportRenderPolicy.StaticRasterModeEnabled", StringComparison.Ordinal),
+            "static DPI apply must build once at the pixel-budget-clamped target, only raise DPI toward it, and skip the python zoom-ladder warmup on page open in static mode");
+
+        AssertTrue(
+            displaySettings.Contains("ViewportRenderPolicy.StaticRasterTargetDpi = _settings.StaticPageRenderDpi", StringComparison.Ordinal) &&
+            measurementSizing.Contains("_viewport.RefreshStaticRasterDpi()", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"TxtStaticRasterDpi\"", StringComparison.Ordinal),
+            "display ribbon must expose and wire the static image resolution field");
+
+        AssertTrue(
+            rasterSheetDpiUpgrade.Contains("private void QueueStaticRasterLazyBuildIfNeeded(", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("rasterSheet?.Enabled == true", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.TrySetUseAsPageOpenRaster(enabledPage, true", StringComparison.Ordinal) &&
+            pageApi.Contains("QueueStaticRasterLazyBuildIfNeeded(pdfPath, pageIndex, pageFolder, rasterSheet)", StringComparison.Ordinal),
+            "static mode must lazily build and pin a raster for pages that opened without one, so raster-less pages stop re-rendering on zoom");
+    }
+
     public static void PdfSheetMetadataParsesDottedSheetNumbersForSuffixRules()
     {
         string helper = ReadRepoFile("Tools/pdf_layers_helper.py");

@@ -175,7 +175,12 @@ public sealed partial class PdfViewport
                 pageFolder,
                 rasterSheet,
                 allowLowZoomFullRasterApply: false,
-                buildMissingDpis: true,
+                // Static mode pins one fixed DPI and never switches DPI on zoom, so
+                // building the 72/100/144 zoom-ladder variants (a python render per
+                // missing DPI on every page open) is pure churn — warm only what
+                // already exists. The single chosen-DPI build is handled separately
+                // by QueueStaticRasterDpiApplyIfNeeded.
+                buildMissingDpis: !ViewportRenderPolicy.StaticRasterModeEnabled,
                 out rasterWorkZoomWarmupQueuedForOpen);
         }
 
@@ -318,6 +323,10 @@ public sealed partial class PdfViewport
             cachedLayers,
             rasterSheet,
             rasterSkipReason);
+        // Static mode: a raster-less page (older jobs, never-rastered pages) just
+        // rendered via the live path — build its raster once and pin it, so it too
+        // becomes a static image instead of blurry + re-rendering on zoom.
+        QueueStaticRasterLazyBuildIfNeeded(pdfPath, pageIndex, pageFolder, rasterSheet);
         RequestRepaint();
     }
 

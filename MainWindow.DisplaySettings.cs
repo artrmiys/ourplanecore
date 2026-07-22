@@ -103,11 +103,22 @@ public partial class MainWindow
         _settings.ScaleSheetHeaderWithPage = ChkDisplayHeaderScaleWithPage.IsChecked == true;
         _settings.SimplifyViewportNavigation = ChkDisplaySimplifyNavigation.IsChecked == true;
         _settings.PdfLayersEnabled = ChkDisplayPdfLayers.IsChecked == true;
+        bool staticRenderModeChanged =
+            _settings.StaticPageRenderEnabled != (ChkDisplayStaticRaster.IsChecked == true);
+        _settings.StaticPageRenderEnabled = ChkDisplayStaticRaster.IsChecked == true;
+        _settings.BlackVectorOverlayEnabled = ChkDisplayBlackVector.IsChecked == true;
         _settings.UnitMode = ChkDisplayImperial.IsChecked == true
             ? UnitMode.Imperial.ToString()
             : UnitMode.Metric.ToString();
 
         ApplyDisplaySettingsToViewport();
+        // Switching the render mode must re-arm (or tear down) the live sharpening
+        // machinery for the page already on screen; a repaint alone won't do it.
+        if (staticRenderModeChanged)
+        {
+            _viewport.RefreshRenderQuality();
+            _viewport.RefreshStaticRasterDpi();
+        }
         ApplySheetOverlaySettings();
         RefreshDetachedSheetDisplaySettings();
         SaveAppSettings();
@@ -189,6 +200,9 @@ public partial class MainWindow
         ViewportRenderPolicy.ApplyQualityMode(_settings.ViewportRenderQuality);
         PdfLayerRenderService.PdfLayersEnabled =
             IsModuleEnabled(ModuleId.PdfLayers) && _settings.PdfLayersEnabled;
+        ViewportRenderPolicy.StaticRasterModeEnabled = _settings.StaticPageRenderEnabled;
+        ViewportRenderPolicy.StaticRasterTargetDpi = _settings.StaticPageRenderDpi;
+        _viewport.ShowBlackVectorOverlay = _settings.BlackVectorOverlayEnabled;
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
         _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(_settings.ViewportMeasurementStrokeScale);
         _settings.ViewportRulerStrokeWidth = NormalizeRulerStrokeWidth(_settings.ViewportRulerStrokeWidth);
@@ -237,6 +251,9 @@ public partial class MainWindow
             ChkDisplayImperial.IsChecked = _viewport.UnitMode == UnitMode.Imperial;
             ChkDisplaySimplifyNavigation.IsChecked = _settings.SimplifyViewportNavigation;
             ChkDisplayPdfLayers.IsChecked = _settings.PdfLayersEnabled;
+            ChkDisplayStaticRaster.IsChecked = _settings.StaticPageRenderEnabled;
+            ChkDisplayBlackVector.IsChecked = _settings.BlackVectorOverlayEnabled;
+            TxtStaticRasterDpi.Text = _settings.StaticPageRenderDpi.ToString(CultureInfo.InvariantCulture);
             ComboViewportRenderQuality.SelectedIndex = ViewportRenderQualitySelectedIndex(_settings.ViewportRenderQuality);
             ComboDisplayViewportBackground.SelectedIndex = ViewportBackgroundSelectedIndex(_settings.ViewportBackground);
             ComboDisplayPageBackground.SelectedIndex = PageBackgroundSelectedIndex(_settings.PageBackground);

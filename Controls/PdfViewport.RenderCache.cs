@@ -761,6 +761,12 @@ public sealed partial class PdfViewport
 
     public static void PrefetchRasterSheetRefresh(PageInfo page)
     {
+        // Static raster mode pins each page to one fixed bitmap, so the whole-job
+        // adaptive-DPI refresh cadence (a background python render ~every 6.5s) is
+        // pure churn — skip it. Self-heal on real PDF changes stays on its own path.
+        if (ViewportRenderPolicy.StaticRasterModeEnabled)
+            return;
+
         if (page.RasterSheet?.Enabled != true ||
             string.IsNullOrWhiteSpace(page.FolderPath) ||
             string.IsNullOrWhiteSpace(page.PdfPath) ||

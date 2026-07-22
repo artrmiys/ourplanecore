@@ -19,7 +19,12 @@ public sealed partial class PdfViewport
     private (SKBitmap Bitmap, float BitmapScale) SelectPageBitmapForPaint()
     {
         SKBitmap bitmap = _pageBitmap!;
-        if (_usingRasterSheetRender || _bitmapScale <= 0 || _zoom <= 0)
+        // Static raster pins one high-DPI image, so zooming out must minify it every
+        // frame — route it through the cached mip (built once, drawn cheaply) to kill
+        // the shimmer. Dynamic raster mode instead swaps to a lower-DPI variant, so
+        // it keeps skipping the mip.
+        bool useStaticRasterMip = IsStaticRasterDisplayActive();
+        if ((_usingRasterSheetRender && !useStaticRasterMip) || _bitmapScale <= 0 || _zoom <= 0)
             return (bitmap, _bitmapScale);
 
         if (_zoom > _bitmapScale * PageMipMaxZoomRatio)

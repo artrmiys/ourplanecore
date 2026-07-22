@@ -201,6 +201,8 @@ public sealed partial class PdfViewport : SKElement
     public  bool     ShowAreaLabels { get; set; } = true;
     public  bool     ShowJoistLabels { get; set; } = true;
     public  bool     ShowCountLabels { get; set; }
+    // Crisp black vector linework drawn on top of the static raster page.
+    public  bool     ShowBlackVectorOverlay { get; set; }
     public  double   MeasurementLabelScale { get; set; } = 1.0;
     public  double   MeasurementStrokeScale { get; set; } = 1.0;
     public  double   AreaEdgeScale { get; set; } = 1.0;
