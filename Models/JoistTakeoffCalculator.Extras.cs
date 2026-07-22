@@ -99,6 +99,194 @@ public static partial class JoistTakeoffCalculator
         return false;
     }
 
+    public static IReadOnlyList<List<JoistExtraSegment>> ClipExtraJoistsToAreaGeometries(
+        IReadOnlyList<JoistExtraSegment> extraJoists,
+        IReadOnlyList<AreaBooleanGeometry> geometries)
+    {
+        var result = geometries
+            .Select(_ => new List<JoistExtraSegment>())
+            .ToList();
+        if (extraJoists.Count == 0 || geometries.Count == 0)
+            return result;
+
+        var usedIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (JoistExtraSegment source in extraJoists)
+        {
+            double sourceDx = source.End.X - source.Start.X;
+            double sourceDy = source.End.Y - source.Start.Y;
+            var pieces = new List<(int GeometryIndex, JoistExtraSegment Segment, double Position)>();
+            for (int geometryIndex = 0; geometryIndex < geometries.Count; geometryIndex++)
+            {
+                foreach (JoistExtraSegment piece in ClipExtraJoistToArea(source, geometries[geometryIndex]))
+                {
+                    double position =
+                        (piece.Start.X - source.Start.X) * sourceDx +
+                        (piece.Start.Y - source.Start.Y) * sourceDy;
+                    pieces.Add((geometryIndex, piece, position));
+                }
+            }
+
+            pieces.Sort((left, right) => left.Position.CompareTo(right.Position));
+            for (int pieceIndex = 0; pieceIndex < pieces.Count; pieceIndex++)
+            {
+                (int geometryIndex, JoistExtraSegment segment, _) = pieces[pieceIndex];
+                segment.Id = AllocateClippedExtraJoistId(source.Id, pieceIndex == 0, usedIds);
+                result[geometryIndex].Add(segment);
+            }
+        }
+
+        return result;
+    }
+
+    private static List<JoistExtraSegment> ClipExtraJoistToArea(
+        JoistExtraSegment source,
+        AreaBooleanGeometry geometry)
+    {
+        var result = new List<JoistExtraSegment>();
+        if (geometry.Points.Count < 3 || !IsFinite(source.Start) || !IsFinite(source.End))
+            return result;
+
+        double dx = source.End.X - source.Start.X;
+        double dy = source.End.Y - source.Start.Y;
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        if (!double.IsFinite(length) || length <= ProjectionEpsilon)
+            return result;
+
+        double dirX = dx / length;
+        double dirY = dy / length;
+        double normalX = -dirY;
+        double normalY = dirX;
+        double offset = Dot(source.Start, normalX, normalY);
+        double sourceStartT = Dot(source.Start, dirX, dirY);
+        double sourceEndT = sourceStartT + length;
+        List<LineIntersection> intersections = LineAreaIntersections(
+            AreaContours(geometry.Points, geometry.Holes),
+            offset,
+            dirX,
+            dirY,
+            normalX,
+            normalY);
+        var breakpoints = new List<double> { sourceStartT, sourceEndT };
+        breakpoints.AddRange(intersections
+            .Select(intersection => intersection.T)
+            .Where(value => value > sourceStartT + ProjectionEpsilon &&
+                            value < sourceEndT - ProjectionEpsilon));
+        breakpoints.Sort();
+
+        using SKPath fillPath = BuildExtraJoistClipPath(geometry);
+        double? retainedStartT = null;
+        double retainedEndT = 0;
+        for (int i = 1; i < breakpoints.Count; i++)
+        {
+            double intervalStartT = breakpoints[i - 1];
+            double intervalEndT = breakpoints[i];
+            if (intervalEndT - intervalStartT <= ProjectionEpsilon)
+                continue;
+
+            double midpointT = (intervalStartT + intervalEndT) / 2.0;
+            SKPoint midpoint = PointOnProjectedLine(
+                source.Start,
+                dirX,
+                dirY,
+                midpointT - sourceStartT);
+            if (fillPath.Contains(midpoint.X, midpoint.Y))
+            {
+                retainedStartT ??= intervalStartT;
+                retainedEndT = intervalEndT;
+                continue;
+            }
+
+            AddClippedExtraJoistPiece(
+                result,
+                source,
+                dirX,
+                dirY,
+                sourceStartT,
+                retainedStartT,
+                retainedEndT);
+            retainedStartT = null;
+        }
+
+        AddClippedExtraJoistPiece(
+            result,
+            source,
+            dirX,
+            dirY,
+            sourceStartT,
+            retainedStartT,
+            retainedEndT);
+
+        return result;
+    }
+
+    private static void AddClippedExtraJoistPiece(
+        ICollection<JoistExtraSegment> result,
+        JoistExtraSegment source,
+        double dirX,
+        double dirY,
+        double sourceStartT,
+        double? retainedStartT,
+        double retainedEndT)
+    {
+        if (!retainedStartT.HasValue || retainedEndT - retainedStartT.Value <= ProjectionEpsilon)
+            return;
+
+        result.Add(new JoistExtraSegment
+        {
+            Id = source.Id,
+            Start = PointOnProjectedLine(source.Start, dirX, dirY, retainedStartT.Value - sourceStartT),
+            End = PointOnProjectedLine(source.Start, dirX, dirY, retainedEndT - sourceStartT),
+        });
+    }
+
+    private static SKPath BuildExtraJoistClipPath(AreaBooleanGeometry geometry)
+    {
+        var path = new SKPath { FillType = SKPathFillType.EvenOdd };
+        AddExtraJoistClipContour(path, geometry.Points);
+        foreach (IReadOnlyList<SKPoint> hole in geometry.Holes)
+            AddExtraJoistClipContour(path, hole);
+        return path;
+    }
+
+    private static void AddExtraJoistClipContour(SKPath path, IReadOnlyList<SKPoint> points)
+    {
+        if (points.Count < 3)
+            return;
+
+        path.MoveTo(points[0]);
+        for (int i = 1; i < points.Count; i++)
+            path.LineTo(points[i]);
+        path.Close();
+    }
+
+    private static SKPoint PointOnProjectedLine(
+        SKPoint origin,
+        double dirX,
+        double dirY,
+        double distance) =>
+        new(
+            (float)(origin.X + dirX * distance),
+            (float)(origin.Y + dirY * distance));
+
+    private static string AllocateClippedExtraJoistId(
+        string? sourceId,
+        bool preferSourceId,
+        ISet<string> usedIds)
+    {
+        string preferred = (sourceId ?? "").Trim();
+        if (preferSourceId && preferred.Length > 0 && usedIds.Add(preferred))
+            return preferred;
+
+        string generated;
+        do
+        {
+            generated = Guid.NewGuid().ToString();
+        }
+        while (!usedIds.Add(generated));
+
+        return generated;
+    }
+
     private static JoistLayoutResult IncludeExtraJoists(
         JoistLayoutResult layout,
         IReadOnlyList<JoistExtraSegment>? extraJoists,

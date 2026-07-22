@@ -89,12 +89,15 @@ public sealed partial class PdfViewport
                 continue;
             }
 
+            IReadOnlyList<List<JoistExtraSegment>> clippedExtraJoists =
+                JoistTakeoffCalculator.ClipExtraJoistsToAreaGeometries(area.ExtraJoists, geometries);
+
             if (geometries.Count == 1)
             {
                 beforeAreaPoints[area] = area.Points.ToList();
                 beforeAreaHoles[area] = CloneHoles(area.Holes);
                 beforeAreaExtraJoists[area] = CloneExtraJoists(area.ExtraJoists);
-                ApplyAreaGeometry(area, geometries[0]);
+                ApplyAreaGeometry(area, geometries[0], clippedExtraJoists[0]);
                 changedAreas.Add(area);
                 continue;
             }
@@ -105,9 +108,13 @@ public sealed partial class PdfViewport
 
             removedAreaIndexes[area] = index;
             removedAreas.Add(area);
-            var claimedExtraJoists = new HashSet<JoistExtraSegment>();
-            foreach (AreaBooleanGeometry geometry in geometries)
-                addedAreas.Add(CloneAreaMeasurement(area, geometry, claimedExtraJoists));
+            for (int geometryIndex = 0; geometryIndex < geometries.Count; geometryIndex++)
+            {
+                addedAreas.Add(CloneAreaMeasurement(
+                    area,
+                    geometries[geometryIndex],
+                    clippedExtraJoists[geometryIndex]));
+            }
         }
 
         var removedLineIndexes = new Dictionary<Measurement, int>();
@@ -348,11 +355,19 @@ public sealed partial class PdfViewport
             .Where(extra => PointInAreaGeometry(ExtraJoistMidpoint(extra), geometry))
             .Select(CloneExtraJoist)
             .ToList();
+        ApplyAreaGeometry(area, geometry, retainedExtraJoists);
+    }
+
+    private static void ApplyAreaGeometry(
+        Measurement area,
+        AreaBooleanGeometry geometry,
+        IReadOnlyList<JoistExtraSegment> extraJoists)
+    {
         area.Points.Clear();
         area.Points.AddRange(geometry.Points.Select(ClonePoint));
         area.Holes.Clear();
         area.Holes.AddRange(geometry.Holes.Select(hole => hole.Select(ClonePoint).ToList()));
-        RestoreExtraJoists(area.ExtraJoists, retainedExtraJoists);
+        RestoreExtraJoists(area.ExtraJoists, extraJoists);
     }
 
     private static bool PointInAreaGeometry(SKPoint point, AreaBooleanGeometry geometry)
@@ -689,6 +704,14 @@ public sealed partial class PdfViewport
             .Select(CloneExtraJoist)
             .ToList();
 
+        return CloneAreaMeasurement(source, geometry, extraJoists);
+    }
+
+    private static Measurement CloneAreaMeasurement(
+        Measurement source,
+        AreaBooleanGeometry geometry,
+        IReadOnlyList<JoistExtraSegment> extraJoists)
+    {
         return new Measurement
         {
             Name = source.Name,
@@ -712,7 +735,7 @@ public sealed partial class PdfViewport
             JoistLengthRounding = source.JoistLengthRounding,
             JoistShowLabels = source.JoistShowLabels,
             JoistDetailedLabels = source.JoistDetailedLabels,
-            ExtraJoists = extraJoists,
+            ExtraJoists = CloneExtraJoists(extraJoists),
         };
     }
 

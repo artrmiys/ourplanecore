@@ -34,6 +34,90 @@ internal static class JoistExtraModelTests
             "cursor outside the area must be rejected");
     }
 
+    public static void AreaCutHoleSplitsExtraJoistIntoFilledPieces()
+    {
+        JoistExtraSegment source = Extra("cut-source", 0, 5, 10, 5);
+        var geometry = new AreaBooleanGeometry(
+            Rectangle(0, 0, 10, 10),
+            [Rectangle(4, 2, 6, 8)]);
+
+        List<JoistExtraSegment> pieces = JoistTakeoffCalculator
+            .ClipExtraJoistsToAreaGeometries([source], [geometry])
+            .Single();
+
+        AssertEqual(2, pieces.Count, "hole should split one extra into two filled pieces");
+        AssertPoint(new SKPoint(0, 5), pieces[0].Start, "left cut piece start");
+        AssertPoint(new SKPoint(4, 5), pieces[0].End, "left cut piece end");
+        AssertPoint(new SKPoint(6, 5), pieces[1].Start, "right cut piece start");
+        AssertPoint(new SKPoint(10, 5), pieces[1].End, "right cut piece end");
+        AssertEqual(2, pieces.Select(piece => piece.Id).Distinct(StringComparer.Ordinal).Count(), "split pieces need unique ids");
+        AssertTrue(pieces.Any(piece => piece.Id == source.Id), "one split piece should retain the source id");
+    }
+
+    public static void AreaCutHoleTangentDoesNotTrimExtraJoist()
+    {
+        JoistExtraSegment source = Extra("tangent-source", 0, 5, 10, 5);
+        var geometry = new AreaBooleanGeometry(
+            Rectangle(0, 0, 10, 10),
+            [[new SKPoint(4, 4), new SKPoint(6, 4), new SKPoint(5, 5)]]);
+
+        JoistExtraSegment retained = JoistTakeoffCalculator
+            .ClipExtraJoistsToAreaGeometries([source], [geometry])
+            .Single()
+            .Single();
+
+        AssertExtra(
+            retained,
+            "tangent-source",
+            new SKPoint(0, 5),
+            new SKPoint(10, 5),
+            "hole tangent");
+    }
+
+    public static void AreaThroughCutDistributesExtraJoistAcrossSegments()
+    {
+        JoistExtraSegment source = Extra("through-cut-source", 0, 5, 10, 5);
+        AreaBooleanGeometry[] geometries =
+        [
+            new AreaBooleanGeometry(Rectangle(0, 0, 4, 10), []),
+            new AreaBooleanGeometry(Rectangle(6, 0, 10, 10), []),
+        ];
+
+        IReadOnlyList<List<JoistExtraSegment>> byArea =
+            JoistTakeoffCalculator.ClipExtraJoistsToAreaGeometries([source], geometries);
+
+        AssertEqual(1, byArea[0].Count, "left area should receive one clipped extra");
+        AssertEqual(1, byArea[1].Count, "right area should receive one clipped extra");
+        AssertPoint(new SKPoint(0, 5), byArea[0][0].Start, "left segment start");
+        AssertPoint(new SKPoint(4, 5), byArea[0][0].End, "left segment end");
+        AssertPoint(new SKPoint(6, 5), byArea[1][0].Start, "right segment start");
+        AssertPoint(new SKPoint(10, 5), byArea[1][0].End, "right segment end");
+        AssertFalse(byArea[0][0].Id == byArea[1][0].Id, "child area pieces need unique ids");
+    }
+
+    public static void AreaCutTrimsTouchedExtraAndPreservesUntouchedExtra()
+    {
+        JoistExtraSegment touched = Extra("touched", 0, 2, 10, 2);
+        JoistExtraSegment untouched = Extra("untouched", 1, 4, 3, 4);
+        JoistExtraSegment removed = Extra("removed", 9, 6, 10, 6);
+        var geometry = new AreaBooleanGeometry(Rectangle(0, 0, 8, 10), []);
+
+        List<JoistExtraSegment> pieces = JoistTakeoffCalculator
+            .ClipExtraJoistsToAreaGeometries([touched, untouched, removed], [geometry])
+            .Single();
+
+        AssertEqual(2, pieces.Count, "fully cut extra should be removed");
+        JoistExtraSegment clippedTouched = pieces.Single(piece => piece.Id == "touched");
+        AssertPoint(new SKPoint(0, 2), clippedTouched.Start, "edge-trimmed extra start");
+        AssertPoint(new SKPoint(8, 2), clippedTouched.End, "edge-trimmed extra end");
+        AssertExtra(
+            pieces.Single(piece => piece.Id == "untouched"),
+            "untouched",
+            new SKPoint(1, 4),
+            new SKPoint(3, 4),
+            "untouched extra");
+    }
+
     public static void ExtraJoistsJoinTotalsButStayInTheirOwnLabelGroup()
     {
         Measurement area = Area(directionDegrees: 0);

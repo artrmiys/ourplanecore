@@ -21,13 +21,22 @@
   `Pages/**/raster/snap.json`. It uses cancellation, reparse/junction refusal,
   timestamp/length/SHA checks, shared raster-writer locking, atomic replace,
   and never deletes project files.
+- Fixed `Cut Area` for persisted Extra Joists. Each finite extra segment is now
+  intersected with every resulting Area fill, so inner holes split it, through
+  cuts distribute clipped pieces to both child segments, edge cuts trim it,
+  and fully removed extras disappear. Split pieces receive unique IDs while
+  one retained piece keeps the original ID for undo/storage continuity.
+- The clipper uses EvenOdd interval classification instead of midpoint ownership
+  or blind intersection pairing. This also protects a joist that only touches
+  a cut/hole vertex from losing an unrelated half.
 - Real read-only analysis found about 189.5 MiB of safe `snap.json` whitespace
   savings in Primrose and about 15.5 MiB in Meadowview. No real job was changed.
 - A copied Meadowview compact smoke processed 13/13 files, saved 16,238,475
   bytes, reported 0 issues, and verified semantic JSON equality before the
   temporary copy was removed.
-- Version advanced to `2.2.4`. Debug build passes with `0 warnings / 0 errors`;
-  the full harness passes `588/588`; Carillon viewport/overlay smoke passes.
+- Version advanced to `2.2.4`. The isolated Debug build passes with
+  `0 warnings / 0 errors`; the full harness passes `592/592`, including four
+  Cut Area / Extra Joist regressions; Carillon viewport/overlay smoke passes.
 - Detailed ownership, safety rules, measurements, and release gate:
   `docs/10-performance-render/F1_VIEWPORT_OVERLAY_PROJECT_STORAGE_2026_07_22.md`.
 

@@ -3,8 +3,9 @@
 ## Outcome
 
 This slice completes the requested F1 shortcut refresh, removes redundant work
-from static-sheet navigation and sheet overlays, and adds a safe Project
-Storage audit/compact surface. The release version is `2.2.4`.
+from static-sheet navigation and sheet overlays, adds a safe Project Storage
+audit/compact surface, and fixes Cut Area clipping for Extra Joists. The
+release version is `2.2.4`.
 
 The permanent executable URL is:
 
@@ -25,6 +26,32 @@ the local release SHA-256 before the release is considered complete.
   normal Draw Line meaning in other contexts.
 - Commands that are not reachable from current input routing are not advertised
   as working shortcuts.
+
+## Cut Area and Extra Joists
+
+The previous Cut Area path assigned each persisted Extra Joist to one result by
+its midpoint and copied the original endpoints unchanged. An extra crossing an
+inner hole could therefore remain drawn through the removed fill, disappear if
+its midpoint was cut, or stay on only one side of a through cut.
+
+The corrected path clips the original finite segment against every resulting
+`AreaBooleanGeometry` before the source Area is changed or replaced:
+
+- an inner hole creates the two filled pieces on either side;
+- a through cut distributes the pieces to both new Area measurements;
+- an edge cut trims the touched endpoint;
+- a fully removed extra produces no persisted piece;
+- one surviving piece keeps the source ID, while additional pieces receive
+  unique IDs so later merge/combine cannot deduplicate them accidentally;
+- interval midpoints are classified with the same Skia EvenOdd fill geometry,
+  so a tangent contact with a hole vertex does not shift intersection parity.
+
+Regular joists still follow their existing contract: they are not persisted as
+segments and are recalculated from each resulting Area geometry. Extra
+endpoints are persisted, so clipping them once fixes viewport drawing, labels,
+totals, takeoff export, and PDF/PlanSwift export together. Existing mixed undo,
+autosave, current JSON, and legacy ProjectFile paths continue to snapshot and
+serialize the resulting list.
 
 ## Static-sheet performance
 
@@ -146,14 +173,16 @@ static-mode disable, and black-vector options.
 ## Verification
 
 - Debug solution build: `0 warnings / 0 errors`.
-- Full C# regression harness: `588/588` passed.
+- Full C# regression harness: `592/592` passed. The added cases cover a hole
+  split, tangent contact, through-cut distribution, edge trimming, untouched
+  ID/endpoints, and full removal.
 - Carillon viewport/overlay stress: PASS.
 - Storage analysis was run read-only against Primrose, Meadowview, and Reeve.
 - A copied Meadowview job compacted 13/13 eligible `snap.json` files, saved
   16,238,475 bytes, reported 0 issues, and passed semantic JSON equality for
   every file. The verified temporary copy was then removed.
-- The installed old process remained untouched during development; release
-  deployment waits for an explicit close/stop because it owns an active job.
+- A user-launched Debug process remained untouched during development; release
+  deployment waits for it to close because it owns the Debug apphost.
 
 ## Ownership
 
@@ -168,6 +197,8 @@ static-mode disable, and black-vector options.
   `Models/ProjectStorageAnalyzer.cs`, and `Models/ProjectStorageCompactor.cs`.
 - Storage UI: `MainWindow.SettingsManager.ProjectStorage.cs`.
 - Shared atomic writer: `Models/IoUtil.cs`.
+- Extra Joist finite clip: `Models/JoistTakeoffCalculator.Extras.cs`.
+- Cut Area distribution: `Controls/PdfViewport.AreaCutTools.cs`.
 - Release automation: `Tools/release/Publish-OurPlanCoreRelease.ps1`.
 
 ## Release gate
