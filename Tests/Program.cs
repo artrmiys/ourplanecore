@@ -138,6 +138,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay mouse drag is wired", TakeoffsTreeRegressionTests.SheetOverlayMouseDragIsWired),
     ("sheet overlay point edit uses pdf snap", TakeoffsTreeRegressionTests.SheetOverlayPointEditUsesPdfSnap),
     ("sheet overlay async load uses fresh page snapshot", TakeoffsTreeRegressionTests.SheetOverlayAsyncLoadUsesFreshPageSnapshot),
+    ("sheet overlay cache and paint policy are bounded", SheetOverlayPerformanceRegressionTests.CacheAndPaintPolicyAreBounded),
     ("sheet overlay reciprocal cleanup is wired", TakeoffsTreeRegressionTests.SheetOverlayReciprocalCleanupIsWired),
     ("sheet overlay auto fit can auto-select overlay", TakeoffsTreeRegressionTests.SheetOverlayAutoFitCanAutoSelectOverlay),
     ("sheet overlay auto fit raster fallback is wired", TakeoffsTreeRegressionTests.SheetOverlayAutoFitRasterFallbackIsWired),

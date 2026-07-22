@@ -3535,20 +3535,20 @@ internal static class TakeoffsTreeRegressionTests
         string shell = ReadRepoFile("MainWindow.xaml.cs");
 
         AssertTrue(
-            method.Contains("SKFilterQuality.None", StringComparison.Ordinal) &&
+            method.Contains("CurrentSheetOverlayFilterQuality()", StringComparison.Ordinal) &&
             policy.Contains("SheetOverlayLowZoomRenderScale = 1.0f", StringComparison.Ordinal) &&
             policy.Contains("SheetOverlayViewportRenderScale = 2.0f", StringComparison.Ordinal) &&
             policy.Contains("SelectSheetOverlayRenderScale", StringComparison.Ordinal) &&
             policy.Contains("SheetOverlayMaxRenderPixels", StringComparison.Ordinal),
-            "sheet overlay underlay should use a cheap 1x overview render, keep a sharp 2x work-zoom render, scale up for zoom, and keep bitmap size bounded without smoothing blur");
-        AssertFalse(
-            method.Contains("SKFilterQuality.Low", StringComparison.Ordinal) ||
-            method.Contains("SKFilterQuality.Medium", StringComparison.Ordinal) ||
-            method.Contains("SKFilterQuality.High", StringComparison.Ordinal),
-            "sheet overlay underlay should not switch to smoothing filters that blur linework or stall page navigation");
+            "sheet overlay underlay should use a bounded scale-aware bitmap and choose sampling from its actual display scale");
         AssertTrue(
-            method.Contains("IsAntialias = false", StringComparison.Ordinal),
-            "bitmap sheet overlays should avoid antialias softening");
+            method.Contains("IsAntialias = false", StringComparison.Ordinal) &&
+            source.Contains("if (_renderNavigationFastFrame || _sheetOverlayBitmapScale <= 0)", StringComparison.Ordinal) &&
+            source.Contains("_sheetOverlayBitmapScale > displayedScale * 1.05f", StringComparison.Ordinal) &&
+            source.Contains("? SKFilterQuality.Medium", StringComparison.Ordinal) &&
+            source.Contains(": SKFilterQuality.None", StringComparison.Ordinal) &&
+            !source.Contains("SKFilterQuality.High", StringComparison.Ordinal),
+            "sheet overlay sampling should stay crisp during navigation and near native scale, then smooth only settled minification without an expensive High filter");
         AssertTrue(
             source.Contains("public bool HasSheetOverlay => _sheetOverlayBitmap != null", StringComparison.Ordinal),
             "viewport smoke tests need to wait until async sheet overlays are actually applied before exercising pan and zoom");

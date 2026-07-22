@@ -19,7 +19,9 @@ public partial class MainWindow
     private const double MinimumBrightSheetOverlayOpacity = 0.82;
     private const double SheetOverlayAlphaBoost = 1.85;
     private const string SheetOverlayTintStyleVersion = "bright-v2";
-    private readonly SheetOverlayBitmapCache _sheetOverlayBitmapCache = new(maxEntries: 8);
+    private readonly SheetOverlayBitmapCache _sheetOverlayBitmapCache = new(
+        maxEntries: 8,
+        maxBytes: ResolveSheetOverlayBitmapCacheBudgetBytes());
     private int _sheetOverlayLoadVersion;
 
     private static readonly IReadOnlyList<(string Label, string Hex)> SheetOverlayColors =
@@ -445,8 +447,8 @@ public partial class MainWindow
         {
             _viewport.ClearSheetOverlay();
             TxtStatus.Text = "Sheet overlay loading...";
+            _ = LoadSheetOverlayAsync(page, version, renderScale);
         }
-        _ = LoadSheetOverlayAsync(page, version, renderScale);
     }
 
     private bool TryApplyCachedSheetOverlay(
@@ -606,6 +608,20 @@ public partial class MainWindow
             return view.Zoom;
 
         return Math.Max(1.0f, view.Zoom);
+    }
+
+    private static long ResolveSheetOverlayBitmapCacheBudgetBytes()
+    {
+        const long fallbackBytes = 192_000_000L;
+        long availableBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        if (availableBytes <= 0)
+            return fallbackBytes;
+
+        double desiredBytes = availableBytes * 0.01;
+        if (double.IsNaN(desiredBytes) || desiredBytes <= 0)
+            return fallbackBytes;
+
+        return Math.Clamp((long)desiredBytes, 96_000_000L, 384_000_000L);
     }
 
     private static (float WidthPt, float HeightPt) ReadSheetOverlaySourceSize(PageInfo page)

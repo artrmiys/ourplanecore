@@ -588,9 +588,11 @@ public sealed partial class PdfViewport
 
         using var paint = new SKPaint
         {
-            // Sheet overlays are alignment references; keep linework crisp.
+            // Keep navigation and near-native linework crisp. Settled minification
+            // uses Medium sampling to suppress stair-stepping without blurring an
+            // overlay that is already at (or below) the displayed resolution.
             IsAntialias = false,
-            FilterQuality = SKFilterQuality.None,
+            FilterQuality = CurrentSheetOverlayFilterQuality(),
         };
 
         float width = _sheetOverlayWidthPt > 0 ? _sheetOverlayWidthPt : _pdfW;
@@ -609,6 +611,17 @@ public sealed partial class PdfViewport
         canvas.Scale(_sheetOverlayScale);
         canvas.DrawBitmap(_sheetOverlayBitmap, new SKRect(0, 0, width, height), paint);
         canvas.Restore();
+    }
+
+    private SKFilterQuality CurrentSheetOverlayFilterQuality()
+    {
+        if (_renderNavigationFastFrame || _sheetOverlayBitmapScale <= 0)
+            return SKFilterQuality.None;
+
+        float displayedScale = Math.Max(0.001f, _zoom * _sheetOverlayScale);
+        return _sheetOverlayBitmapScale > displayedScale * 1.05f
+            ? SKFilterQuality.Medium
+            : SKFilterQuality.None;
     }
 
     private static SKRect IntersectRects(SKRect a, SKRect b)

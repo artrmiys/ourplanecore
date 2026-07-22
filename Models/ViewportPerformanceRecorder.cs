@@ -105,6 +105,7 @@ public static class ViewportPerformanceRecorder
         long elapsedMs,
         long pageBitmapMs,
         long overlayMs,
+        long sheetOverlayPaintMs,
         long measurementMs,
         long markupMs,
         long inProgressMs,
@@ -128,6 +129,7 @@ public static class ViewportPerformanceRecorder
                 ElapsedMs = elapsedMs,
                 PageBitmapMs = pageBitmapMs,
                 OverlayMs = overlayMs,
+                SheetOverlayPaintMs = sheetOverlayPaintMs,
                 MeasurementMs = measurementMs,
                 MarkupMs = markupMs,
                 InProgressMs = inProgressMs,
@@ -244,6 +246,7 @@ public static class ViewportPerformanceRecorder
             MaxRenderMs = renders.Count == 0 ? 0 : renders.Max(sample => sample.ElapsedMs),
             MaxSlowFrameMs = slowFrames.Count == 0 ? 0 : slowFrames.Max(sample => sample.ElapsedMs),
             MaxPageBitmapPaintMs = slowFrames.Count == 0 ? 0 : slowFrames.Max(sample => sample.PageBitmapMs),
+            MaxSheetOverlayPaintMs = slowFrames.Count == 0 ? 0 : slowFrames.Max(sample => sample.SheetOverlayPaintMs),
             RepaintRequestCount = run.RepaintRequestCount,
             RepaintCoalescedCount = run.RepaintCoalescedCount,
             RepaintCoalesceRate = run.RepaintRequestCount == 0
@@ -333,6 +336,7 @@ public sealed class ViewportPerformanceSummary
     public long MaxRenderMs { get; set; }
     public long MaxSlowFrameMs { get; set; }
     public long MaxPageBitmapPaintMs { get; set; }
+    public long MaxSheetOverlayPaintMs { get; set; }
     public int RepaintRequestCount { get; set; }
     public int RepaintCoalescedCount { get; set; }
     public double RepaintCoalesceRate { get; set; }
@@ -384,6 +388,7 @@ public sealed class ViewportSlowFrameSample
     public long ElapsedMs { get; set; }
     public long PageBitmapMs { get; set; }
     public long OverlayMs { get; set; }
+    public long SheetOverlayPaintMs { get; set; }
     public long MeasurementMs { get; set; }
     public long MarkupMs { get; set; }
     public long InProgressMs { get; set; }

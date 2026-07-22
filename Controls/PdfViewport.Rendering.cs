@@ -40,6 +40,7 @@ public sealed partial class PdfViewport
 
         long pageBitmapMs = 0;
         long overlayMs = 0;
+        long sheetOverlayPaintMs = 0;
         long measurementMs = 0;
         long markupMs = 0;
         long inProgressMs = 0;
@@ -122,7 +123,11 @@ public sealed partial class PdfViewport
                 canvas.Concat(ref measMtx);
                 sectionStart = frameWatch.ElapsedMilliseconds;
                 if (ViewportRenderPolicy.ShouldDrawSheetOverlay(_renderNavigationFastFrame, IsSheetOverlayPointEditing))
+                {
+                    long sheetOverlayStart = frameWatch.ElapsedMilliseconds;
                     DrawSheetOverlay(canvas, visiblePdf);
+                    sheetOverlayPaintMs += frameWatch.ElapsedMilliseconds - sheetOverlayStart;
+                }
                 DrawSheetOverlayEditGuides(canvas);
                 DrawCursorGuide(canvas, visiblePdf);
                 DrawTransformOverlay(canvas);
@@ -167,6 +172,7 @@ public sealed partial class PdfViewport
                 visibleMeasurementCount,
                 pageBitmapMs,
                 overlayMs,
+                sheetOverlayPaintMs,
                 measurementMs,
                 markupMs,
                 inProgressMs,
@@ -182,6 +188,7 @@ public sealed partial class PdfViewport
         int visibleMeasurementCount,
         long pageBitmapMs,
         long overlayMs,
+        long sheetOverlayPaintMs,
         long measurementMs,
         long markupMs,
         long inProgressMs,
@@ -202,6 +209,7 @@ public sealed partial class PdfViewport
             elapsedMs,
             pageBitmapMs,
             overlayMs,
+            sheetOverlayPaintMs,
             measurementMs,
             markupMs,
             inProgressMs,
@@ -217,7 +225,8 @@ public sealed partial class PdfViewport
             $"Viewport slow frame {elapsedMs}ms; zoom={_zoom:0.###}; fast={_renderNavigationFastFrame}; " +
             $"page='{_pageFolder}'; activeMeasurements={activeMeasurementCount}; visibleMeasurements={visibleMeasurementCount}; " +
             $"renderedScale={_renderedScale:0.###}; overlay={(_sheetOverlayBitmap != null)}; " +
-            $"timings=page:{pageBitmapMs} overlay:{overlayMs} measurements:{measurementMs} markups:{markupMs} " +
+            $"timings=page:{pageBitmapMs} overlay:{overlayMs} sheetOverlay:{sheetOverlayPaintMs} " +
+            $"measurements:{measurementMs} markups:{markupMs} " +
             $"inProgress:{inProgressMs} labels:{labelMs} chrome:{screenOverlayMs}ms");
     }
 
