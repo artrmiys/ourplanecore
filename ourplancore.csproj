@@ -12,9 +12,9 @@
     <Product>OurPlanCore</Product>
     <Company>OurPlanCore</Company>
     <Description>OurPlanCore construction takeoff application</Description>
-    <Version>2.2.3</Version>
-    <AssemblyVersion>2.2.3.0</AssemblyVersion>
-    <FileVersion>2.2.3.0</FileVersion>
+    <Version>2.2.4</Version>
+    <AssemblyVersion>2.2.4.0</AssemblyVersion>
+    <FileVersion>2.2.4.0</FileVersion>
     <AssemblyName>ourplancore</AssemblyName>
     <ApplicationIcon>Assets\ourplancore.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -66,8 +66,10 @@
   <ItemGroup>
     <Compile Remove="Tests\**\*.cs" />
     <Compile Remove="Tools\PlanSwiftImportTool\**\*.cs" />
+    <Compile Remove="cache\**\*.cs" />
     <None Remove="Tests\**\*" />
     <None Remove="Tools\PlanSwiftImportTool\**\*" />
+    <None Remove="cache\**\*" />
   </ItemGroup>
 
 </Project>

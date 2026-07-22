@@ -52,24 +52,7 @@ public sealed partial class PdfViewport
     // budget — 300 DPI on an E-size sheet would otherwise allocate ~0.5 GB.
     private int SafeStaticRasterTargetDpi()
     {
-        int chosen = AppSettingsStore.NormalizeStaticPageRenderDpi(ViewportRenderPolicy.StaticRasterTargetDpi);
-        if (_pdfW <= 0 || _pdfH <= 0)
-            return chosen;
-
-        float pagePoints = _pdfW * _pdfH;
-        if (pagePoints <= 0)
-            return chosen;
-
-        float budgetScale = MathF.Sqrt(ViewportRenderPolicy.ResponsiveMaxRenderPixels / pagePoints);
-        int budgetDpi = RasterSheetCacheService.RenderScaleToDpi(budgetScale);
-        if (budgetDpi <= 0)
-            return chosen;
-
-        // Honor the pixel budget even when it falls below the UI minimum (72): on a
-        // huge sheet clamping back up to 72 would rebuild the very ~0.5 GB bitmap the
-        // budget exists to prevent. Returning the true budget DPI instead makes the
-        // caller keep the existing raster (its DPI already meets the budget).
-        return Math.Max(1, Math.Min(chosen, budgetDpi));
+        return StaticRasterPrefetchPolicy.ResolveEffectiveTargetDpi(_pdfW, _pdfH);
     }
 
     private async Task BuildStaticRasterDpiForCurrentPageAsync(
@@ -181,7 +164,7 @@ public sealed partial class PdfViewport
             return;
         }
 
-        int targetDpi = AppSettingsStore.NormalizeStaticPageRenderDpi(ViewportRenderPolicy.StaticRasterTargetDpi);
+        int targetDpi = SafeStaticRasterTargetDpi();
         PageInfo page = new()
         {
             Name = string.IsNullOrWhiteSpace(pageFolder) ? $"Page {pageIndex + 1}" : Path.GetFileName(pageFolder),

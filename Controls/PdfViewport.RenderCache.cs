@@ -45,9 +45,9 @@ public sealed partial class PdfViewport
     private static readonly HashSet<string> RasterSheetWorkZoomWarmupInFlight = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim RasterSheetWorkZoomWarmupSemaphore = new(1, 1);
 
-    // Upper caps are intentionally generous: budgets stay ratio-bound to available
-    // RAM (so 8-16 GB machines are unaffected), but a big-RAM workstation can keep
-    // far more sheets/tiles hot instead of re-rendering them. Ratios unchanged.
+    // Live PDF caches stay adaptive. The full-sheet raster cache has a lower hard
+    // ceiling because a single E-size bitmap can occupy about 100 MB; keeping dozens
+    // decoded made large jobs fast once but allowed multi-GB idle working sets.
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
         ResolveViewportRamBudget(192_000_000L, 2_560_000_000L, 0.020);
 
@@ -55,7 +55,7 @@ public sealed partial class PdfViewport
         ResolveViewportRamBudget(192_000_000L, 1_792_000_000L, 0.018);
 
     private static long ResolveRasterSheetBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(256_000_000L, 2_560_000_000L, 0.025);
+        ResolveViewportRamBudget(256_000_000L, 768_000_000L, 0.012);
 
     private static long ResolveLayerBitmapCacheBudgetBytes() =>
         ResolveViewportRamBudget(256_000_000L, 2_560_000_000L, 0.030);

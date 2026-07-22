@@ -56,6 +56,7 @@ public partial class MainWindow
         "Sort A/S",
         "Sort D/Sec/WT",
         "Auto Rename / Scale",
+        "Project Storage",
         "Defaults",
     ];
 
@@ -148,6 +149,7 @@ public partial class MainWindow
                 "Sort A/S" => BuildArchStructPanel(),
                 "Sort D/Sec/WT" => BuildSuffixSortPanel(),
                 "Auto Rename / Scale" => BuildRulesPanel(),
+                "Project Storage" => BuildProjectStoragePanel(),
                 _ => BuildDefaultsPanel(),
             };
             _settingsPanels[category] = panel;
@@ -166,6 +168,7 @@ public partial class MainWindow
             case "Sort A/S": BindArchStruct(); break;
             case "Sort D/Sec/WT": BindSuffixSort(); break;
             case "Auto Rename / Scale": BindSheetMetadataSettings(); break;
+            case "Project Storage": BindProjectStorageSettings(); break;
             case "Defaults": SyncDefaultsZoomControl(); break;
         }
     }

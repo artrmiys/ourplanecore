@@ -178,7 +178,16 @@ $jobState = $null
 $settingsState = $null
 $proc = $null
 $reportPathWasProvided = -not [string]::IsNullOrWhiteSpace($ReportPath)
-$reportPath = if ($reportPathWasProvided) { $ReportPath } else { Join-Path $env:TEMP ("onc_viewport_page_stress_report_" + [guid]::NewGuid().ToString("N") + ".json") }
+$reportPath = if ($reportPathWasProvided) {
+    $reportCandidate = if ([System.IO.Path]::IsPathRooted($ReportPath)) {
+        $ReportPath
+    } else {
+        Join-Path $ProjectRoot $ReportPath
+    }
+    [System.IO.Path]::GetFullPath($reportCandidate)
+} else {
+    Join-Path $env:TEMP ("onc_viewport_page_stress_report_" + [guid]::NewGuid().ToString("N") + ".json")
+}
 $oldSmoke = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_SMOKE
 $oldReport = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_REPORT
 $oldTimeout = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS

@@ -19,6 +19,12 @@ if (args.Length > 0 && args[0] == "sheetmetadata-golden")
 if (args.Length > 0 && args[0] == "sheetmetadata-install-global")
     return SheetMetadataConfigHarness.InstallGlobalPrecise();
 
+if (args.Length > 0 && args[0] == "storage-analysis")
+    return ProjectStorageHarness.Run(args);
+
+if (args.Length > 0 && args[0] == "storage-compact-smoke")
+    return ProjectStorageHarness.RunCompactSmoke(args);
+
 string testGlobalRoot = Path.Combine(Path.GetTempPath(), "onc_tests_global", Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
 
@@ -139,6 +145,15 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay point edit uses pdf snap", TakeoffsTreeRegressionTests.SheetOverlayPointEditUsesPdfSnap),
     ("sheet overlay async load uses fresh page snapshot", TakeoffsTreeRegressionTests.SheetOverlayAsyncLoadUsesFreshPageSnapshot),
     ("sheet overlay cache and paint policy are bounded", SheetOverlayPerformanceRegressionTests.CacheAndPaintPolicyAreBounded),
+    ("project storage analysis classifies references duplicates raster and recovery", ProjectStorageAnalyzerTests.AnalysisClassifiesReferencesDuplicatesRasterAndRecovery),
+    ("project storage analysis is read only for malformed metadata and snap json", ProjectStorageAnalyzerTests.AnalysisIsReadOnlyForMalformedMetadataAndSnapJson),
+    ("project storage analysis protects every referenced exact duplicate", ProjectStorageAnalyzerTests.AnalysisProtectsEveryReferencedExactDuplicate),
+    ("project storage analysis handles valid non object reference metadata", ProjectStorageAnalyzerTests.AnalysisHandlesValidNonObjectReferenceMetadata),
+    ("project storage analysis reports external page dependencies", ProjectStorageAnalyzerTests.AnalysisReportsExternalPageDependencies),
+    ("project storage compact preview is read only and targets raster snap json", ProjectStorageCompactorTests.PreviewIsReadOnlyAndTargetsOnlyRasterSnapJson),
+    ("project storage compact preserves json semantics and reports savings", ProjectStorageCompactorTests.CompactPreservesJsonSemanticsAndReportsSavings),
+    ("project storage compact skips invalid or changed json", ProjectStorageCompactorTests.InvalidOrChangedJsonIsSkippedWithoutMutation),
+    ("project storage compact guards cancellation path races and reparse points", ProjectStorageCompactorTests.CancellationAndPathRaceGuardsAreWired),
     ("sheet overlay reciprocal cleanup is wired", TakeoffsTreeRegressionTests.SheetOverlayReciprocalCleanupIsWired),
     ("sheet overlay auto fit can auto-select overlay", TakeoffsTreeRegressionTests.SheetOverlayAutoFitCanAutoSelectOverlay),
     ("sheet overlay auto fit raster fallback is wired", TakeoffsTreeRegressionTests.SheetOverlayAutoFitRasterFallbackIsWired),
@@ -366,6 +381,7 @@ var tests = new List<(string Name, Action Run)>
     ("raster snap strict black lines only is wired", TakeoffsTreeRegressionTests.RasterSnapStrictBlackLinesOnlyIsWired),
     ("raster sheet render skips delayed pdf zoom refresh", TakeoffsTreeRegressionTests.RasterSheetRenderSkipsDelayedPdfZoomRefresh),
     ("static raster mode suppresses live re-renders", TakeoffsTreeRegressionTests.StaticRasterModeSuppressesLiveReRenders),
+    ("static raster prefetch accepts only a safe active raster", StaticRasterPrefetchPolicyTests.ActiveNearTargetRasterSuppressesOnlySafePrefetch),
     ("pdf sheet metadata parses dotted sheet numbers for suffix rules", TakeoffsTreeRegressionTests.PdfSheetMetadataParsesDottedSheetNumbersForSuffixRules),
     ("pdf raster edge snap preview is wired", TakeoffsTreeRegressionTests.PdfRasterEdgeSnapPreviewIsWired),
     ("pages tree selected sheet scale menu is wired", TakeoffsTreeRegressionTests.PagesTreeSelectedSheetScaleMenuIsWired),

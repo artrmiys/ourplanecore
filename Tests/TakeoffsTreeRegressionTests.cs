@@ -55,6 +55,7 @@ internal static class TakeoffsTreeRegressionTests
         string queuePreviewPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePreviewPrefetchAt(");
         string queueReadableBasePrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueReadableBasePrefetchAt(");
         string queueCleanRenderPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueCleanRenderPrefetchAt(");
+        string staticRasterPrefetchPolicy = ReadRepoFile("Models/StaticRasterPrefetchPolicy.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
 
         AssertFalse(
@@ -203,6 +204,8 @@ internal static class TakeoffsTreeRegressionTests
             queuePreviewPrefetchAtMethod.Contains("float renderScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("bool includeRasterSheetWarmup = true", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("bool includeRasterSheetRefresh = true", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page)", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("if (!hasReadyStaticRaster)", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchPagePreview(page.PdfPath, page.PdfPage, renderScale)", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("if (includeRasterSheetWarmup)", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetBitmap", StringComparison.Ordinal) &&
@@ -212,12 +215,19 @@ internal static class TakeoffsTreeRegressionTests
             queueReadableBasePrefetchAtMethod.Contains("ViewportRenderPolicy.ResponsiveMinRenderScale", StringComparison.Ordinal) &&
             queueReadableBasePrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
             queueReadableBasePrefetchAtMethod.Contains("preferCachedRenderImmediately: true", StringComparison.Ordinal) &&
+            queueReadableBasePrefetchAtMethod.Contains("StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page)", StringComparison.Ordinal) &&
             policy.Contains("NearbyPageReadableBasePrefetchRadius = HasSpareRenderCapacity ? 2 : 1", StringComparison.Ordinal) &&
             policy.Contains("NearbyPageDirectionalPreviewPrefetchRadius = HasSpareRenderCapacity ? 6 : 3", StringComparison.Ordinal) &&
             policy.Contains("NearbyPageDirectionalReadableBasePrefetchRadius = HasSpareRenderCapacity ? 5 : 3", StringComparison.Ordinal) &&
             policy.Contains("NearbyPageCleanRenderPrefetchRadius = HasSpareRenderCapacity ? 1 : 0", StringComparison.Ordinal) &&
-            queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
-            "nearby page prefetch should warm cheap previews, cached-first readable base bitmaps, and extra sheets in the user's paging direction; capable machines also pre-render the immediate neighbour sharp via the prefetch pool");
+            queueCleanRenderPrefetchAtMethod.Contains("StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page)", StringComparison.Ordinal) &&
+            queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("RasterSheetCacheService.UseAsPageOpenRaster(source)", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("PdfLayerRenderService.PdfLayersEnabled", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("HasExistingSourceImageOverview", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("currentDpi >= targetDpi * 0.95f", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("RasterSheetCacheService.HasReadyReadableRaster", StringComparison.Ordinal),
+            "nearby page prefetch should warm live PDF previews only when a page-open static raster is unavailable, while still warming the saved bitmap and preserving fallback rendering");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()
@@ -2190,6 +2200,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("RasterSheetBitmapCache", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetBitmapCache = new(maxEntries: 128", StringComparison.Ordinal) &&
             renderCache.Contains("ResolveRasterSheetBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
+            renderCache.Contains("ResolveViewportRamBudget(256_000_000L, 768_000_000L, 0.012)", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
             renderCache.Contains("if (!RasterSheetCacheService.IsSourceImageRaster(source))", StringComparison.Ordinal) &&
@@ -2707,6 +2718,7 @@ internal static class TakeoffsTreeRegressionTests
         string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        string staticRasterPrefetchPolicy = ReadRepoFile("Models/StaticRasterPrefetchPolicy.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string rasterSheetDpiUpgrade = ReadRepoFile("Controls/PdfViewport.RasterSheetDpiUpgrade.cs");
@@ -2773,7 +2785,9 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("private void QueueStaticRasterDpiApplyIfNeeded()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("private int SafeStaticRasterTargetDpi()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("currentDpi >= targetDpi", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.ResponsiveMaxRenderPixels", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("StaticRasterPrefetchPolicy.ResolveEffectiveTargetDpi(_pdfW, _pdfH)", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("ViewportRenderPolicy.ResponsiveMaxRenderPixels", StringComparison.Ordinal) &&
+            staticRasterPrefetchPolicy.Contains("ResolveEffectiveTargetDpi(source.WidthPt, source.HeightPt)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.BuildAndEnable(buildPage, targetScale)", StringComparison.Ordinal) &&
             layers.Contains("QueueStaticRasterDpiApplyIfNeeded()", StringComparison.Ordinal) &&
             pageApi.Contains("buildMissingDpis: !ViewportRenderPolicy.StaticRasterModeEnabled", StringComparison.Ordinal),
@@ -2799,6 +2813,7 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             rasterSheetDpiUpgrade.Contains("private void QueueStaticRasterLazyBuildIfNeeded(", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("rasterSheet?.Enabled == true", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("int targetDpi = SafeStaticRasterTargetDpi();", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.TrySetUseAsPageOpenRaster(enabledPage, true", StringComparison.Ordinal) &&
             pageApi.Contains("QueueStaticRasterLazyBuildIfNeeded(pdfPath, pageIndex, pageFolder, rasterSheet)", StringComparison.Ordinal),
             "static mode must lazily build and pin a raster for pages that opened without one, so raster-less pages stop re-rendering on zoom");
@@ -3971,7 +3986,9 @@ internal static class TakeoffsTreeRegressionTests
             script.Contains("$resolvedExe = if ([string]::IsNullOrWhiteSpace($ExePath))", StringComparison.Ordinal) &&
             script.Contains("if (-not [string]::IsNullOrWhiteSpace($resolvedExe))", StringComparison.Ordinal) &&
             script.Contains("Start-Process -FilePath $resolvedExe", StringComparison.Ordinal) &&
-            script.Contains("-WorkingDirectory (Split-Path -Parent $resolvedExe)", StringComparison.Ordinal),
+            script.Contains("-WorkingDirectory (Split-Path -Parent $resolvedExe)", StringComparison.Ordinal) &&
+            script.Contains("[System.IO.Path]::IsPathRooted($ReportPath)", StringComparison.Ordinal) &&
+            script.Contains("Join-Path $ProjectRoot $ReportPath", StringComparison.Ordinal),
             "viewport stress smoke should be able to launch a packaged executable directly from its own working directory");
         AssertTrue(
             script.Contains("[string]$SettingsPath = \"\"", StringComparison.Ordinal) &&

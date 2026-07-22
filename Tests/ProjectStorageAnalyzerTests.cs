@@ -73,7 +73,7 @@ internal static class ProjectStorageAnalyzerTests
             AssertCategory(analysis, metadataOnly, ProjectStorageCategory.Canonical);
             AssertCategory(analysis, snapshotOnly, ProjectStorageCategory.Canonical);
             AssertCategory(analysis, recoveryMetadata, ProjectStorageCategory.Canonical);
-            AssertCategory(analysis, orphan, ProjectStorageCategory.OrphanSource);
+            AssertCategory(analysis, orphan, ProjectStorageCategory.UnreferencedPageSource);
             AssertCategory(
                 analysis,
                 Path.Combine(raster, "working.webp"),
@@ -121,6 +121,15 @@ internal static class ProjectStorageAnalyzerTests
             AssertTrue(snap.CompactBytes < snap.CurrentBytes, "pretty snap.json should have compact potential");
             AssertEqual(snap.PotentialSavingsBytes, analysis.PotentialSnapJsonSavingsBytes, "total snap savings");
             AssertEqual(0, analysis.Warnings.Count, "valid fixture warnings");
+            AssertTrue(analysis.ReferenceScanComplete, "valid fixture reference scan");
+            AssertEqual(
+                analysis.Files.Count,
+                analysis.Categories.Sum(category => category.FileCount),
+                "category counts should include every file once");
+            AssertEqual(
+                analysis.Files.Count,
+                analysis.Files.Select(file => file.FullPath).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                "file entries should have unique paths");
         });
     }
 
@@ -149,13 +158,106 @@ internal static class ProjectStorageAnalyzerTests
                 AssertEqual(expected.Content, actual.Content, $"preserve content for {path}");
             }
 
-            AssertCategory(analysis, source, ProjectStorageCategory.OrphanSource);
+            AssertCategory(analysis, source, ProjectStorageCategory.SourceNeedsReview);
             AssertCategory(analysis, sourceJson, ProjectStorageCategory.Canonical);
             AssertCategory(analysis, snapJson, ProjectStorageCategory.RebuildableRaster);
             ProjectStorageSnapJsonReport snap = AssertSingle(analysis.SnapJsonReports, "malformed snap report");
             AssertFalse(snap.IsValidJson, "malformed snap should be reported, not rewritten");
             AssertEqual(0L, snap.PotentialSavingsBytes, "malformed snap savings");
             AssertTrue(analysis.Warnings.Count >= 2, "malformed metadata and snap warnings");
+            AssertFalse(analysis.ReferenceScanComplete, "malformed metadata makes source findings incomplete");
+            AssertEqual(0L, analysis.PotentialDuplicateSavingsBytes, "incomplete references disable duplicate savings");
+        });
+    }
+
+    public static void AnalysisProtectsEveryReferencedExactDuplicate()
+    {
+        WithTempJob(root =>
+        {
+            string sources = Directory.CreateDirectory(Path.Combine(root, "sources")).FullName;
+            string pages = Directory.CreateDirectory(Path.Combine(root, "Pages")).FullName;
+            string first = WriteText(Path.Combine(sources, "first.pdf"), "identical-source");
+            string second = WriteText(Path.Combine(sources, "second.pdf"), "identical-source");
+
+            string currentPage = Directory.CreateDirectory(Path.Combine(pages, "A101")).FullName;
+            WriteJson(Path.Combine(currentPage, "source.json"), new
+            {
+                pdf = Path.GetRelativePath(currentPage, first),
+            });
+
+            string snapshotRoot = Directory.CreateDirectory(
+                Path.Combine(root, ".snapshots", "20260722_130000_manual")).FullName;
+            string snapshotPage = Directory.CreateDirectory(
+                Path.Combine(snapshotRoot, "Pages", "A102")).FullName;
+            string logicalPage = Path.Combine(pages, "A102");
+            WriteJson(Path.Combine(snapshotPage, "source.json"), new
+            {
+                pdf = Path.GetRelativePath(logicalPage, second),
+            });
+
+            ProjectStorageAnalysis protectedAnalysis = ProjectStorageAnalyzer.Analyze(root);
+            AssertTrue(protectedAnalysis.ReferenceScanComplete, "both duplicate references should resolve");
+            AssertEqual(0, protectedAnalysis.DuplicateGroups.Count, "referenced duplicates are not savings");
+            AssertEqual(0L, protectedAnalysis.PotentialDuplicateSavingsBytes, "referenced duplicate bytes are protected");
+            AssertCategory(protectedAnalysis, first, ProjectStorageCategory.Canonical);
+            AssertCategory(protectedAnalysis, second, ProjectStorageCategory.Canonical);
+
+            string spare = WriteText(Path.Combine(sources, "spare.pdf"), "identical-source");
+            ProjectStorageAnalysis withSpare = ProjectStorageAnalyzer.Analyze(root);
+            ProjectStorageDuplicateGroup group = AssertSingle(withSpare.DuplicateGroups, "unreferenced duplicate group");
+            AssertEqual(new FileInfo(spare).Length, group.PotentialSavingsBytes, "only spare copy is a candidate");
+            AssertTrue(
+                group.DuplicatePaths.Any(path => EndsWithPath(path, Path.Combine("sources", "spare.pdf"))),
+                "only unreferenced spare should be listed");
+            AssertCategory(withSpare, spare, ProjectStorageCategory.ExactDuplicateSource);
+        });
+    }
+
+    public static void AnalysisHandlesValidNonObjectReferenceMetadata()
+    {
+        WithTempJob(root =>
+        {
+            string source = WriteText(Path.Combine(root, "sources", "candidate.pdf"), "source");
+            string page = Directory.CreateDirectory(Path.Combine(root, "Pages", "A201")).FullName;
+            WriteText(Path.Combine(page, "source.json"), "[]");
+
+            ProjectStorageAnalysis analysis = ProjectStorageAnalyzer.Analyze(root);
+
+            AssertFalse(analysis.ReferenceScanComplete, "array metadata should require review, not crash");
+            AssertCategory(analysis, source, ProjectStorageCategory.SourceNeedsReview);
+            AssertTrue(
+                analysis.Warnings.Any(warning => warning.Contains("Expected a JSON object", StringComparison.Ordinal)),
+                "wrong-shape metadata warning");
+        });
+    }
+
+    public static void AnalysisReportsExternalPageDependencies()
+    {
+        WithTempJob(root =>
+        {
+            string external = root + ".external.pdf";
+            try
+            {
+                WriteText(external, "external-source");
+                string page = Directory.CreateDirectory(Path.Combine(root, "Pages", "A301")).FullName;
+                WriteJson(Path.Combine(page, "source.json"), new { pdf = external });
+
+                ProjectStorageAnalysis analysis = ProjectStorageAnalyzer.Analyze(root);
+
+                AssertTrue(analysis.ReferenceScanComplete, "an existing external target is readable metadata");
+                AssertEqual(1, analysis.ExternalReferenceCount, "external dependency count");
+                AssertTrue(
+                    analysis.References.Any(reference =>
+                        reference.TargetExists && !reference.TargetsJob && SamePath(reference.ResolvedTargetPath, external)),
+                    "external dependency reference");
+                AssertTrue(
+                    analysis.Warnings.Any(warning => warning.Contains("non-portable", StringComparison.OrdinalIgnoreCase)),
+                    "external dependency portability warning");
+            }
+            finally
+            {
+                try { File.Delete(external); } catch { }
+            }
         });
     }
 

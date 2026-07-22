@@ -903,11 +903,15 @@ public partial class MainWindow
             return;
 
         PageInfo page = pages[index];
-        PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage, renderScale);
+        bool hasReadyStaticRaster = StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page);
+        if (!hasReadyStaticRaster)
+            PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage, renderScale);
+
         if (includeRasterSheetWarmup)
         {
             PdfViewport.PrefetchRasterSheetBitmap(page);
-            PdfViewport.PrefetchRasterSheetWorkZoomBitmaps(page);
+            if (!hasReadyStaticRaster)
+                PdfViewport.PrefetchRasterSheetWorkZoomBitmaps(page);
         }
 
         if (includeRasterSheetRefresh)
@@ -920,6 +924,9 @@ public partial class MainWindow
             return;
 
         PageInfo page = pages[index];
+        if (StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page))
+            return;
+
         PdfViewport.PrefetchPagePreview(
             page.PdfPath,
             page.PdfPage,
@@ -933,6 +940,9 @@ public partial class MainWindow
             return;
 
         PageInfo page = pages[index];
+        if (StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page))
+            return;
+
         PdfViewport.PrefetchCleanLayerRender(
             page.PdfPath,
             page.PdfPage,

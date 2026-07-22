@@ -8,7 +8,8 @@ public enum ProjectStorageCategory
     Canonical,
     RebuildableRaster,
     ExactDuplicateSource,
-    OrphanSource,
+    UnreferencedPageSource,
+    SourceNeedsReview,
     RecoveryHistory,
     Other,
 }
@@ -27,7 +28,8 @@ public sealed record ProjectStorageReference(
     string ResolvedTargetPath,
     ProjectStorageReferenceKind Kind,
     bool TargetExists,
-    bool TargetsJobSource);
+    bool TargetsJobSource,
+    bool TargetsJob);
 
 public sealed record ProjectStorageFileEntry(
     string FullPath,
@@ -73,6 +75,8 @@ public sealed class ProjectStorageAnalysis
 
     public required IReadOnlyList<string> Warnings { get; init; }
 
+    public required bool ReferenceScanComplete { get; init; }
+
     public long TotalBytes => Files.Sum(file => file.Length);
 
     public long PotentialDuplicateSavingsBytes =>
@@ -80,6 +84,9 @@ public sealed class ProjectStorageAnalysis
 
     public long PotentialSnapJsonSavingsBytes =>
         SnapJsonReports.Sum(report => report.PotentialSavingsBytes);
+
+    public int ExternalReferenceCount => References.Count(reference =>
+        reference.TargetExists && !reference.TargetsJob);
 
     public ProjectStorageCategorySummary Category(ProjectStorageCategory category) =>
         Categories.FirstOrDefault(item => item.Category == category) ??

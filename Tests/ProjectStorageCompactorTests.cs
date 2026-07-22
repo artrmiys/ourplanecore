@@ -95,7 +95,56 @@ internal static class ProjectStorageCompactorTests
                 changedFile.Status,
                 "stale preview status");
             AssertEqual(replacement, File.ReadAllText(changed), "changed JSON must not be overwritten");
+
+            string sameShape = RasterSnapPath(root, "SameShapeChanged");
+            string original = PrettyJson();
+            WriteText(sameShape, original);
+            ProjectStorageCompactionPlan sameShapePlan = ProjectStorageCompactor.BuildPlan(root);
+            ProjectStorageCompactionCandidate sameShapeCandidate = sameShapePlan.Candidates.Single(candidate =>
+                SamePath(candidate.FullPath, sameShape));
+            string sameLengthReplacement = original.Replace("\"enabled\": true", "\"enabled\": null", StringComparison.Ordinal);
+            AssertEqual(original.Length, sameLengthReplacement.Length, "same-shape test fixture length");
+            WriteText(sameShape, sameLengthReplacement);
+            File.SetLastWriteTimeUtc(sameShape, new DateTime(sameShapeCandidate.LastWriteUtcTicks, DateTimeKind.Utc));
+
+            ProjectStorageCompactionResult sameShapeResult = ProjectStorageCompactor.Execute(sameShapePlan);
+            ProjectStorageCompactionFileResult sameShapeFile = sameShapeResult.Files.Single(file =>
+                EndsWithPath(file.RelativePath, Path.Combine("SameShapeChanged", "raster", "snap.json")));
+            AssertEqual(
+                ProjectStorageCompactionStatus.SkippedChangedSincePreview,
+                sameShapeFile.Status,
+                "same-length and same-timestamp content change status");
+            AssertEqual(
+                sameLengthReplacement,
+                File.ReadAllText(sameShape),
+                "hash mismatch must preserve same-length changed JSON");
         });
+    }
+
+    public static void CancellationAndPathRaceGuardsAreWired()
+    {
+        WithTempJob(root =>
+        {
+            WriteText(RasterSnapPath(root, "Cancel"), PrettyJson());
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            AssertThrows<OperationCanceledException>(
+                () => ProjectStorageCompactor.BuildPlan(root, cancellation.Token),
+                "canceled preview should stop before parsing project files");
+        });
+
+        string repoRoot = RepoRoot();
+        string compactor = File.ReadAllText(Path.Combine(repoRoot, "Models", "ProjectStorageCompactor.cs"));
+        string ioUtil = File.ReadAllText(Path.Combine(repoRoot, "Models", "IoUtil.cs"));
+        string raster = File.ReadAllText(Path.Combine(repoRoot, "Models", "RasterSheetCacheService.cs"));
+        AssertTrue(
+            compactor.Contains("IsSafePhysicalSnapPath", StringComparison.Ordinal) &&
+            compactor.Contains("FileAttributes.ReparsePoint", StringComparison.Ordinal) &&
+            compactor.Contains("HashStream(input, cancellationToken)", StringComparison.Ordinal) &&
+            compactor.Contains("IoUtil.WriteStreamAtomic", StringComparison.Ordinal) &&
+            ioUtil.Contains("lock (AtomicWriteGate(path))", StringComparison.Ordinal) &&
+            raster.Contains("IoUtil.WriteAllTextAtomic", StringComparison.Ordinal),
+            "safe compact and raster writer must share path locking with SHA and reparse guards");
     }
 
     private static string PrettyJson() =>
@@ -175,6 +224,19 @@ internal static class ProjectStorageCompactorTests
                 suffix.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar),
                 StringComparison.OrdinalIgnoreCase);
 
+    private static string RepoRoot()
+    {
+        DirectoryInfo? current = new(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "ourplancore.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not find ourplancore repo root.");
+    }
+
     private static void AssertTrue(bool condition, string message)
     {
         if (!condition)
@@ -182,6 +244,21 @@ internal static class ProjectStorageCompactorTests
     }
 
     private static void AssertFalse(bool condition, string message) => AssertTrue(!condition, message);
+
+    private static void AssertThrows<TException>(Action action, string message)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(message);
+    }
 
     private static void AssertEqual<T>(T expected, T actual, string message)
     {

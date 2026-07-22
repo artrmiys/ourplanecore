@@ -1657,11 +1657,9 @@ public static class RasterSheetCacheService
                 .ToList(),
         };
 
-        string tempPath = snapPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        JobWriteAccess.Demand(tempPath, "write raster snap index");
-        File.WriteAllText(tempPath, JsonSerializer.Serialize(file, OurPlanCoreJobStore.JsonOptions));
-        JobWriteAccess.Demand(snapPath, "publish raster snap index");
-        File.Move(tempPath, snapPath, overwrite: true);
+        IoUtil.WriteAllTextAtomic(
+            snapPath,
+            JsonSerializer.Serialize(file, OurPlanCoreJobStore.JsonOptions));
 
         source.SnapIndex = Path.GetRelativePath(page.FolderPath, snapPath);
         source.SnapBlackOnly = true;
