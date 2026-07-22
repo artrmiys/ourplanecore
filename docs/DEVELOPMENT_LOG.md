@@ -1,5 +1,42 @@
 ﻿# Development Log
 
+## 2026-07-22 PlanSwift-Style Static Raster Page Mode
+
+- Made the default non-layer page display a pinned static raster once a raster
+  sheet is available. While active, zoom and pan resample that bitmap without
+  queueing zoom re-renders, detail tiles, adaptive DPI upgrades, motion warmup,
+  or the periodic whole-job raster refresh.
+- Kept `PDF layers` as the live-render escape hatch. Static mode activates only
+  when a raster sheet is displayed and the layer renderer is off. Older pages
+  without a raster build and pin one cache image in the background.
+- Added persisted Display controls: `Static image` (default on), `Black vector`
+  (default off), and resolution `72-300 DPI` (`150` default). Existing
+  near-target or higher-resolution rasters are preserved, and oversized sheets
+  are capped by the render pixel budget.
+- Added the optional crisp black snap-segment overlay. Scanned PDFs without
+  vector geometry remain raster-only, and dense-sheet fast-navigation frames
+  skip the overlay above its segment safety limit.
+- Committed the implementation as
+  `de7dcefde9f2e351e24df011e83a9d379b2b313a` (`17` files, `+630/-3`). A fresh
+  restore/build passed with `0 warnings / 0 errors`, and the full regression
+  harness passed `558/558` including
+  `StaticRasterModeSuppressesLiveReRenders`.
+- The compressed package present in `Desktop\updates\OurPlanCore` is
+  `174,267,111` bytes. Runtime logs prove a real 150-DPI static lazy build and
+  later cache reuse; the rollback EXE and Desktop shortcut were preserved.
+  However, it was published three minutes before the commit, so its
+  ProductVersion still names parent `ea5dc17`; a clean republish from
+  `de7dcef` is still required for exact source provenance.
+- Release-log validation is not clean: the latest packaged session remains
+  alive and contains `Loaded takeoffs` / `Viewport`, but it also logged one
+  unrelated/unattributed UI exception after applying Modules: duplicate key
+  `pages.nameScaleSetup` in `RebuildSideCommandStrip()`. Do not mark the release
+  gate passed until that error is investigated and a clean packaged run is
+  recorded.
+- Detailed behavior, ownership, runtime evidence, workspace exclusions, and
+  next checks:
+  `docs/10-performance-render/STATIC_RASTER_PAGE_MODE_2026_07_22.md`.
+
 ## 2026-07-18 Dimension Scale, Continuous Annotations, and Universal Ortho
 
 - Fixed Ruler/Beam dimension text so an existing annotation resolves its value
