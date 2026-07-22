@@ -61,7 +61,8 @@ public partial class MainWindow
 
     private void SplitSelectedMeasurementsToNewTakeoff(
         IReadOnlyList<Measurement>? explicitSelection = null,
-        TakeoffMeasurementNode? sectionAnchor = null)
+        TakeoffMeasurementNode? sectionAnchor = null,
+        IReadOnlyDictionary<Measurement, IReadOnlyList<int>>? explicitPointSelection = null)
     {
         if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Split Measurements"))
             return;
@@ -70,9 +71,29 @@ public partial class MainWindow
         if (!ValidateMergeSplitSelection(selected, out string measurementType))
             return;
 
-        IReadOnlyList<TakeoffItem> sourceItems = SourceItemsForMeasurements(selected);
-        string initialName = DefaultSplitTakeoffName(sourceItems, selected, measurementType);
-        string? name = ShowInputDialog("New takeoff name:", initialName, "Split Selected Measurements");
+        IReadOnlyDictionary<Measurement, IReadOnlyList<int>> selectedPointIndices =
+            ResolvePointSelectionForSplit(
+                selected,
+                explicitPointSelection,
+                useViewportSelection: explicitSelection == null && sectionAnchor == null,
+                out bool pointSelectionRequested);
+        if (pointSelectionRequested && selectedPointIndices.Count == 0)
+        {
+            TxtStatus.Text = "Selected Count markers are no longer available. Select them again.";
+            return;
+        }
+
+        IReadOnlyList<Measurement> effectiveSelection = measurementType == "point" && selectedPointIndices.Count > 0
+            ? selected.Where(selectedPointIndices.ContainsKey).ToList()
+            : selected;
+        int splitQuantity = SplitSelectionQuantity(effectiveSelection, measurementType, selectedPointIndices);
+
+        IReadOnlyList<TakeoffItem> sourceItems = SourceItemsForMeasurements(effectiveSelection);
+        string initialName = DefaultSplitTakeoffName(sourceItems, effectiveSelection, measurementType);
+        string dialogTitle = measurementType == "point"
+            ? "Split Selected Count Marks"
+            : "Split Selected Measurements";
+        string? name = ShowInputDialog("New takeoff name:", initialName, dialogTitle);
         if (name == null)
             return;
 
@@ -83,12 +104,86 @@ public partial class MainWindow
             return;
         }
 
-        TakeoffItem target = CreateSplitTargetTakeoff(name, measurementType, sourceItems, selected);
+        if (IsRecordTool(_activeTool))
+            SetTool("select");
+
+        TakeoffItem target = CreateSplitTargetTakeoff(name, measurementType, sourceItems, effectiveSelection);
         MoveSelectedMeasurementsToTakeoff(
             selected,
             target,
-            moved => $"Split {moved} segment(s) into new takeoff {target.Name}.");
+            moved => measurementType == "point"
+                ? $"Split {CountMarkLabel(splitQuantity)} into new takeoff {target.Name}."
+                : $"Split {moved} segment(s) into new takeoff {target.Name}.",
+            selectedPointIndices);
     }
+
+    private IReadOnlyDictionary<Measurement, IReadOnlyList<int>> ResolvePointSelectionForSplit(
+        IReadOnlyList<Measurement> selected,
+        IReadOnlyDictionary<Measurement, IReadOnlyList<int>>? explicitPointSelection,
+        bool useViewportSelection,
+        out bool pointSelectionRequested)
+    {
+        pointSelectionRequested = false;
+        if (!selected.Any(measurement =>
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "point"))
+        {
+            return new Dictionary<Measurement, IReadOnlyList<int>>();
+        }
+
+        IReadOnlyDictionary<Measurement, IReadOnlyList<int>> candidates;
+        if (explicitPointSelection != null)
+        {
+            candidates = explicitPointSelection;
+            pointSelectionRequested = candidates.Count > 0;
+        }
+        else if (useViewportSelection)
+        {
+            candidates = _viewport.GetSelectedPointVertexSelections()
+                .ToDictionary(selection => selection.Measurement, selection => selection.PointIndices);
+            pointSelectionRequested = candidates.Count > 0;
+        }
+        else
+        {
+            candidates = new Dictionary<Measurement, IReadOnlyList<int>>();
+        }
+
+        var selectedSet = new HashSet<Measurement>(selected);
+        var resolved = new Dictionary<Measurement, IReadOnlyList<int>>();
+        foreach ((Measurement measurement, IReadOnlyList<int> indices) in candidates)
+        {
+            if (!selectedSet.Contains(measurement) ||
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "point")
+            {
+                continue;
+            }
+
+            var valid = indices
+                .Where(index => index >= 0 && index < measurement.Points.Count)
+                .Distinct()
+                .OrderBy(index => index)
+                .ToList();
+            if (valid.Count > 0)
+                resolved[measurement] = valid;
+        }
+
+        return resolved;
+    }
+
+    private static int SplitSelectionQuantity(
+        IReadOnlyList<Measurement> selected,
+        string measurementType,
+        IReadOnlyDictionary<Measurement, IReadOnlyList<int>> selectedPointIndices)
+    {
+        if (measurementType != "point")
+            return selected.Count;
+
+        return selectedPointIndices.Count > 0
+            ? selectedPointIndices.Values.Sum(indices => indices.Count)
+            : selected.Sum(measurement => measurement.Points.Count);
+    }
+
+    private static string CountMarkLabel(int count) =>
+        $"{count} Count mark{(count == 1 ? "" : "s")}";
 
     private IReadOnlyList<Measurement> SelectedMeasurementsForMergeSplit(
         IReadOnlyList<Measurement>? explicitSelection,
@@ -311,15 +406,23 @@ public partial class MainWindow
     private void MoveSelectedMeasurementsToTakeoff(
         IReadOnlyList<Measurement> selected,
         TakeoffItem target,
-        Func<int, string> statusText)
+        Func<int, string> statusText,
+        IReadOnlyDictionary<Measurement, IReadOnlyList<int>>? selectedPointIndices = null)
     {
         try
         {
             FlushTakeoffAutosaves();
-            MeasurementMoveResult result = MeasurementMergeSplitService.MoveMeasurementsToTakeoff(
-                _takeoffItems,
-                selected,
-                target);
+            MeasurementMoveResult result =
+                OurPlanCoreJobStore.NormalizeMeasurementType(target.MeasurementType) == "point"
+                    ? PointMeasurementSplitService.MoveMeasurementsToTakeoff(
+                        _takeoffItems,
+                        selected,
+                        selectedPointIndices,
+                        target)
+                    : MeasurementMergeSplitService.MoveMeasurementsToTakeoff(
+                        _takeoffItems,
+                        selected,
+                        target);
             string status = statusText(result.MovedMeasurements.Count);
             if (result.CoalescedLineCount > 0)
                 status = $"{status.TrimEnd('.')}. Coalesced {result.CoalescedLineCount} line section(s).";
@@ -379,6 +482,13 @@ public partial class MainWindow
         IReadOnlyList<Measurement> selected,
         string measurementType)
     {
+        if (measurementType == "point" &&
+            sourceItems.Count == 1 &&
+            !string.IsNullOrWhiteSpace(sourceItems[0].Name))
+        {
+            return sourceItems[0].Name.Trim();
+        }
+
         if (selected.Count == 1 && !string.IsNullOrWhiteSpace(selected[0].Name))
             return selected[0].Name.Trim();
 

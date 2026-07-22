@@ -40,6 +40,32 @@ public partial class MainWindow
             : clickedMeasurement == null
                 ? Array.Empty<Measurement>()
                 : [clickedMeasurement];
+        var selectedSet = new HashSet<Measurement>(selection);
+        var pointSelections = _viewport.GetSelectedPointVertexSelections()
+            .Where(pointSelection => selectedSet.Contains(pointSelection.Measurement))
+            .ToDictionary(
+                pointSelection => pointSelection.Measurement,
+                pointSelection => pointSelection.PointIndices);
+        if (pointSelections.Count == 0 &&
+            clickedMeasurement != null &&
+            selectedSet.Contains(clickedMeasurement) &&
+            OurPlanCoreJobStore.NormalizeMeasurementType(clickedMeasurement.MType) == "point" &&
+            request.PointVertexIndex >= 0 &&
+            request.PointVertexIndex < clickedMeasurement.Points.Count)
+        {
+            pointSelections[clickedMeasurement] = [request.PointVertexIndex];
+        }
+
+        bool isCountSelection = selection.Count > 0 && selection.All(measurement =>
+            OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "point");
+        int countMarkCount = pointSelections.Count > 0
+            ? pointSelections.Values.Sum(indices => indices.Count)
+            : selection.Sum(measurement => measurement.Points.Count);
+        string splitLabel = isCountSelection
+            ? $"Split {CountMarkLabel(countMarkCount)}..."
+            : selection.Count > 1
+                ? $"Split {selection.Count} Segment(s)..."
+                : "Split Segment...";
         if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
         {
             menu.Items.Add(new Separator());
@@ -49,10 +75,12 @@ public partial class MainWindow
                 "merge takeoff segments",
                 () => MergeSelectedMeasurementsToPromptedTakeoff(selection)));
             menu.Items.Add(MakeWritableViewportMenuItem(
-                selection.Count > 1 ? $"Split {selection.Count} Segment(s)..." : "Split Segment...",
+                splitLabel,
                 selection.Count > 0,
-                "split takeoff segments",
-                () => SplitSelectedMeasurementsToNewTakeoff(selection)));
+                isCountSelection ? "split Count marks" : "split takeoff segments",
+                () => SplitSelectedMeasurementsToNewTakeoff(
+                    selection,
+                    explicitPointSelection: pointSelections.Count > 0 ? pointSelections : null)));
         }
     }
 

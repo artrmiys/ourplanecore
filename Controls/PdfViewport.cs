@@ -34,7 +34,11 @@ public sealed record ViewportContextRequest(
     string PageFolder,
     Measurement? Measurement,
     PageAnnotation? Annotation = null,
-    ViewportOverlayHitKind OverlayHit = ViewportOverlayHitKind.None);
+    ViewportOverlayHitKind OverlayHit = ViewportOverlayHitKind.None,
+    int PointVertexIndex = -1);
+public sealed record PointVertexSelection(
+    Measurement Measurement,
+    IReadOnlyList<int> PointIndices);
 public sealed record ViewportAiCropSelectionRequest(
     SKRect CropRect,
     SKPoint AnchorPdf,
@@ -100,6 +104,7 @@ public sealed partial class PdfViewport : SKElement
     private Point? _rightClickStart;
     private SKPoint? _rightClickPdf;
     private Measurement? _rightClickMeasurement;
+    private int _rightClickPointVertexIndex = -1;
     private PageAnnotation? _rightClickAnnotation;
     private ViewportOverlayHitKind _rightClickOverlayHit = ViewportOverlayHitKind.None;
     private bool _rightClickMoved;

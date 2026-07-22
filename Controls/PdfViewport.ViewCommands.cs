@@ -86,6 +86,24 @@ public sealed partial class PdfViewport
             .Where(m => _measurementSet.Contains(m) && IsMeasurementOnActivePage(m))
             .ToList();
 
+    public IReadOnlyList<PointVertexSelection> GetSelectedPointVertexSelections()
+    {
+        var selections = GetSelectedMeasurements()
+            .Where(measurement =>
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "point")
+            .Select(measurement => new PointVertexSelection(
+                measurement,
+                Array.AsReadOnly(ActiveMeasurementVertexIndices(measurement)
+                    .Where(index => index >= 0 && index < measurement.Points.Count)
+                    .Distinct()
+                    .OrderBy(index => index)
+                    .ToArray())))
+            .Where(selection => selection.PointIndices.Count > 0)
+            .ToArray();
+
+        return Array.AsReadOnly(selections);
+    }
+
     public bool BeginJoistDirectionCapture(Measurement areaMeasurement)
     {
         if (OurPlanCoreJobStore.NormalizeMeasurementType(areaMeasurement.MType) != "area")

@@ -82,12 +82,20 @@ public partial class MainWindow
             () => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true), anchor)));
         if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
         {
+            bool isCountSection = selectedNodes.All(selectedNode =>
+                OurPlanCoreJobStore.NormalizeMeasurementType(selectedNode.Measurement.MType) == "point");
             menu.Items.Add(MakeMenuItem(
                 selectedCount > 1 ? $"Merge {selectedCount} Segments..." : "Merge Segment...",
                 true,
                 () => MergeSelectedMeasurementsToPromptedTakeoff(sectionAnchor: anchor)));
             menu.Items.Add(MakeMenuItem(
-                selectedCount > 1 ? $"Split {selectedCount} Segments..." : "Split Segment...",
+                isCountSection
+                    ? selectedCount > 1
+                        ? $"Split {selectedCount} Count Sections..."
+                        : "Split Count Section..."
+                    : selectedCount > 1
+                        ? $"Split {selectedCount} Segments..."
+                        : "Split Segment...",
                 true,
                 () => SplitSelectedMeasurementsToNewTakeoff(sectionAnchor: anchor)));
             bool isAreaSection =

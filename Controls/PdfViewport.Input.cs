@@ -44,6 +44,7 @@ public sealed partial class PdfViewport
             _rightClickPdf = pdf;
             _rightClickMoved = false;
             _rightClickMeasurement = null;
+            _rightClickPointVertexIndex = -1;
             _rightClickAnnotation = null;
             _rightClickOverlayHit = HitSheetOverlay(pos);
             if (_rightClickOverlayHit != ViewportOverlayHitKind.None)
@@ -68,9 +69,21 @@ public sealed partial class PdfViewport
                 else if (TryHitMeasurement(pdf, out Measurement measurement))
                 {
                     _rightClickMeasurement = measurement;
-                    if (_selectedMeasurements.Contains(measurement))
+                    bool hitPointVertex = TryHitPointVertexOnMeasurement(
+                        measurement,
+                        pdf,
+                        MeasurementHitToleranceScreenPx,
+                        out int pointVertexIndex);
+                    _rightClickPointVertexIndex = hitPointVertex ? pointVertexIndex : -1;
+                    bool preserveSelectedPointVertices = hitPointVertex &&
+                                                         IsMeasurementVertexSelected(measurement, pointVertexIndex);
+                    if (hitPointVertex && !preserveSelectedPointVertices)
+                    {
+                        SelectMeasurement(measurement, pointVertexIndex);
+                    }
+                    else if (!preserveSelectedPointVertices && _selectedMeasurements.Contains(measurement))
                         SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1);
-                    else
+                    else if (!preserveSelectedPointVertices)
                         SelectMeasurement(measurement, -1);
                 }
                 else if (TryHitAnnotation(pdf, out PageAnnotation annotation))
@@ -610,6 +623,7 @@ public sealed partial class PdfViewport
         Point contextScreen = _rightClickStart ?? ViewPointToCanvas(e.GetPosition(this));
         SKPoint contextPdf = _rightClickPdf ?? ScreenToPdf((float)contextScreen.X, (float)contextScreen.Y);
         Measurement? contextMeasurement = _rightClickMeasurement;
+        int contextPointVertexIndex = _rightClickPointVertexIndex;
         PageAnnotation? contextAnnotation = _rightClickAnnotation;
         ViewportOverlayHitKind contextOverlayHit = _rightClickOverlayHit;
 
@@ -674,6 +688,7 @@ public sealed partial class PdfViewport
             _rightClickStart = null;
             _rightClickPdf = null;
             _rightClickMeasurement = null;
+            _rightClickPointVertexIndex = -1;
             _rightClickAnnotation = null;
             _rightClickOverlayHit = ViewportOverlayHitKind.None;
             _rightClickMoved = false;
@@ -689,7 +704,8 @@ public sealed partial class PdfViewport
                 _pageFolder,
                 contextMeasurement,
                 contextAnnotation,
-                contextOverlayHit));
+                contextOverlayHit,
+                contextPointVertexIndex));
         }
         e.Handled = true;
     }

@@ -120,6 +120,33 @@ public sealed partial class PdfViewport
         return false;
     }
 
+    private bool TryHitPointVertexOnMeasurement(
+        Measurement measurement,
+        SKPoint pdf,
+        float screenTolerancePx,
+        out int pointIndex)
+    {
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "point")
+        {
+            pointIndex = -1;
+            return false;
+        }
+
+        float tolerance = screenTolerancePx / Math.Max(_zoom, 0.01f);
+        float toleranceSquared = tolerance * tolerance;
+        for (int index = measurement.Points.Count - 1; index >= 0; index--)
+        {
+            if (DistanceSquared(pdf, measurement.Points[index]) <= toleranceSquared)
+            {
+                pointIndex = index;
+                return true;
+            }
+        }
+
+        pointIndex = -1;
+        return false;
+    }
+
     private bool TryHitSelectedVertexOnMeasurement(Measurement measurement, SKPoint pdf, float screenTolerancePx, out int vertexIndex)
     {
         float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
