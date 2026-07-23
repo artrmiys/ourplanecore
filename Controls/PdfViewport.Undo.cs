@@ -440,6 +440,39 @@ public sealed partial class PdfViewport
             []), coalesce: false);
     }
 
+    private void PushSheetOverlayTransformUndo(
+        string targetPageFolder,
+        string overlayPageFolder,
+        SheetOverlayTransformSnapshot before,
+        SheetOverlayTransformSnapshot after,
+        string status)
+    {
+        if (_applyingViewportUndo ||
+            string.IsNullOrWhiteSpace(targetPageFolder) ||
+            string.IsNullOrWhiteSpace(overlayPageFolder) ||
+            !HasSheetOverlayTransformChanged(before, after))
+        {
+            return;
+        }
+
+        PushUndoAction(
+            new ViewportUndoAction(
+                "",
+                status,
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                new SheetOverlayTransformUndo(
+                    targetPageFolder,
+                    overlayPageFolder,
+                    before,
+                    after)),
+            coalesce: false);
+    }
+
     private void PushUndoAction(ViewportUndoAction action, bool coalesce)
     {
         if (coalesce &&
@@ -460,6 +493,12 @@ public sealed partial class PdfViewport
         while (_undoStack.Count > 0)
         {
             ViewportUndoAction action = _undoStack[^1];
+            if (IsSheetOverlayUndoWaitingForBitmap(action))
+            {
+                PostStatus("Overlay is loading; Undo will remain available.");
+                return true;
+            }
+
             _undoStack.RemoveAt(_undoStack.Count - 1);
             if (ApplyUndoAction(action))
                 return true;
@@ -467,6 +506,16 @@ public sealed partial class PdfViewport
 
         return false;
     }
+
+    private bool IsSheetOverlayUndoWaitingForBitmap(ViewportUndoAction action) =>
+        action.OverlayTransform is { } overlayTransform &&
+        _sheetOverlayBitmap == null &&
+        SheetOverlayReciprocalService.SameFolder(
+            _sheetOverlayTargetPageFolder,
+            overlayTransform.TargetPageFolder) &&
+        SheetOverlayReciprocalService.SameFolder(
+            _sheetOverlaySourcePageFolder,
+            overlayTransform.OverlayPageFolder);
 
     private bool ApplyUndoAction(ViewportUndoAction action)
     {
@@ -566,6 +615,14 @@ public sealed partial class PdfViewport
                 PageAnnotationChanged?.Invoke(snapshot.Target);
                 changed = true;
             }
+
+            if (action.OverlayTransform is { } overlayTransform &&
+                TryApplySheetOverlayTransformUndo(
+                    overlayTransform,
+                    $"Undo: {action.Status}."))
+            {
+                changed = true;
+            }
         }
         finally
         {
@@ -578,6 +635,38 @@ public sealed partial class PdfViewport
         RequestRepaint();
         PublishTransformSelectionChanged();
         PostStatus($"Undo: {action.Status}.");
+        return true;
+    }
+
+    private bool TryApplySheetOverlayTransformUndo(
+        SheetOverlayTransformUndo undo,
+        string status)
+    {
+        if (_sheetOverlayBitmap == null ||
+            _sheetOverlayTransformPreviewActive ||
+            !SheetOverlayReciprocalService.SameFolder(_pageFolder, undo.TargetPageFolder) ||
+            !SheetOverlayReciprocalService.SameFolder(
+                _sheetOverlayTargetPageFolder,
+                undo.TargetPageFolder) ||
+            !SheetOverlayReciprocalService.SameFolder(
+                _sheetOverlaySourcePageFolder,
+                undo.OverlayPageFolder) ||
+            CurrentSheetOverlayTransform() is not { } current ||
+            HasSheetOverlayTransformChanged(current, undo.After))
+        {
+            return false;
+        }
+
+        _sheetOverlayOffsetXPt = undo.Before.OffsetXPt;
+        _sheetOverlayOffsetYPt = undo.Before.OffsetYPt;
+        _sheetOverlayScale = undo.Before.OverlayScale;
+        _sheetOverlayRotationDegrees = undo.Before.OverlayRotationDegrees;
+        ClearStaticPageFrameCache();
+        if (CurrentSheetOverlayTransform() is not { } restored)
+            return false;
+
+        SheetOverlayTransformPreviewChanged?.Invoke(restored);
+        PublishSheetOverlayTransformChange(restored, status, postStatus: false);
         return true;
     }
 
@@ -645,6 +734,8 @@ public sealed partial class PdfViewport
     }
 
     private static bool SameUndoTargets(ViewportUndoAction left, ViewportUndoAction right) =>
+        left.OverlayTransform == null &&
+        right.OverlayTransform == null &&
         left.MeasurementPoints.Count == right.MeasurementPoints.Count &&
         left.AnnotationPoints.Count == right.AnnotationPoints.Count &&
         left.AddedMeasurements.Count == right.AddedMeasurements.Count &&
@@ -669,7 +760,14 @@ public sealed partial class PdfViewport
         List<MeasurementPresenceUndo> AddedMeasurements,
         List<AnnotationPresenceUndo> AddedAnnotations,
         List<MeasurementPresenceUndo> RemovedMeasurements,
-        List<AnnotationPresenceUndo> RemovedAnnotations);
+        List<AnnotationPresenceUndo> RemovedAnnotations,
+        SheetOverlayTransformUndo? OverlayTransform = null);
+
+    private sealed record SheetOverlayTransformUndo(
+        string TargetPageFolder,
+        string OverlayPageFolder,
+        SheetOverlayTransformSnapshot Before,
+        SheetOverlayTransformSnapshot After);
 
     private sealed record MeasurementPointUndo(
         Measurement Target,

@@ -3677,7 +3677,7 @@ internal static class TakeoffsTreeRegressionTests
             updateMethod.Contains("ApplySheetOverlayTransform(", StringComparison.Ordinal),
             "sheet overlay mouse move should preview offsets without persisting source.json on every pointer update");
         AssertTrue(
-            finishMethod.Contains("ApplySheetOverlayTransform(", StringComparison.Ordinal) &&
+            finishMethod.Contains("CommitSheetOverlayTransformChange(", StringComparison.Ordinal) &&
             finishMethod.Contains("BuildSheetOverlayTransformStatus(", StringComparison.Ordinal),
             "sheet overlay mouse drag should persist the transform once when the button is released");
     }
@@ -3738,6 +3738,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void SheetOverlayReciprocalCleanupIsWired()
     {
         string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string properties = ReadRepoFile("MainWindow.SheetOverlay.Properties.cs");
         string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");
         string autoSelect = ReadRepoFile("MainWindow.SheetOverlay.AutoSelect.cs");
         string service = ReadRepoFile(Path.Combine("Models", "SheetOverlayReciprocalService.cs"));
@@ -3745,7 +3746,7 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             main.Contains("ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage))", StringComparison.Ordinal) &&
             main.Contains("ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(latest))", StringComparison.Ordinal) &&
-            main.Contains("ClearReciprocalSheetOverlay(updated)", StringComparison.Ordinal) &&
+            properties.Contains("ClearReciprocalSheetOverlay(updated)", StringComparison.Ordinal) &&
             main.Contains("SheetOverlayReciprocalService.TryClear", StringComparison.Ordinal) &&
             !main.Contains("SyncReciprocalSheetOverlay(", StringComparison.Ordinal) &&
             !main.Contains("SheetOverlayReciprocalService.TrySync", StringComparison.Ordinal),

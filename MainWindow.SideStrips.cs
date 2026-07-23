@@ -130,8 +130,9 @@ public partial class MainWindow
         if (host == null)
             return;
 
-        var catalog = BuildSideStripCommandCatalog()
-            .ToDictionary(info => info.Id, info => info, StringComparer.OrdinalIgnoreCase);
+        var catalog = new Dictionary<string, SideStripCommandInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (SideStripCommandInfo info in BuildSideStripCommandCatalog())
+            catalog.TryAdd(info.Id, info);
 
         var stack = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
         bool hasVisibleCommand = false;
@@ -273,8 +274,6 @@ public partial class MainWindow
             items.Add(new SideStripCommandInfo("pages.detach", "Detach to Windows", "Pages", "", "Open the selected Pages sheets in detached windows."));
             items.Add(new SideStripCommandInfo("pages.tileM2", "Tile on Monitor 2", "Pages", "", "Tile the selected sheets on monitor 2."));
         }
-        if (IsModuleEnabled(ModuleId.SheetManager))
-            items.Add(new SideStripCommandInfo("pages.nameScaleSetup", "Name / Scale Setup", "Pages", "", "Open the floating page name / scale setup window."));
         items.AddRange(
         [
             new SideStripCommandInfo("pages.newFolder", "New Page Folder", "Pages", "", "Create a new folder under the selected Pages folder."),

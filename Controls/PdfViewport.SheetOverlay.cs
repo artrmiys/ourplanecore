@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Windows.Input;
+using OurPlanCore;
 using SkiaSharp;
 
 namespace OurPlanCore.Controls;
@@ -27,6 +28,8 @@ public sealed partial class PdfViewport
     private float _sheetOverlayBitmapScale;
     private float _lastSheetOverlayRefreshRequestScale;
     private string _sheetOverlayName = "";
+    private string _sheetOverlayTargetPageFolder = "";
+    private string _sheetOverlaySourcePageFolder = "";
     private SheetOverlayPointEditStep _sheetOverlayPointEditStep;
     private SKPoint _sheetOverlayEditAnchorLocal;
     private SKPoint _sheetOverlayEditAnchorTarget;
@@ -37,6 +40,7 @@ public sealed partial class PdfViewport
     private SKPoint _sheetOverlayDragStartPdf;
     private float _sheetOverlayDragStartOffsetXPt;
     private float _sheetOverlayDragStartOffsetYPt;
+    private SheetOverlayTransformSnapshot? _sheetOverlayDragStartTransform;
 
     public bool HasSheetOverlay => _sheetOverlayBitmap != null;
 
@@ -52,38 +56,73 @@ public sealed partial class PdfViewport
         string overlayPdfPath = "",
         int overlayPageIndex = 0,
         IReadOnlyList<PdfLayerInfo>? overlayLayers = null,
-        float bitmapScale = 0)
+        float bitmapScale = 0,
+        string overlayPageFolder = "")
     {
-        bool preserveTransformPreview =
-            _sheetOverlayTransformPreviewActive &&
-            _sheetOverlayBitmap != null;
+        string nextOverlayPageFolder = overlayPageFolder ?? "";
+        bool sameBinding =
+            !string.IsNullOrWhiteSpace(_sheetOverlayTargetPageFolder) &&
+            !string.IsNullOrWhiteSpace(_sheetOverlaySourcePageFolder) &&
+            SheetOverlayReciprocalService.SameFolder(
+                _sheetOverlayTargetPageFolder,
+                _pageFolder) &&
+            SheetOverlayReciprocalService.SameFolder(
+                _sheetOverlaySourcePageFolder,
+                nextOverlayPageFolder);
+        bool preserveTransformGesture =
+            sameBinding &&
+            HasPendingSheetOverlayTransformGesture;
         float liveOffsetXPt = _sheetOverlayOffsetXPt;
         float liveOffsetYPt = _sheetOverlayOffsetYPt;
         float liveOverlayScale = _sheetOverlayScale;
         float liveOverlayRotationDegrees = _sheetOverlayRotationDegrees;
 
-        ClearSheetOverlay();
+        ClearSheetOverlayCore(
+            preserveTransformGesture,
+            preserveBindingIdentity: sameBinding);
         _sheetOverlayBitmap = bitmap;
         _sheetOverlayWidthPt = widthPt;
         _sheetOverlayHeightPt = heightPt;
-        _sheetOverlayOffsetXPt = preserveTransformPreview ? liveOffsetXPt : offsetXPt;
-        _sheetOverlayOffsetYPt = preserveTransformPreview ? liveOffsetYPt : offsetYPt;
+        _sheetOverlayOffsetXPt = preserveTransformGesture ? liveOffsetXPt : offsetXPt;
+        _sheetOverlayOffsetYPt = preserveTransformGesture ? liveOffsetYPt : offsetYPt;
         _sheetOverlayScale = NormalizeSheetOverlayScale(
-            preserveTransformPreview ? liveOverlayScale : overlayScale);
+            preserveTransformGesture ? liveOverlayScale : overlayScale);
         _sheetOverlayRotationDegrees = NormalizeSheetOverlayRotation(
-            preserveTransformPreview ? liveOverlayRotationDegrees : overlayRotationDegrees);
+            preserveTransformGesture ? liveOverlayRotationDegrees : overlayRotationDegrees);
         _sheetOverlayBitmapScale = bitmapScale > 0 ? bitmapScale : InferSheetOverlayBitmapScale(bitmap, widthPt);
         _lastSheetOverlayRefreshRequestScale = _sheetOverlayBitmapScale;
         _sheetOverlayName = overlayName ?? "";
+        _sheetOverlayTargetPageFolder = _pageFolder;
+        _sheetOverlaySourcePageFolder = nextOverlayPageFolder;
         if (!string.IsNullOrWhiteSpace(overlayPdfPath))
             SetOverlayPdfSnapSource(overlayPdfPath, overlayPageIndex, _sheetOverlayName, overlayLayers);
-        CancelSheetOverlayPointEdit(silent: true);
         MaybeRequestSheetOverlayRenderScaleRefresh();
         RequestRepaint();
     }
 
-    public void ClearSheetOverlay()
+    public void PrepareSheetOverlayReload(
+        string targetPageFolder,
+        string overlayPageFolder)
     {
+        ClearSheetOverlayCore(
+            preserveTransformGesture: false,
+            preserveBindingIdentity: false);
+        _sheetOverlayTargetPageFolder = targetPageFolder ?? "";
+        _sheetOverlaySourcePageFolder = overlayPageFolder ?? "";
+    }
+
+    public void ClearSheetOverlay() =>
+        ClearSheetOverlayCore(
+            preserveTransformGesture: false,
+            preserveBindingIdentity: false);
+
+    private void ClearSheetOverlayCore(
+        bool preserveTransformGesture,
+        bool preserveBindingIdentity)
+    {
+        if (!preserveTransformGesture)
+            CancelPendingSheetOverlayTransformGesture(postStatus: false);
+
         _sheetOverlayBitmap?.Dispose();
         _sheetOverlayBitmap = null;
         _sheetOverlayWidthPt = 0;
@@ -95,9 +134,12 @@ public sealed partial class PdfViewport
         _sheetOverlayBitmapScale = 0;
         _lastSheetOverlayRefreshRequestScale = 0;
         _sheetOverlayName = "";
+        if (!preserveBindingIdentity)
+        {
+            _sheetOverlayTargetPageFolder = "";
+            _sheetOverlaySourcePageFolder = "";
+        }
         ClearOverlayPdfSnapSource();
-        CancelSheetOverlayPointEdit(silent: true);
-        CancelSheetOverlayDrag(silent: true);
         RequestRepaint();
     }
 
@@ -109,6 +151,7 @@ public sealed partial class PdfViewport
             return;
         }
 
+        CancelPendingSheetOverlayTransformGesture(postStatus: false);
         _sheetOverlayPointEditStep = SheetOverlayPointEditStep.MoveSource;
         _sheetOverlayEditAnchorLocal = default;
         _sheetOverlayEditAnchorTarget = default;
@@ -125,7 +168,7 @@ public sealed partial class PdfViewport
     private bool TryBeginSheetOverlayDrag(SKPoint pdf)
     {
         if (_sheetOverlayBitmap == null ||
-            IsSheetOverlayPointEditing ||
+            HasPendingSheetOverlayTransformGesture ||
             !IsSheetOverlayDragModifierActive() ||
             !IsPointInsideSheetOverlay(pdf))
         {
@@ -137,6 +180,7 @@ public sealed partial class PdfViewport
         _sheetOverlayDragStartPdf = pdf;
         _sheetOverlayDragStartOffsetXPt = _sheetOverlayOffsetXPt;
         _sheetOverlayDragStartOffsetYPt = _sheetOverlayOffsetYPt;
+        _sheetOverlayDragStartTransform = CurrentSheetOverlayTransform();
         CaptureMouse();
         PostStatus("Overlay drag: move the mouse, release to save. Hold Shift for fine movement.");
         RequestRepaint();
@@ -172,18 +216,19 @@ public sealed partial class PdfViewport
             return false;
 
         bool changed = _sheetOverlayDragChanged;
+        SheetOverlayTransformSnapshot? start = _sheetOverlayDragStartTransform;
+        SheetOverlayTransformSnapshot? current = CurrentSheetOverlayTransform();
         _draggingSheetOverlay = false;
         _sheetOverlayDragChanged = false;
+        _sheetOverlayDragStartTransform = null;
         if (IsMouseCaptured)
             ReleaseMouseCapture();
 
-        if (changed)
+        if (changed && start != null && current != null)
         {
-            ApplySheetOverlayTransform(
-                _sheetOverlayOffsetXPt,
-                _sheetOverlayOffsetYPt,
-                _sheetOverlayScale,
-                _sheetOverlayRotationDegrees,
+            CommitSheetOverlayTransformChange(
+                start,
+                current,
                 BuildSheetOverlayTransformStatus(
                     "Overlay moved",
                     _sheetOverlayOffsetXPt,
@@ -209,6 +254,7 @@ public sealed partial class PdfViewport
         _sheetOverlayOffsetYPt = _sheetOverlayDragStartOffsetYPt;
         _draggingSheetOverlay = false;
         _sheetOverlayDragChanged = false;
+        _sheetOverlayDragStartTransform = null;
         if (IsMouseCaptured)
             ReleaseMouseCapture();
         if (!silent)
@@ -244,6 +290,15 @@ public sealed partial class PdfViewport
         float scaleFactor = fine ? 1.01f : 1.05f;
         float rotationStep = fine ? 0.25f : 1f;
         Key key = OurPlanCore.KeyboardShortcutKeys.EffectiveKey(e);
+        bool recognized =
+            key is Key.Left or Key.Right or Key.Up or Key.Down or
+                Key.Add or Key.OemPlus or Key.Subtract or Key.OemMinus or
+                Key.OemOpenBrackets or Key.OemCloseBrackets or
+                Key.D0 or Key.NumPad0;
+        if (!recognized)
+            return false;
+
+        CancelPendingSheetOverlayTransformGesture(postStatus: false);
 
         switch (key)
         {
@@ -543,6 +598,40 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
+    public bool TryCommitSheetOverlayTransform(
+        string targetPageFolder,
+        string overlayPageFolder,
+        float offsetXPt,
+        float offsetYPt,
+        float overlayScale,
+        float overlayRotationDegrees,
+        string status)
+    {
+        if (_sheetOverlayBitmap == null ||
+            IsReadOnlyMode ||
+            string.IsNullOrWhiteSpace(targetPageFolder) ||
+            string.IsNullOrWhiteSpace(overlayPageFolder) ||
+            !SheetOverlayReciprocalService.SameFolder(_pageFolder, targetPageFolder) ||
+            !SheetOverlayReciprocalService.SameFolder(
+                _sheetOverlayTargetPageFolder,
+                targetPageFolder) ||
+            !SheetOverlayReciprocalService.SameFolder(
+                _sheetOverlaySourcePageFolder,
+                overlayPageFolder))
+        {
+            return false;
+        }
+
+        CancelPendingSheetOverlayTransformGesture(postStatus: false);
+        ApplySheetOverlayTransform(
+            offsetXPt,
+            offsetYPt,
+            overlayScale,
+            overlayRotationDegrees,
+            status);
+        return true;
+    }
+
     private void ApplySheetOverlayTransform(
         float offsetXPt,
         float offsetYPt,
@@ -550,17 +639,58 @@ public sealed partial class PdfViewport
         float overlayRotationDegrees,
         string status)
     {
-        _sheetOverlayOffsetXPt = offsetXPt;
-        _sheetOverlayOffsetYPt = offsetYPt;
+        SheetOverlayTransformSnapshot? start = CurrentSheetOverlayTransform();
+        _sheetOverlayOffsetXPt = Math.Clamp(offsetXPt, -100000f, 100000f);
+        _sheetOverlayOffsetYPt = Math.Clamp(offsetYPt, -100000f, 100000f);
         _sheetOverlayScale = NormalizeSheetOverlayScale(overlayScale);
         _sheetOverlayRotationDegrees = NormalizeSheetOverlayRotation(overlayRotationDegrees);
+        SheetOverlayTransformSnapshot? current = CurrentSheetOverlayTransform();
+        if (start != null && current != null)
+            CommitSheetOverlayTransformChange(start, current, status);
+        else
+            PostStatus(status);
+        RequestRepaint();
+    }
+
+    private void CommitSheetOverlayTransformChange(
+        SheetOverlayTransformSnapshot start,
+        SheetOverlayTransformSnapshot current,
+        string status)
+    {
+        if (!HasSheetOverlayTransformChanged(start, current))
+        {
+            PostStatus(status);
+            return;
+        }
+
+        if (!_applyingViewportUndo)
+        {
+            PushSheetOverlayTransformUndo(
+                _pageFolder,
+                _sheetOverlaySourcePageFolder,
+                start,
+                current,
+                "overlay transform");
+        }
+
+        PublishSheetOverlayTransformChange(current, status);
+    }
+
+    private void PublishSheetOverlayTransformChange(
+        SheetOverlayTransformSnapshot transform,
+        string status,
+        bool postStatus = true)
+    {
         SheetOverlayTransformChanged?.Invoke(new SheetOverlayTransformChange(
-            _sheetOverlayOffsetXPt,
-            _sheetOverlayOffsetYPt,
-            _sheetOverlayScale,
-            _sheetOverlayRotationDegrees,
+            _pageFolder,
+            _sheetOverlaySourcePageFolder,
+            transform.OffsetXPt,
+            transform.OffsetYPt,
+            transform.OverlayScale,
+            transform.OverlayRotationDegrees,
             status));
-        PostStatus(status);
+        if (postStatus)
+            PostStatus(status);
         MaybeRequestSheetOverlayRenderScaleRefresh();
         RequestRepaint();
     }

@@ -2011,6 +2011,7 @@
                               IsReadOnly="False"
                               SelectionMode="Extended"
                               SelectionUnit="FullRow"
+                              ScrollViewer.HorizontalScrollBarVisibility="Visible"
                               SelectionChanged="SheetManagerGrid_SelectionChanged">
                         <DataGrid.Columns>
                             <DataGridCheckBoxColumn Header="Rename" Binding="{Binding ApplyRename}"/>

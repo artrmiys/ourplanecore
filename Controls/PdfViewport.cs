@@ -44,6 +44,8 @@ public sealed record ViewportAiCropSelectionRequest(
     SKPoint AnchorPdf,
     string PageFolder);
 public sealed record SheetOverlayTransformChange(
+    string TargetPageFolder,
+    string OverlayPageFolder,
     float OffsetXPt,
     float OffsetYPt,
     float OverlayScale,

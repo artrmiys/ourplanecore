@@ -79,6 +79,7 @@ public partial class SheetOverlayPropertiesPanel : UserControl
     public event EventHandler<SheetOverlayTransformEventArgs>? TransformPreviewRequested;
     public event EventHandler? TransformCommitRequested;
     public event EventHandler? TransformCancelRequested;
+    public event EventHandler? UndoRequested;
 
     public SheetOverlayPropertiesPanel()
     {
@@ -343,8 +344,16 @@ public partial class SheetOverlayPropertiesPanel : UserControl
 
     private void Panel_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && CancelPreviewIfPending())
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Z)
+        {
+            if (!CancelPreviewIfPending())
+                UndoRequested?.Invoke(this, EventArgs.Empty);
             e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && CancelPreviewIfPending())
+        {
+            e.Handled = true;
+        }
     }
 
     private void Visibility_Click(object sender, RoutedEventArgs e)

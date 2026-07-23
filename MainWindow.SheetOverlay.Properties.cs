@@ -56,6 +56,7 @@ public partial class MainWindow
         OverlayPropertiesPanel.TransformPreviewRequested += OverlayPropertiesPanel_TransformPreviewRequested;
         OverlayPropertiesPanel.TransformCommitRequested += OverlayPropertiesPanel_TransformCommitRequested;
         OverlayPropertiesPanel.TransformCancelRequested += OverlayPropertiesPanel_TransformCancelRequested;
+        OverlayPropertiesPanel.UndoRequested += OverlayPropertiesPanel_UndoRequested;
         _viewport.SheetOverlayTransformChanged += OnSheetOverlayTransformChangedForProperties;
         _viewport.SheetOverlayTransformPreviewChanged += OnSheetOverlayTransformPreviewChanged;
         _sheetOverlayPropertiesInitialized = true;
@@ -258,6 +259,51 @@ public partial class MainWindow
 
     private void OverlayPropertiesPanel_TransformCancelRequested(object? sender, EventArgs e) =>
         CancelSheetOverlayPropertiesPreview(postStatus: true);
+
+    private void OverlayPropertiesPanel_UndoRequested(object? sender, EventArgs e)
+    {
+        if (IsCurrentJobReadOnly)
+        {
+            TxtStatus.Text = "Read-only job: overlay changes cannot be undone.";
+            return;
+        }
+
+        _viewport.UndoLast();
+    }
+
+    private void OnSheetOverlayTransformChanged(SheetOverlayTransformChange change)
+    {
+        if (_currentPage == null ||
+            string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder) ||
+            !SameFolder(_currentPage.FolderPath, change.TargetPageFolder) ||
+            !SameFolder(_currentPage.OverlayPageFolder, change.OverlayPageFolder))
+        {
+            AppLog.Warn(
+                $"Ignored stale sheet overlay transform; target='{change.TargetPageFolder}'; " +
+                $"source='{change.OverlayPageFolder}'; current='{_currentPage?.FolderPath ?? ""}'; " +
+                $"currentSource='{_currentPage?.OverlayPageFolder ?? ""}'.");
+            return;
+        }
+
+        if (!EnsureCurrentJobWritable("change the sheet overlay"))
+            return;
+
+        OurPlanCoreJobStore.SavePageOverlayTransform(
+            change.TargetPageFolder,
+            change.OffsetXPt,
+            change.OffsetYPt,
+            change.OverlayScale,
+            change.OverlayRotationDegrees);
+
+        if (OurPlanCoreJobStore.TryReadPage(change.TargetPageFolder) is { } updated)
+        {
+            _currentPage = updated;
+            ClearReciprocalSheetOverlay(updated);
+            RefreshPageOverlayTreeNode(updated);
+        }
+
+        TxtStatus.Text = change.Status;
+    }
 
     private void OnSheetOverlayTransformChangedForProperties(SheetOverlayTransformChange change)
     {

@@ -19,6 +19,7 @@ public sealed partial class PdfViewport
     private enum SheetOverlaySelectionHandle
     {
         None,
+        Move,
         Scale,
         Rotation,
     }
@@ -31,6 +32,7 @@ public sealed partial class PdfViewport
     private SheetOverlayTransformSnapshot? _sheetOverlayTransformPreviewStart;
     private SheetOverlaySelectionHandle _sheetOverlaySelectionHandle;
     private SheetOverlayTransformSnapshot? _sheetOverlayHandleStart;
+    private SKPoint _sheetOverlayHandleStartPointerPdf;
     private SKPoint _sheetOverlayHandleCenter;
     private float _sheetOverlayHandleStartDistance;
     private float _sheetOverlayHandleStartAngle;
@@ -38,6 +40,12 @@ public sealed partial class PdfViewport
     public event Action<SheetOverlayTransformSnapshot>? SheetOverlayTransformPreviewChanged;
 
     public bool IsSheetOverlaySelectionActive => _sheetOverlaySelectionActive;
+
+    private bool HasPendingSheetOverlayTransformGesture =>
+        _sheetOverlayTransformPreviewActive ||
+        _sheetOverlaySelectionHandle != SheetOverlaySelectionHandle.None ||
+        _draggingSheetOverlay ||
+        IsSheetOverlayPointEditing;
 
     public void SetSheetOverlaySelectionActive(bool active, bool canEdit = true)
     {
@@ -153,14 +161,7 @@ public sealed partial class PdfViewport
         if (start == null || current == null || !HasSheetOverlayTransformChanged(start, current))
             return;
 
-        SheetOverlayTransformChanged?.Invoke(new SheetOverlayTransformChange(
-            current.OffsetXPt,
-            current.OffsetYPt,
-            current.OverlayScale,
-            current.OverlayRotationDegrees,
-            status));
-        PostStatus(status);
-        MaybeRequestSheetOverlayRenderScaleRefresh();
+        CommitSheetOverlayTransformChange(start, current, status);
     }
 
     public void CancelSheetOverlayTransformPreview(bool postStatus = true)
@@ -344,6 +345,7 @@ public sealed partial class PdfViewport
             !_sheetOverlaySelectionCanEdit ||
             IsReadOnlyMode ||
             _sheetOverlayBitmap == null ||
+            IsSheetOverlayDragModifierActive() ||
             e.ChangedButton != MouseButton.Left)
         {
             return;
@@ -352,14 +354,16 @@ public sealed partial class PdfViewport
         Point canvasPoint = ViewPointToCanvas(e.GetPosition(this));
         SKPoint pdf = ScreenToPdf((float)canvasPoint.X, (float)canvasPoint.Y);
         SheetOverlaySelectionHandle handle = HitSheetOverlaySelectionHandle(pdf);
-        if (handle == SheetOverlaySelectionHandle.None ||
-            BeginSheetOverlayTransformPreview() is not { } start)
-        {
+        if (handle == SheetOverlaySelectionHandle.None)
             return;
-        }
+
+        Focus();
+        if (BeginSheetOverlayTransformPreview() is not { } start)
+            return;
 
         _sheetOverlaySelectionHandle = handle;
         _sheetOverlayHandleStart = start;
+        _sheetOverlayHandleStartPointerPdf = pdf;
         _sheetOverlayHandleCenter = SheetOverlayDisplayCenter(
             start.WidthPt,
             start.HeightPt,
@@ -374,9 +378,15 @@ public sealed partial class PdfViewport
             pdf.Y - _sheetOverlayHandleCenter.Y,
             pdf.X - _sheetOverlayHandleCenter.X);
         CaptureMouse();
-        PostStatus(handle == SheetOverlaySelectionHandle.Scale
-            ? "Overlay scale: drag the orange corner; release to save."
-            : "Overlay rotation: drag the orange round handle; release to save.");
+        PostStatus(handle switch
+        {
+            SheetOverlaySelectionHandle.Move =>
+                "Overlay move: drag inside the orange frame; release to save.",
+            SheetOverlaySelectionHandle.Scale =>
+                "Overlay scale: drag the orange corner; release to save.",
+            _ =>
+                "Overlay rotation: drag the orange round handle; release to save.",
+        });
         e.Handled = true;
     }
 
@@ -392,6 +402,17 @@ public sealed partial class PdfViewport
         Point canvasPoint = ViewPointToCanvas(e.GetPosition(this));
         SKPoint pdf = ScreenToPdf((float)canvasPoint.X, (float)canvasPoint.Y);
         SheetOverlayTransformSnapshot start = _sheetOverlayHandleStart;
+        if (_sheetOverlaySelectionHandle == SheetOverlaySelectionHandle.Move)
+        {
+            ApplySheetOverlayTransformPreview(
+                start.OffsetXPt + pdf.X - _sheetOverlayHandleStartPointerPdf.X,
+                start.OffsetYPt + pdf.Y - _sheetOverlayHandleStartPointerPdf.Y,
+                start.OverlayScale,
+                start.OverlayRotationDegrees);
+            e.Handled = true;
+            return;
+        }
+
         float scale = start.OverlayScale;
         float rotation = start.OverlayRotationDegrees;
         if (_sheetOverlaySelectionHandle == SheetOverlaySelectionHandle.Scale)
@@ -454,19 +475,76 @@ public sealed partial class PdfViewport
 
     private void FinishSheetOverlaySelectionHandle(bool commit)
     {
-        bool wasDragging = _sheetOverlaySelectionHandle != SheetOverlaySelectionHandle.None;
-        _sheetOverlaySelectionHandle = SheetOverlaySelectionHandle.None;
-        _sheetOverlayHandleStart = null;
-        if (IsMouseCaptured)
-            ReleaseMouseCapture();
+        SheetOverlaySelectionHandle handle = _sheetOverlaySelectionHandle;
+        bool wasDragging = handle != SheetOverlaySelectionHandle.None;
+        ResetSheetOverlaySelectionHandleState();
 
         if (commit && wasDragging)
         {
-            CommitSheetOverlayTransformPreview("Overlay transform updated from orange handles.");
+            string status = handle switch
+            {
+                SheetOverlaySelectionHandle.Move => "Overlay moved from orange frame.",
+                SheetOverlaySelectionHandle.Scale => "Overlay scaled from orange corner.",
+                SheetOverlaySelectionHandle.Rotation => "Overlay rotated from orange handle.",
+                _ => "Overlay transform updated.",
+            };
+            CommitSheetOverlayTransformPreview(status);
             return;
         }
 
         CancelSheetOverlayTransformPreview();
+    }
+
+    private bool CancelPendingSheetOverlayTransformGesture(bool postStatus)
+    {
+        bool hadPendingGesture = HasPendingSheetOverlayTransformGesture;
+        ResetSheetOverlaySelectionHandleState();
+        CancelSheetOverlayTransformPreview(postStatus: false);
+        CancelSheetOverlayDrag(silent: true);
+        CancelSheetOverlayPointEdit(silent: true);
+        if (hadPendingGesture && postStatus)
+            PostStatus("Overlay transform cancelled.");
+        return hadPendingGesture;
+    }
+
+    private void ResetSheetOverlaySelectionHandleState()
+    {
+        _sheetOverlaySelectionHandle = SheetOverlaySelectionHandle.None;
+        _sheetOverlayHandleStart = null;
+        _sheetOverlayHandleStartPointerPdf = default;
+        _sheetOverlayHandleCenter = default;
+        _sheetOverlayHandleStartDistance = 0;
+        _sheetOverlayHandleStartAngle = 0;
+        if (IsMouseCaptured)
+            ReleaseMouseCapture();
+    }
+
+    private bool TryCancelPendingSheetOverlayTransformForUndo()
+    {
+        if (_sheetOverlaySelectionHandle != SheetOverlaySelectionHandle.None)
+        {
+            FinishSheetOverlaySelectionHandle(commit: false);
+            return true;
+        }
+
+        if (_sheetOverlayTransformPreviewActive)
+        {
+            CancelSheetOverlayTransformPreview();
+            return true;
+        }
+
+        if (_draggingSheetOverlay)
+            return CancelSheetOverlayDrag();
+
+        if (!IsSheetOverlayPointEditing)
+            return false;
+
+        bool transformWasCommitted =
+            _sheetOverlayPointEditStep is
+                SheetOverlayPointEditStep.ScaleSource or
+                SheetOverlayPointEditStep.ScaleTarget;
+        CancelSheetOverlayPointEdit(silent: true);
+        return !transformWasCommitted;
     }
 
     private SheetOverlaySelectionHandle HitSheetOverlaySelectionHandle(SKPoint pdf)
@@ -490,6 +568,18 @@ public sealed partial class PdfViewport
         {
             if (OverlayDistance(pdf, corner) <= scaleTolerance)
                 return SheetOverlaySelectionHandle.Scale;
+        }
+
+        if (TryGetSheetOverlaySize(out float width, out float height))
+        {
+            SKPoint local = OverlayDisplayToLocal(pdf);
+            if (local.X >= 0 &&
+                local.X <= width &&
+                local.Y >= 0 &&
+                local.Y <= height)
+            {
+                return SheetOverlaySelectionHandle.Move;
+            }
         }
 
         return SheetOverlaySelectionHandle.None;

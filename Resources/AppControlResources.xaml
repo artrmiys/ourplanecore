@@ -92,13 +92,15 @@
     </ControlTemplate>
 
     <Style TargetType="ScrollBar">
-        <Setter Property="Width"    Value="8"/>
-        <Setter Property="MinWidth" Value="8"/>
         <Style.Triggers>
             <Trigger Property="Orientation" Value="Vertical">
+                <Setter Property="Width"    Value="8"/>
+                <Setter Property="MinWidth" Value="8"/>
                 <Setter Property="Template" Value="{StaticResource VScrollBarTemplate}"/>
             </Trigger>
             <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width"     Value="Auto"/>
+                <Setter Property="MinWidth"  Value="0"/>
                 <Setter Property="Height"    Value="8"/>
                 <Setter Property="MinHeight" Value="8"/>
                 <Setter Property="Template" Value="{StaticResource HScrollBarTemplate}"/>

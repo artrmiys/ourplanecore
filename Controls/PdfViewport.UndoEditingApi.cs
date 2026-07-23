@@ -21,6 +21,9 @@ public sealed partial class PdfViewport
 
     public void UndoLast()
     {
+        if (TryCancelPendingSheetOverlayTransformForUndo())
+            return;
+
         if (_drawPts.Count > 0)
         {
             _drawPts.RemoveAt(_drawPts.Count - 1);

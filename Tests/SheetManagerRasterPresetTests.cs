@@ -232,8 +232,28 @@ internal static class SheetManagerRasterPresetTests
         string presetUi = File.ReadAllText(RepoFile("MainWindow.SheetManagerRasterPresets.cs"));
         string manager = File.ReadAllText(RepoFile("MainWindow.WorkspaceManagers.cs"));
         string resources = File.ReadAllText(RepoFile("Resources/AppNavigationResources.xaml"));
+        string controlResources = File.ReadAllText(RepoFile("Resources/AppControlResources.xaml"));
+        string sideStrips = File.ReadAllText(RepoFile("MainWindow.SideStrips.cs"));
         string viewport = File.ReadAllText(RepoFile("Controls/PdfViewport.RasterSheetDpiUpgrade.cs"));
-
+        int sheetManagerGridStart = xaml.IndexOf("<DataGrid x:Name=\"SheetManagerGrid\"", StringComparison.Ordinal);
+        int sheetManagerGridTagEnd = sheetManagerGridStart >= 0
+            ? xaml.IndexOf('>', sheetManagerGridStart)
+            : -1;
+        int verticalScrollBarTriggerStart = controlResources.IndexOf(
+            "<Trigger Property=\"Orientation\" Value=\"Vertical\">",
+            StringComparison.Ordinal);
+        int horizontalScrollBarTriggerStart = controlResources.IndexOf(
+            "<Trigger Property=\"Orientation\" Value=\"Horizontal\">",
+            StringComparison.Ordinal);
+        int horizontalScrollBarTriggerEnd = horizontalScrollBarTriggerStart >= 0
+            ? controlResources.IndexOf("</Trigger>", horizontalScrollBarTriggerStart, StringComparison.Ordinal)
+            : -1;
+        int sideCatalogStart = sideStrips.IndexOf(
+            "private IReadOnlyList<SideStripCommandInfo> BuildSideStripCommandCatalog()",
+            StringComparison.Ordinal);
+        int sideCatalogEnd = sideCatalogStart >= 0
+            ? sideStrips.IndexOf("private void ExecuteSideStripCommand", sideCatalogStart, StringComparison.Ordinal)
+            : -1;
         AssertTrue(xaml.Contains("Text=\"Selected: 0\"", StringComparison.Ordinal), "toolbar must expose selected-row count");
         AssertTrue(xaml.Contains("x:Name=\"SheetManagerRasterPresetItems\"", StringComparison.Ordinal), "numeric presets must be config-driven");
         AssertTrue(xaml.Contains("x:Name=\"SheetManagerRasterOptionsPopup\"", StringComparison.Ordinal), "advanced raster actions must live under Options");
@@ -253,6 +273,38 @@ internal static class SheetManagerRasterPresetTests
                 "<Setter Property=\"ScrollViewer.HorizontalScrollBarVisibility\" Value=\"Auto\"/>",
                 StringComparison.Ordinal),
             "shared DataGrid style must expose horizontal scrolling only when needed");
+        AssertTrue(
+            sheetManagerGridStart >= 0 &&
+            sheetManagerGridTagEnd > sheetManagerGridStart &&
+            xaml[sheetManagerGridStart..sheetManagerGridTagEnd].Contains(
+                "ScrollViewer.HorizontalScrollBarVisibility=\"Visible\"",
+                StringComparison.Ordinal),
+            "Sheet Manager grid must keep its bottom horizontal scrollbar visible");
+        AssertTrue(
+            verticalScrollBarTriggerStart >= 0 &&
+            horizontalScrollBarTriggerStart > verticalScrollBarTriggerStart &&
+            horizontalScrollBarTriggerEnd > horizontalScrollBarTriggerStart &&
+            controlResources[verticalScrollBarTriggerStart..horizontalScrollBarTriggerStart].Contains(
+                "<Setter Property=\"Width\"    Value=\"8\"/>",
+                StringComparison.Ordinal) &&
+            controlResources[verticalScrollBarTriggerStart..horizontalScrollBarTriggerStart].Contains(
+                "<Setter Property=\"MinWidth\" Value=\"8\"/>",
+                StringComparison.Ordinal) &&
+            controlResources[horizontalScrollBarTriggerStart..horizontalScrollBarTriggerEnd].Contains(
+                "<Setter Property=\"Width\"     Value=\"Auto\"/>",
+                StringComparison.Ordinal) &&
+            controlResources[horizontalScrollBarTriggerStart..horizontalScrollBarTriggerEnd].Contains(
+                "<Setter Property=\"MinWidth\"  Value=\"0\"/>",
+                StringComparison.Ordinal),
+            "vertical scrollbars must stay eight pixels wide while horizontal scrollbars stretch");
+        AssertTrue(
+            sideStrips.Contains("catalog.TryAdd(info.Id, info);", StringComparison.Ordinal) &&
+            sideCatalogStart >= 0 &&
+            sideCatalogEnd > sideCatalogStart &&
+            !sideStrips[sideCatalogStart..sideCatalogEnd].Contains(
+                "\"pages.nameScaleSetup\"",
+                StringComparison.Ordinal),
+            "side-strip catalog must tolerate duplicate command IDs without manually duplicating Name / Scale");
     }
 
     private static string RepoFile(string relativePath)

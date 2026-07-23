@@ -3,6 +3,7 @@ using Docnet.Core.Models;
 using OurPlanCore;
 using OurPlanCore.Controls;
 using SkiaSharp;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
@@ -143,6 +144,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay context menus stay compact", SheetOverlayPropertiesRegressionTests.SheetOverlayContextMenusStayCompactAndRouteAdvancedActionsToProperties),
     ("sheet overlay transform preview persists once", SheetOverlayPropertiesRegressionTests.SheetOverlayTransformPreviewPersistsOnceOnCommit),
     ("sheet overlay active frame follows rotated corners", SheetOverlayPropertiesRegressionTests.SheetOverlayActiveFrameUsesRotatedOverlayCorners),
+    ("sheet overlay move and undo use one validated viewport action", SheetOverlayPropertiesRegressionTests.SheetOverlayMoveAndUndoUseOneValidatedViewportAction),
     ("sheet overlay live transform bypasses static frame cache", SheetOverlayPropertiesRegressionTests.SheetOverlayLiveTransformBypassesStaticFrameCache),
     ("sheet overlay live preview survives bitmap replacement", SheetOverlayPropertiesRegressionTests.SheetOverlayLivePreviewSurvivesQualityBitmapReplacement),
     ("sheet overlay frame honors read-only page and module lifecycle", SheetOverlayPropertiesRegressionTests.SheetOverlayFrameHonorsReadOnlyPageAndModuleLifecycle),
@@ -650,6 +652,11 @@ var tests = new List<(string Name, Action Run)>
     ("viewport measurement spatial index filters by bounds", ViewportMeasurementSpatialIndexFiltersByBounds),
     ("viewport measurement spatial index preserves draw order", ViewportMeasurementSpatialIndexPreservesDrawOrder),
     ("viewport pasted batch undo removes many measurements in one callback", ViewportPastedBatchUndoRemovesManyMeasurementsInOneCallback),
+    ("viewport overlay undo restores transform in shared history", ViewportOverlayUndoRestoresTransformInSharedHistory),
+    ("viewport stale overlay undo falls through to measurements", ViewportStaleOverlayUndoFallsThroughToMeasurementHistory),
+    ("overlay preview cannot cross source binding", SheetOverlayUndoLifecycleTests.PreviewCannotCrossOverlayBinding),
+    ("same binding reload keeps overlay undo", SheetOverlayUndoLifecycleTests.SameBindingReloadKeepsOverlayUndo),
+    ("host overlay commit creates one undo action", SheetOverlayUndoLifecycleTests.HostCommitCancelsPreviewIntoOneUndoAction),
     ("pdf snap index finds nearest point", PdfSnapIndexFindsNearestPoint),
     ("pdf snap index prefers corner ties", PdfSnapIndexPrefersCornerTies),
     ("pdf snap index snaps to line", PdfSnapIndexSnapsToLine),
@@ -5834,6 +5841,130 @@ static void ViewportPastedBatchUndoRemovesManyMeasurementsInOneCallback()
         AssertEqual("1", batchRemovedCalls.ToString(), "batch undo should emit one removed callback");
         AssertEqual(pastedCount.ToString(), batchRemovedCount.ToString(), "batch undo callback count");
         AssertEqual(existingCount.ToString(), LoadedViewportMeasurementCount(viewport).ToString(), "undo should keep pre-existing measurements");
+    });
+}
+
+static void ViewportOverlayUndoRestoresTransformInSharedHistory()
+{
+    RunOnStaThread(() =>
+    {
+        string targetPageFolder = Path.Combine(Path.GetTempPath(), "onc_overlay_undo_target");
+        string overlayPageFolder = Path.Combine(Path.GetTempPath(), "onc_overlay_undo_source");
+        var viewport = new PdfViewport();
+        SetPrivateField(viewport, "_pageFolder", targetPageFolder);
+        viewport.SetSheetOverlay(
+            new SKBitmap(20, 10),
+            200,
+            100,
+            "Overlay source",
+            overlayPageFolder: overlayPageFolder);
+
+        try
+        {
+            var changes = new List<SheetOverlayTransformChange>();
+            viewport.SheetOverlayTransformChanged += changes.Add;
+            AssertTrue(
+                viewport.TryCommitSheetOverlayTransform(
+                    targetPageFolder,
+                    overlayPageFolder,
+                    18,
+                    -7,
+                    1.25f,
+                    12,
+                    "Overlay moved."),
+                "current target/source overlay transform should commit");
+            AssertEqual("1", changes.Count.ToString(), "overlay commit event count");
+
+            var measurement = new Measurement
+            {
+                MType = "line",
+                PageFolder = targetPageFolder,
+                Points = [new SKPoint(0, 0), new SKPoint(10, 0)],
+            };
+            viewport.SetMeasurements([measurement], clearUndoStack: false);
+            viewport.RegisterAddedMeasurementsUndo([measurement], "remove test measurement");
+
+            viewport.UndoLast();
+            AssertEqual("0", LoadedViewportMeasurementCount(viewport).ToString(), "newer measurement undo should run first");
+            AssertEqual(
+                "18",
+                viewport.CurrentSheetOverlayTransform()?.OffsetXPt.ToString(CultureInfo.InvariantCulture) ?? "",
+                "measurement undo must leave the older overlay transform intact");
+
+            viewport.UndoLast();
+            SheetOverlayTransformSnapshot restored = viewport.CurrentSheetOverlayTransform() ??
+                throw new InvalidOperationException("overlay transform disappeared during undo");
+            AssertEqual("0", restored.OffsetXPt.ToString(CultureInfo.InvariantCulture), "overlay undo X");
+            AssertEqual("0", restored.OffsetYPt.ToString(CultureInfo.InvariantCulture), "overlay undo Y");
+            AssertEqual("1", restored.OverlayScale.ToString(CultureInfo.InvariantCulture), "overlay undo scale");
+            AssertEqual("0", restored.OverlayRotationDegrees.ToString(CultureInfo.InvariantCulture), "overlay undo rotation");
+            AssertEqual("2", changes.Count.ToString(), "overlay undo persistence event count");
+            AssertEqual(targetPageFolder, changes[^1].TargetPageFolder, "overlay undo target identity");
+            AssertEqual(overlayPageFolder, changes[^1].OverlayPageFolder, "overlay undo source identity");
+        }
+        finally
+        {
+            viewport.ClearSheetOverlay();
+        }
+    });
+}
+
+static void ViewportStaleOverlayUndoFallsThroughToMeasurementHistory()
+{
+    RunOnStaThread(() =>
+    {
+        string targetPageFolder = Path.Combine(Path.GetTempPath(), "onc_overlay_stale_target");
+        string overlayPageFolder = Path.Combine(Path.GetTempPath(), "onc_overlay_stale_source");
+        var viewport = new PdfViewport();
+        SetPrivateField(viewport, "_pageFolder", targetPageFolder);
+        viewport.SetSheetOverlay(
+            new SKBitmap(20, 10),
+            200,
+            100,
+            "Overlay source",
+            overlayPageFolder: overlayPageFolder);
+
+        try
+        {
+            var measurement = new Measurement
+            {
+                MType = "line",
+                PageFolder = targetPageFolder,
+                Points = [new SKPoint(0, 0), new SKPoint(10, 0)],
+            };
+            viewport.SetMeasurements([measurement]);
+            viewport.RegisterAddedMeasurementsUndo([measurement], "remove fallback measurement");
+
+            int transformEvents = 0;
+            viewport.SheetOverlayTransformChanged += _ => transformEvents++;
+            AssertTrue(
+                viewport.TryCommitSheetOverlayTransform(
+                    targetPageFolder,
+                    overlayPageFolder,
+                    9,
+                    4,
+                    1.1f,
+                    3,
+                    "Overlay moved."),
+                "overlay setup transform should commit");
+
+            SetPrivateField(
+                viewport,
+                "_sheetOverlaySourcePageFolder",
+                Path.Combine(Path.GetTempPath(), "onc_overlay_replaced_source"));
+            viewport.UndoLast();
+
+            AssertEqual("0", LoadedViewportMeasurementCount(viewport).ToString(), "stale overlay undo must fall through");
+            AssertEqual("1", transformEvents.ToString(), "stale overlay undo must not emit a persistence event");
+            AssertEqual(
+                "9",
+                viewport.CurrentSheetOverlayTransform()?.OffsetXPt.ToString(CultureInfo.InvariantCulture) ?? "",
+                "stale overlay undo must not mutate the replacement overlay");
+        }
+        finally
+        {
+            viewport.ClearSheetOverlay();
+        }
     });
 }
 

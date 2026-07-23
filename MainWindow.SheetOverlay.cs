@@ -162,6 +162,20 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
             return;
 
+        if (_currentPage != null &&
+            SameFolder(_currentPage.FolderPath, latest.FolderPath) &&
+            _viewport.TryCommitSheetOverlayTransform(
+                latest.FolderPath,
+                latest.OverlayPageFolder,
+                (float)offsetXPt,
+                (float)offsetYPt,
+                (float)overlayScale,
+                (float)overlayRotationDegrees,
+                status))
+        {
+            return;
+        }
+
         OurPlanCoreJobStore.SavePageOverlayTransform(
             latest.FolderPath,
             offsetXPt,
@@ -231,31 +245,6 @@ public partial class MainWindow
         }
 
         TxtStatus.Text = "Overlay edit: overlay is still loading. Use Edit by Points once it appears.";
-    }
-
-    private void OnSheetOverlayTransformChanged(SheetOverlayTransformChange change)
-    {
-        if (!EnsureCurrentJobWritable("change the sheet overlay"))
-            return;
-
-        if (_currentPage == null || string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder))
-            return;
-
-        OurPlanCoreJobStore.SavePageOverlayTransform(
-            _currentPage.FolderPath,
-            change.OffsetXPt,
-            change.OffsetYPt,
-            change.OverlayScale,
-            change.OverlayRotationDegrees);
-
-        if (OurPlanCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
-        {
-            _currentPage = updated;
-            ClearReciprocalSheetOverlay(updated);
-            RefreshPageOverlayTreeNode(updated);
-        }
-
-        TxtStatus.Text = change.Status;
     }
 
     private void ClearPageOverlay(PageInfo page)
@@ -392,14 +381,14 @@ public partial class MainWindow
         }
 
         int version = ++_sheetOverlayLoadVersion;
-        if (!keepExistingUntilReady)
-            _viewport.ClearSheetOverlay();
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
         {
             _viewport.SetSheetOverlaySelectionActive(false);
             _viewport.ClearSheetOverlay();
             return;
         }
+        if (!keepExistingUntilReady)
+            _viewport.PrepareSheetOverlayReload(page.FolderPath, page.OverlayPageFolder);
 
         float renderScale = SelectSheetOverlayViewportRenderScale(page, restoreView, requestedRenderScale);
         if (!TryBuildSheetOverlayBitmap(
@@ -440,7 +429,7 @@ public partial class MainWindow
         float renderScale = SelectSheetOverlayPageOpenFirstFrameRenderScale(page, restoreView);
         if (!TryApplyCachedSheetOverlay(page, restoreView, renderScale))
         {
-            _viewport.ClearSheetOverlay();
+            _viewport.PrepareSheetOverlayReload(page.FolderPath, page.OverlayPageFolder);
             TxtStatus.Text = "Sheet overlay loading...";
             _ = LoadSheetOverlayAsync(page, version, renderScale);
         }
@@ -520,6 +509,7 @@ public partial class MainWindow
 
         if (!result.Ok || result.Bitmap == null)
         {
+            _viewport.ClearSheetOverlay();
             TxtStatus.Text = $"Sheet overlay unavailable: {result.Error}";
             return;
         }
@@ -554,7 +544,8 @@ public partial class MainWindow
             overlayPage?.PdfPath ?? "",
             overlayPage?.PdfPage ?? 0,
             OverlaySnapLayers(overlayPage),
-            bitmapScale: renderScale);
+            bitmapScale: renderScale,
+            overlayPageFolder: page.OverlayPageFolder);
         ActivateCurrentSheetOverlayFrameAfterBitmapLoad(page);
     }
 

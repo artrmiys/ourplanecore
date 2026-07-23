@@ -83,6 +83,13 @@ internal static class SheetOverlayPropertiesRegressionTests
             viewport,
             "public void CommitSheetOverlayTransformPreview(",
             "public void CancelSheetOverlayTransformPreview(");
+        string overlay = ReadRepoFile(Path.Combine(
+            "Controls",
+            "PdfViewport.SheetOverlay.cs"));
+        string publishMethod = SliceBetween(
+            overlay,
+            "private void PublishSheetOverlayTransformChange(",
+            "private static string BuildSheetOverlayTransformStatus(");
 
         AssertTrue(
             panel.Contains("_viewport.PreviewSheetOverlayTransform(", StringComparison.Ordinal) &&
@@ -90,7 +97,8 @@ internal static class SheetOverlayPropertiesRegressionTests
             "the panel must separate live preview from commit");
         AssertTrue(
             !previewMethod.Contains("SheetOverlayTransformChanged?.Invoke", StringComparison.Ordinal) &&
-            CountOccurrences(commitMethod, "SheetOverlayTransformChanged?.Invoke") == 1,
+            CountOccurrences(commitMethod, "CommitSheetOverlayTransformChange(") == 1 &&
+            CountOccurrences(publishMethod, "SheetOverlayTransformChanged?.Invoke") == 1,
             "preview must remain in memory and commit must raise one persistence event");
         AssertTrue(
             viewport.Contains("CancelSheetOverlayTransformPreview", StringComparison.Ordinal) &&
@@ -106,6 +114,10 @@ internal static class SheetOverlayPropertiesRegressionTests
         string rendering = ReadRepoFile(Path.Combine(
             "Controls",
             "PdfViewport.Rendering.cs"));
+        string hitTest = SliceBetween(
+            viewport,
+            "private SheetOverlaySelectionHandle HitSheetOverlaySelectionHandle(SKPoint pdf)",
+            "private static SKPoint SheetOverlayDisplayCenter(");
 
         AssertContainsAll(
             viewport,
@@ -114,14 +126,113 @@ internal static class SheetOverlayPropertiesRegressionTests
             "OverlayLocalToDisplay(new SKPoint(width, 0))",
             "OverlayLocalToDisplay(new SKPoint(width, height))",
             "OverlayLocalToDisplay(new SKPoint(0, height))",
+            "SheetOverlaySelectionHandle.Move",
             "SheetOverlaySelectionHandle.Scale",
             "SheetOverlaySelectionHandle.Rotation");
         AssertTrue(
             rendering.Contains("DrawSheetOverlaySelection(canvas)", StringComparison.Ordinal),
             "the active frame must be drawn only by the live viewport rendering path");
         AssertTrue(
-            !viewport.Contains("IsPointInsideSheetOverlay(pdf)", StringComparison.Ordinal),
-            "ordinary clicks inside the overlay rectangle must not steal takeoff selection");
+            hitTest.IndexOf("SheetOverlaySelectionHandle.Rotation", StringComparison.Ordinal) <
+            hitTest.IndexOf("SheetOverlaySelectionHandle.Scale", StringComparison.Ordinal) &&
+            hitTest.IndexOf("SheetOverlaySelectionHandle.Scale", StringComparison.Ordinal) <
+            hitTest.IndexOf("SheetOverlaySelectionHandle.Move", StringComparison.Ordinal) &&
+            hitTest.Contains("SKPoint local = OverlayDisplayToLocal(pdf);", StringComparison.Ordinal) &&
+            hitTest.Contains("local.X >= 0", StringComparison.Ordinal) &&
+            hitTest.Contains("local.Y <= height", StringComparison.Ordinal),
+            "rotation and scale handles must win before exact rotated-interior move hit testing");
+    }
+
+    public static void SheetOverlayMoveAndUndoUseOneValidatedViewportAction()
+    {
+        string selection = ReadRepoFile(Path.Combine(
+            "Controls",
+            "PdfViewport.SheetOverlaySelection.cs"));
+        string overlay = ReadRepoFile(Path.Combine(
+            "Controls",
+            "PdfViewport.SheetOverlay.cs"));
+        string undo = ReadRepoFile(Path.Combine(
+            "Controls",
+            "PdfViewport.Undo.cs"));
+        string undoEditing = ReadRepoFile(Path.Combine(
+            "Controls",
+            "PdfViewport.UndoEditingApi.cs"));
+        string panel = ReadRepoFile(Path.Combine(
+            "Controls",
+            "SheetOverlayPropertiesPanel.xaml.cs"));
+        string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string properties = ReadRepoFile("MainWindow.SheetOverlay.Properties.cs");
+        string mouseDown = SliceBetween(
+            selection,
+            "private void SheetOverlaySelection_PreviewMouseLeftButtonDown(",
+            "private void SheetOverlaySelection_PreviewMouseMove(");
+        string move = SliceBetween(
+            selection,
+            "private void SheetOverlaySelection_PreviewMouseMove(",
+            "private void SheetOverlaySelection_PreviewMouseLeftButtonUp(");
+        string undoLast = SliceBetween(
+            undoEditing,
+            "public void UndoLast()",
+            "public void DeleteMeasurements(");
+
+        AssertContainsAll(
+            move,
+            "SheetOverlaySelectionHandle.Move",
+            "start.OffsetXPt + pdf.X - _sheetOverlayHandleStartPointerPdf.X",
+            "start.OffsetYPt + pdf.Y - _sheetOverlayHandleStartPointerPdf.Y",
+            "start.OverlayScale",
+            "start.OverlayRotationDegrees");
+        AssertContainsAll(
+            selection,
+            "CommitSheetOverlayTransformPreview(status)",
+            "TryCancelPendingSheetOverlayTransformForUndo",
+            "FinishSheetOverlaySelectionHandle(commit: false)");
+        AssertTrue(
+            mouseDown.IndexOf("Focus();", StringComparison.Ordinal) <
+            mouseDown.IndexOf("BeginSheetOverlayTransformPreview()", StringComparison.Ordinal) &&
+            mouseDown.IndexOf("BeginSheetOverlayTransformPreview()", StringComparison.Ordinal) <
+            mouseDown.IndexOf("CaptureMouse();", StringComparison.Ordinal),
+            "overlay handle input must commit the focused editor before starting and capturing a new gesture");
+        AssertTrue(
+            undoLast.IndexOf("TryCancelPendingSheetOverlayTransformForUndo()", StringComparison.Ordinal) <
+            undoLast.IndexOf("_drawPts.Count", StringComparison.Ordinal),
+            "Ctrl+Z must cancel an active overlay gesture before undoing unfinished drawing points");
+        AssertTrue(
+            mouseDown.Contains("IsSheetOverlayDragModifierActive()", StringComparison.Ordinal) &&
+            mouseDown.IndexOf("IsSheetOverlayDragModifierActive()", StringComparison.Ordinal) <
+            mouseDown.IndexOf("HitSheetOverlaySelectionHandle(pdf)", StringComparison.Ordinal),
+            "the orange frame must leave Ctrl+Alt drag to the legacy fine-move input path");
+        AssertContainsAll(
+            overlay,
+            "PushSheetOverlayTransformUndo(",
+            "TryCommitSheetOverlayTransform(",
+            "_sheetOverlayTargetPageFolder",
+            "_sheetOverlaySourcePageFolder",
+            "HasPendingSheetOverlayTransformGesture",
+            "CancelPendingSheetOverlayTransformGesture(postStatus: false)",
+            "PrepareSheetOverlayReload(");
+        AssertContainsAll(
+            undo,
+            "SheetOverlayTransformUndo?",
+            "undo.TargetPageFolder",
+            "undo.OverlayPageFolder",
+            "HasSheetOverlayTransformChanged(current, undo.After)",
+            "IsSheetOverlayUndoWaitingForBitmap(action)",
+            "PublishSheetOverlayTransformChange(restored, status, postStatus: false)");
+        AssertTrue(
+            main.Contains(
+                "_viewport.PrepareSheetOverlayReload(page.FolderPath, page.OverlayPageFolder);",
+                StringComparison.Ordinal),
+            "same-source async reloads must retain binding identity while their bitmap is unavailable");
+        AssertTrue(
+            panel.Contains("UndoRequested?.Invoke", StringComparison.Ordinal) &&
+            properties.Contains("OverlayPropertiesPanel.UndoRequested +=", StringComparison.Ordinal) &&
+            properties.Contains("_viewport.UndoLast();", StringComparison.Ordinal),
+            "Ctrl+Z from the properties panel must cancel a pending preview or route into viewport history");
+        AssertTrue(
+            properties.Contains("change.TargetPageFolder", StringComparison.Ordinal) &&
+            properties.Contains("change.OverlayPageFolder", StringComparison.Ordinal),
+            "persistence must reject stale overlay undo events after target or source page changes");
     }
 
     public static void SheetOverlayLiveTransformBypassesStaticFrameCache()
@@ -160,9 +271,11 @@ internal static class SheetOverlayPropertiesRegressionTests
 
         AssertContainsAll(
             overlay,
-            "bool preserveTransformPreview",
-            "preserveTransformPreview ? liveOffsetXPt : offsetXPt",
-            "preserveTransformPreview ? liveOverlayScale : overlayScale");
+            "bool preserveTransformGesture",
+            "preserveTransformGesture ? liveOffsetXPt : offsetXPt",
+            "preserveTransformGesture ? liveOverlayScale : overlayScale",
+            "sameBinding &&",
+            "HasPendingSheetOverlayTransformGesture");
         AssertTrue(
             !previewApply.Contains("MaybeRequestSheetOverlayRenderScaleRefresh", StringComparison.Ordinal),
             "live slider and handle ticks must defer quality reload until commit");
