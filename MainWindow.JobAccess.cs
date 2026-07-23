@@ -251,6 +251,7 @@ public partial class MainWindow
     {
         bool readOnly = IsCurrentJobReadOnly;
         _viewport.IsReadOnlyMode = readOnly;
+        ApplySheetOverlayJobAccessState();
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
             window.Viewport.IsReadOnlyMode = readOnly;
         ApplyThreeDReadOnlyState(readOnly);

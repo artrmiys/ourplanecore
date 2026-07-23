@@ -227,7 +227,12 @@ public sealed partial class PdfViewport
             if (page == null || string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
                 return ((IReadOnlyList<PdfGeometrySnapSegment>)[], error);
 
-            RasterSheetBuildResult build = RasterSheetCacheService.BuildCachePreservingEnabled(page);
+            int pinnedDpi = RasterSheetCacheService.PinnedRasterDpi(page.RasterSheet);
+            float buildScale = pinnedDpi > 0
+                ? RasterSheetCacheService.RasterDpiToRenderScale(pinnedDpi)
+                : RasterSheetCacheService.DefaultRenderScale;
+            RasterSheetBuildResult build =
+                RasterSheetCacheService.BuildCachePreservingEnabled(page, buildScale);
             if (!build.Ok || build.Source == null)
             {
                 string buildError = string.IsNullOrWhiteSpace(build.Error)

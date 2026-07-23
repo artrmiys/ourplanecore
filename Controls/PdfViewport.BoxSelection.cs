@@ -84,7 +84,7 @@ public sealed partial class PdfViewport
 
                 if (TryHitMeasurement(_boxSelectStartPdf, out Measurement hitMeasurement))
                 {
-                    ApplyAdditiveObjectGesture([hitMeasurement], _boxSelectRemove);
+                    ApplyAdditiveObjectGesture([hitMeasurement], [], _boxSelectRemove);
                     return;
                 }
 
@@ -109,6 +109,16 @@ public sealed partial class PdfViewport
                 ? MeasurementIntersectsRect(m, rect)
                 : MeasurementContainedInRect(m, rect))
             .ToList();
+        IReadOnlyList<CutRegionRef> cutRegionHits = CutRegionSelectionService.FindInMarquee(
+            ActivePageMeasurementsNear(rect),
+            rect,
+            selectTouched);
+        var cutRegionParents = new HashSet<Measurement>(
+            cutRegionHits.Select(cutRegion => cutRegion.Parent));
+        hits.RemoveAll(measurement =>
+            cutRegionParents.Contains(measurement) &&
+            measurement.MType == "area" &&
+            !CutRegionSelectionService.OuterBoundaryIntersectsRect(measurement.Points, rect));
         var annotationHits = _annotations.Where(annotation =>
                 IsAnnotationVisibleOnActivePage(annotation) &&
                 (selectTouched
@@ -116,15 +126,18 @@ public sealed partial class PdfViewport
                     : AnnotationContainedInRect(annotation, rect)))
                 .ToList();
         if (_boxSelectAnnotationDomain && annotationHits.Count > 0)
+        {
             hits.Clear();
-        else if (hits.Count > 0)
+            cutRegionHits = [];
+        }
+        else if (hits.Count > 0 || cutRegionHits.Count > 0)
             annotationHits.Clear();
 
         if (_boxSelectAdditive)
         {
-            if (hits.Count > 0)
+            if (hits.Count > 0 || cutRegionHits.Count > 0)
             {
-                ApplyAdditiveObjectGesture(hits, _boxSelectRemove);
+                ApplyAdditiveObjectGesture(hits, cutRegionHits, _boxSelectRemove);
                 return;
             }
 
@@ -158,56 +171,72 @@ public sealed partial class PdfViewport
         if (annotationHits.Count > 0)
             SetSelectedAnnotations(annotationHits, annotationHits.LastOrDefault(), -1);
         else
-            SetSelectedMeasurements(hits, hits.LastOrDefault(), -1);
+            SetMixedMeasurementSelection(hits, cutRegionHits, hits.LastOrDefault());
 
         RequestRepaint();
         PostStatus(annotationHits.Count > 0
             ? annotationHits.Count == 1
                 ? $"Selected {ToolTitle(annotationHits[0].Kind)} markup."
                 : $"Selected {annotationHits.Count} markups. Delete removes them."
-            : hits.Count == 0
+            : hits.Count == 0 && cutRegionHits.Count == 0
             ? selectTouched
                 ? "Crossing select: no measurements touched by box."
                 : "Window select: no measurements fully inside box."
             : selectTouched
-                ? $"Selected {GetSelectedMeasurements().Count} touched measurement(s). Ctrl+C copies, Ctrl+V pastes."
-                : $"Selected {GetSelectedMeasurements().Count} enclosed measurement(s). Ctrl+C copies, Ctrl+V pastes.");
+                ? $"Selected {GetSelectedMeasurements().Count} measurement(s) and {SelectedCutRegionCount} touched cutout(s)."
+                : $"Selected {GetSelectedMeasurements().Count} measurement(s) and {SelectedCutRegionCount} enclosed cutout(s).");
     }
 
     // Ctrl adds/toggles objects; Ctrl+Shift removes them. Shift alone is Ortho.
-    private void ApplyAdditiveObjectGesture(IReadOnlyList<Measurement> hits, bool removeMode)
+    private void ApplyAdditiveObjectGesture(
+        IReadOnlyList<Measurement> hits,
+        IReadOnlyList<CutRegionRef> cutRegionHits,
+        bool removeMode)
     {
         var selected = GetSelectedMeasurements().ToList();
+        var selectedCutRegions = SelectedCutRegions().ToList();
 
         if (removeMode)
         {
             var combined = selected.Where(m => !hits.Contains(m)).ToList();
-            foreach (Measurement hit in hits)
-                _selectedMeasurementVertexIndices.Remove(hit);
-            int removed = selected.Count - combined.Count;
-            SetSelectedMeasurements(combined, combined.LastOrDefault(), -1);
+            var combinedCutRegions = selectedCutRegions
+                .Where(cutRegion => !cutRegionHits.Contains(cutRegion))
+                .ToList();
+            int removed = selected.Count - combined.Count +
+                          selectedCutRegions.Count - combinedCutRegions.Count;
+            SetMixedMeasurementSelection(combined, combinedCutRegions, combined.LastOrDefault());
             RequestRepaint();
-            PostStatus(combined.Count == 0
+            PostStatus(combined.Count == 0 && combinedCutRegions.Count == 0
                 ? "Selection cleared."
-                : $"Removed {removed} object(s). {combined.Count} still selected.");
+                : $"Removed {removed} object(s). {combined.Count} measurement(s) and {combinedCutRegions.Count} cutout(s) remain.");
             return;
         }
 
         var newOnes = hits.Where(m => !selected.Contains(m)).ToList();
-        if (newOnes.Count > 0)
+        var newCutRegions = cutRegionHits
+            .Where(cutRegion =>
+                !selectedCutRegions.Contains(cutRegion) &&
+                !selected.Contains(cutRegion.Parent) &&
+                !newOnes.Contains(cutRegion.Parent))
+            .ToList();
+        if (newOnes.Count > 0 || newCutRegions.Count > 0)
         {
             var combined = selected.Concat(newOnes).ToList();
-            // SetSelectedMeasurements also clears any per-object vertex sub-selection.
-            SetSelectedMeasurements(combined, newOnes[^1], -1);
+            var combinedCutRegions = selectedCutRegions
+                .Concat(newCutRegions)
+                .Where(cutRegion => !combined.Contains(cutRegion.Parent))
+                .ToList();
+            SetMixedMeasurementSelection(
+                combined,
+                combinedCutRegions,
+                newOnes.LastOrDefault() ?? combined.LastOrDefault());
             RequestRepaint();
-            PostStatus($"Selected {combined.Count} object(s). Ctrl+C copies, Ctrl+V pastes.");
+            PostStatus($"Selected {combined.Count} measurement(s) and {combinedCutRegions.Count} cutout(s). Ctrl+C copies the bundle.");
             return;
         }
 
         // All hits already selected. Alt changes the vertex selection set; direct handle drag edits it.
-        PostStatus(selected.Count == 1
-            ? "Object already selected. Drag a handle to edit it, or use Alt to select multiple handles."
-            : $"{selected.Count} objects selected.");
+        PostStatus($"{selected.Count} measurement(s) and {selectedCutRegions.Count} cutout(s) already selected.");
     }
 
     private void ApplyAnnotationClickGesture(PageAnnotation annotation, bool removeMode)

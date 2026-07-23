@@ -66,10 +66,13 @@ public partial class MainWindow
         SettingsPresetStore.InstallProviders(_currentJob);
         SettingsPresetStore.InstallPageSortProvider(_currentJob);
         SettingsPresetStore.InstallSheetMetadataProvider(_currentJob);
+        SettingsPresetStore.InstallRasterDpiPresetProvider(_currentJob);
         _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
         _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
+        _rasterDpiPresetConfig = SettingsPresetStore.ResolveRasterDpiPresets(_currentJob).Clone();
         _takeoffTemplateConfig = TakeoffTemplateStore.ResolveConfig(_currentJob).Clone();
+        RefreshSheetManagerRasterPresetButtons();
         RefreshTakeoffTemplateEditors();
         ReloadModuleFeatures();
     }
@@ -81,6 +84,7 @@ public partial class MainWindow
         _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
         _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
+        _rasterDpiPresetConfig = SettingsPresetStore.ResolveRasterDpiPresets(_currentJob).Clone();
         string cat = (_settingsCategoryList?.SelectedItem as string) ?? SettingsCategories[0];
         ShowSettingsCategory(cat);
     }
@@ -622,6 +626,8 @@ public partial class MainWindow
         _defaultsAutoCleanRasterOnCloseBox.Unchecked += (_, _) => SetAutoCleanRasterCacheOnClose(false);
         root.Children.Add(_defaultsAutoCleanRasterOnCloseBox);
 
+        AppendRasterDpiPresetSettings(root);
+
         root.Children.Add(Header("Tree display"));
         root.Children.Add(new TextBlock
         {
@@ -691,6 +697,7 @@ public partial class MainWindow
             _defaultsTakeoffSectionsBox.IsChecked = _settings.ShowTakeoffSectionsInTree;
         if (_defaultsAutoCleanRasterOnCloseBox != null)
             _defaultsAutoCleanRasterOnCloseBox.IsChecked = _settings.AutoCleanRasterCacheOnClose;
+        BindRasterDpiPresetSettings();
     }
 
     private void SetAutoCleanRasterCacheOnClose(bool enabled)

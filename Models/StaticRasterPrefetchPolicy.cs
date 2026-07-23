@@ -39,7 +39,9 @@ public static class StaticRasterPrefetchPolicy
         if (!RasterSheetCacheService.UseAsPageOpenRaster(source))
             return false;
 
-        int targetDpi = ResolveEffectiveTargetDpi(source.WidthPt, source.HeightPt);
+        int targetDpi = RasterSheetCacheService.PinnedRasterDpi(source);
+        if (targetDpi <= 0)
+            targetDpi = ResolveEffectiveTargetDpi(source.WidthPt, source.HeightPt);
         int currentDpi = RasterSheetCacheService.RenderScaleToDpi(source.RenderScale);
         if (!RequiresPinnedDpiMigration(currentDpi, targetDpi))
             return true;

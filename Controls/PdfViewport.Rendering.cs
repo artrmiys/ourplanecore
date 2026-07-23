@@ -98,6 +98,7 @@ public sealed partial class PdfViewport
                     sheetOverlayPaintMs += frameWatch.ElapsedMilliseconds - sheetOverlayStart;
                 }
                 DrawSheetOverlayEditGuides(canvas);
+                DrawSheetOverlaySelection(canvas);
                 DrawCursorGuide(canvas, visiblePdf);
                 DrawTransformOverlay(canvas);
                 overlayMs += frameWatch.ElapsedMilliseconds - sectionStart;

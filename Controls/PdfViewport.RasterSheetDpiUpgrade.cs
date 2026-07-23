@@ -19,6 +19,7 @@ public sealed partial class PdfViewport
             _bitmapScale <= 0 ||
             _rasterSheetSource?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+            RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
             string.IsNullOrWhiteSpace(_pageFolder) ||
             string.IsNullOrWhiteSpace(_pdfPath))
         {
@@ -73,7 +74,8 @@ public sealed partial class PdfViewport
                     return;
 
                 PageInfo buildPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
-                if (buildPage.RasterSheet?.Enabled != true)
+                if (buildPage.RasterSheet?.Enabled != true ||
+                    RasterSheetCacheService.IsRasterDpiPinned(buildPage.RasterSheet))
                     return;
 
                 float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
@@ -106,6 +108,7 @@ public sealed partial class PdfViewport
             {
                 if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath) ||
                     !IsStaticRasterDisplayActive() ||
+                    RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
                     targetDpi != SafeStaticRasterTargetDpi() ||
                     !StaticRasterPrefetchPolicy.RequiresPinnedDpiMigration(
                         RasterSheetCacheService.RenderScaleToDpi(_bitmapScale),
@@ -156,6 +159,7 @@ public sealed partial class PdfViewport
             _usingLayerRenderer ||
             _pdfLayersLoadedForPage ||
             rasterSheet?.Enabled == true ||
+            RasterSheetCacheService.IsRasterDpiPinned(rasterSheet) ||
             string.IsNullOrWhiteSpace(pageFolder) ||
             string.IsNullOrWhiteSpace(pdfPath) ||
             !File.Exists(pdfPath))
@@ -209,6 +213,8 @@ public sealed partial class PdfViewport
                     return;
 
                 PageInfo buildPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
+                if (RasterSheetCacheService.IsRasterDpiPinned(buildPage.RasterSheet))
+                    return;
                 float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
                 result = await Task.Run(() =>
                 {
@@ -247,6 +253,7 @@ public sealed partial class PdfViewport
             {
                 if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath) ||
                     !ViewportRenderPolicy.StaticRasterModeEnabled ||
+                    RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
                     _usingRasterSheetRender ||
                     _usingLayerRenderer ||
                     _pdfLayersLoadedForPage)
@@ -286,6 +293,7 @@ public sealed partial class PdfViewport
             _usingRasterSheetOverviewRender ||
             _rasterSheetSource?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+            RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
             _pdfLayersLoadedForPage ||
             _usingLayerRenderer ||
             _bitmapScale <= 0 ||
@@ -319,6 +327,7 @@ public sealed partial class PdfViewport
             !_usingRasterSheetOverviewRender &&
             _rasterSheetSource?.Enabled == true &&
             !RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) &&
+            !RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) &&
             !_pdfLayersLoadedForPage &&
             !_usingLayerRenderer &&
             _bitmapScale > 0 &&
@@ -401,6 +410,7 @@ public sealed partial class PdfViewport
 
         if (!_usingRasterSheetRender ||
             _rasterSheetSource?.Enabled != true ||
+            RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
             _pdfLayersLoadedForPage ||
             _usingLayerRenderer ||
             _bitmapScale <= 0)
@@ -453,6 +463,7 @@ public sealed partial class PdfViewport
         if (_usingRasterSheetOverviewRender ||
             _rasterSheetSource?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+            RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
             _pdfLayersLoadedForPage ||
             _usingLayerRenderer ||
             _bitmapScale <= 0)
@@ -480,6 +491,7 @@ public sealed partial class PdfViewport
     private bool ShouldUseResponsiveRasterSheetDpiForZoom(RasterSheetSource? rasterSheet, float zoom) =>
         rasterSheet?.Enabled == true &&
         !RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
+        !RasterSheetCacheService.IsRasterDpiPinned(rasterSheet) &&
         !_pdfLayersLoadedForPage &&
         !_usingLayerRenderer &&
         zoom >= ViewportRenderPolicy.RasterSheetDisplayMinZoom &&
@@ -496,6 +508,7 @@ public sealed partial class PdfViewport
     {
         if (_rasterSheetSource?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+            RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
             _pdfLayersLoadedForPage ||
             _usingLayerRenderer ||
             string.IsNullOrWhiteSpace(_pageFolder) ||
@@ -562,6 +575,7 @@ public sealed partial class PdfViewport
         if (!ShouldHoldHeavyRasterSheetDpiAfterMotion(targetDpi) ||
             _rasterSheetSource?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+            RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
             _pdfLayersLoadedForPage ||
             _usingLayerRenderer)
         {
@@ -644,6 +658,7 @@ public sealed partial class PdfViewport
     private void QueueRasterSheetQualityRestoreAfterMotion(PageInfo page)
     {
         if (page.RasterSheet?.Enabled != true ||
+            RasterSheetCacheService.IsRasterDpiPinned(page.RasterSheet) ||
             string.IsNullOrWhiteSpace(page.FolderPath) ||
             string.IsNullOrWhiteSpace(page.PdfPath) ||
             page.PdfPage < 0)

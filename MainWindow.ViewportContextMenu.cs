@@ -12,11 +12,21 @@ public partial class MainWindow
     {
         Measurement? clickedMeasurement = request.Measurement;
         var selected = _viewport.GetSelectedMeasurements();
+        int selectedCutouts = _viewport.SelectedCutRegionCount;
         bool copyClicked = selected.Count == 0 && clickedMeasurement != null;
-        bool canCopy = selected.Count > 0 || copyClicked;
-        string copyLabel = selected.Count > 1 ? "Copy Selected Measurements" : "Copy Measurement";
+        bool canCopy = selected.Count > 0 || selectedCutouts > 0 || copyClicked;
+        string copyLabel = selectedCutouts > 0
+            ? selected.Count > 0
+                ? $"Copy {selected.Count} Measurement(s) + {selectedCutouts} Cutout(s)"
+                : $"Copy {selectedCutouts} Cutout(s)"
+            : selected.Count > 1
+                ? "Copy Selected Measurements"
+                : "Copy Measurement";
         menu.Items.Add(MakeMenuItem(copyLabel, canCopy, () =>
         {
+            if (_viewport.CopyCurrentMeasurementAndCutRegionSelection())
+                return;
+
             IReadOnlyList<Measurement> source = selected.Count > 0
                 ? selected
                 : clickedMeasurement == null
@@ -29,11 +39,25 @@ public partial class MainWindow
             return;
 
         int clipboardCount = _measurementClipboard?.Entries.Count ?? 0;
+        int cutoutClipboardCount = _viewport.CutRegionClipboardCount;
+        bool pasteMixed = _viewport.HasCurrentMixedMeasurementCutRegionClipboard &&
+                          clipboardCount > 0 &&
+                          cutoutClipboardCount > 0;
+        bool pasteCutouts = _viewport.HasCurrentCutRegionClipboard && cutoutClipboardCount > 0;
+        bool pasteMeasurements = _viewport.HasCurrentMeasurementClipboard && clipboardCount > 0;
+        string pasteLabel = pasteMixed
+            ? $"Paste {clipboardCount} Measurement(s) + {cutoutClipboardCount} Cutout(s)"
+            : pasteCutouts
+                ? $"Paste {cutoutClipboardCount} Cutout(s)"
+                : clipboardCount > 0
+                    ? $"Paste {clipboardCount} Measurement(s) to This Sheet"
+                    : "Paste Measurements to This Sheet";
         menu.Items.Add(MakeWritableViewportMenuItem(
-            clipboardCount > 0 ? $"Paste {clipboardCount} Measurement(s) to This Sheet" : "Paste Measurements to This Sheet",
-            _currentPage != null && clipboardCount > 0,
-            "paste measurements",
-            () => PasteMeasurementsFromClipboard(new SKPoint(request.PdfX, request.PdfY))));
+            pasteLabel,
+            _currentPage != null && (pasteMixed || pasteCutouts || pasteMeasurements),
+            "paste measurements and cutouts",
+            () => _viewport.PasteCurrentMeasurementAndCutRegionClipboard(
+                new SKPoint(request.PdfX, request.PdfY))));
 
         IReadOnlyList<Measurement> selection = selected.Count > 0
             ? selected

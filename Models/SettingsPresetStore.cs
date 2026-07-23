@@ -72,6 +72,12 @@ public static class SettingsPresetStore
     private static string JobSheetMetadataPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "AI_Context", "settings", "sheet_metadata.json");
 
+    private static string GlobalRasterDpiPresetPath() =>
+        Path.Combine(SmartContextStore.GlobalRoot, "presets", "raster_dpi_presets.json");
+
+    private static string JobRasterDpiPresetPath(OurPlanCoreJob job) =>
+        Path.Combine(job.RootPath, "AI_Context", "settings", "raster_dpi_presets.json");
+
     private static T? LoadJson<T>(string path) where T : class
     {
         try
@@ -226,4 +232,35 @@ public static class SettingsPresetStore
 
     public static void InstallSheetMetadataProvider(OurPlanCoreJob? job) =>
         SheetMetadataRulesService.Install(ResolveSheetMetadata(job));
+
+    // Sheet Manager raster DPI buttons: per-job override -> global -> defaults.
+    public static RasterDpiPresetConfig? LoadGlobalRasterDpiPresets() =>
+        LoadJson<RasterDpiPresetConfig>(GlobalRasterDpiPresetPath());
+
+    public static void SaveGlobalRasterDpiPresets(RasterDpiPresetConfig config) =>
+        SaveJson(
+            GlobalRasterDpiPresetPath(),
+            RasterDpiPresetConfig.UpgradeForCurrentSchema(config));
+
+    public static RasterDpiPresetConfig? LoadJobRasterDpiPresetOverride(OurPlanCoreJob job) =>
+        LoadJson<RasterDpiPresetConfig>(JobRasterDpiPresetPath(job));
+
+    public static void SaveJobRasterDpiPresetOverride(
+        OurPlanCoreJob job,
+        RasterDpiPresetConfig config) =>
+        SaveJson(
+            JobRasterDpiPresetPath(job),
+            RasterDpiPresetConfig.UpgradeForCurrentSchema(config));
+
+    public static RasterDpiPresetConfig ResolveRasterDpiPresets(OurPlanCoreJob? job)
+    {
+        if (job != null && LoadJobRasterDpiPresetOverride(job) is { } jobConfig)
+            return RasterDpiPresetConfig.UpgradeForCurrentSchema(jobConfig);
+        if (LoadGlobalRasterDpiPresets() is { } globalConfig)
+            return RasterDpiPresetConfig.UpgradeForCurrentSchema(globalConfig);
+        return RasterDpiPresetConfig.BuildDefault();
+    }
+
+    public static void InstallRasterDpiPresetProvider(OurPlanCoreJob? job) =>
+        RasterDpiPresetService.Install(ResolveRasterDpiPresets(job));
 }

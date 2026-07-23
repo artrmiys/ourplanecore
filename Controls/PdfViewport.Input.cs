@@ -83,7 +83,7 @@ public sealed partial class PdfViewport
                         SelectMeasurement(measurement, pointVertexIndex);
                     }
                     else if (!preserveSelectedPointVertices && _selectedMeasurements.Contains(measurement))
-                        SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1);
+                        SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1, preserveCutRegions: true);
                     else if (!preserveSelectedPointVertices)
                         SelectMeasurement(measurement, -1);
                 }
@@ -222,7 +222,8 @@ public sealed partial class PdfViewport
                 }
 
                 bool preserveSelectionForAdd = selectionModifierActive;
-                if (TryBeginTransformHandleEdit(pdf, pos))
+                if (TryBeginTransformHandleEdit(pdf, pos) ||
+                    TryBeginSelectedCutRegionBundleMove(pdf, pos))
                 {
                     e.Handled = true;
                     return;
@@ -357,7 +358,7 @@ public sealed partial class PdfViewport
             return;
         }
 
-        if (_draggingTransformScale || _draggingTransformRotate)
+        if (_draggingTransformScale || _draggingTransformRotate || _draggingTransformMove)
         {
             UpdateTransformDrag(ScreenToPdf((float)pos.X, (float)pos.Y));
             e.Handled = true;
@@ -707,7 +708,7 @@ public sealed partial class PdfViewport
             return;
         }
 
-        if (_draggingTransformScale || _draggingTransformRotate)
+        if (_draggingTransformScale || _draggingTransformRotate || _draggingTransformMove)
         {
             FinishTransformDrag();
             e.Handled = true;
@@ -913,22 +914,10 @@ public sealed partial class PdfViewport
             case Key.C:
                 if (Keyboard.Modifiers == ModifierKeys.Control)
                 {
-                    if (!CopySelectedCutRegions())
+                    if (!CopySelectedPageAnnotations() &&
+                        !CopyCurrentMeasurementAndCutRegionSelection())
                     {
-                        _holeClipboard.Clear();
-                        if (!CopySelectedPageAnnotations())
-                        {
-                            IReadOnlyList<Measurement> selectedMeasurements = GetSelectedMeasurements();
-                            if (selectedMeasurements.Count > 0)
-                            {
-                                MarkMeasurementClipboardCurrent();
-                                CopyMeasurementsRequested?.Invoke(selectedMeasurements);
-                            }
-                            else
-                            {
-                                PostStatus("Select measurements or markups before copying.");
-                            }
-                        }
+                        PostStatus("Select measurements, cutouts, or markups before copying.");
                     }
                     e.Handled = true;
                 }
@@ -941,12 +930,12 @@ public sealed partial class PdfViewport
                 }
                 break;
             case Key.V when Keyboard.Modifiers == ModifierKeys.Control:
-                if (IsCutRegionClipboardCurrent)
-                    PasteCutRegions(_lastPointerPdf);
-                else if (IsAnnotationClipboardCurrent)
+                if (IsAnnotationClipboardCurrent)
                     PasteCopiedPageAnnotations(_lastPointerPdf);
                 else
-                    PasteMeasurementsRequested?.Invoke(_lastPointerPdf);
+                    // Shared resolver covers IsCutRegionClipboardCurrent,
+                    // mixed measurement+cutout, and measurement payloads.
+                    PasteCurrentMeasurementAndCutRegionClipboard(_lastPointerPdf);
                 e.Handled = true;
                 break;
             case Key.Delete:

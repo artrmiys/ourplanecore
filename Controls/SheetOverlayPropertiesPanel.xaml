@@ -1,0 +1,259 @@
+<UserControl x:Class="OurPlanCore.Controls.SheetOverlayPropertiesPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="230"
+             Focusable="True"
+             PreviewKeyDown="Panel_PreviewKeyDown">
+    <UserControl.Resources>
+        <Style x:Key="OverlaySectionHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="Margin" Value="0,8,0,4"/>
+        </Style>
+        <Style x:Key="OverlayCompactButton"
+               TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="Padding" Value="7,3"/>
+            <Setter Property="Margin" Value="0,0,4,4"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
+        <Style x:Key="OverlayValueBox"
+               TargetType="TextBox"
+               BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Width" Value="58"/>
+            <Setter Property="Padding" Value="3,2"/>
+            <Setter Property="Margin" Value="5,0,0,0"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="OverlayTransformSlider"
+               TargetType="Slider"
+               BasedOn="{StaticResource {x:Type Slider}}">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="IsSnapToTickEnabled" Value="False"/>
+            <Setter Property="SmallChange" Value="1"/>
+            <Setter Property="LargeChange" Value="6"/>
+            <EventSetter Event="ValueChanged" Handler="TransformSlider_ValueChanged"/>
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="TransformSlider_PreviewMouseLeftButtonUp"/>
+            <EventSetter Event="PreviewKeyUp" Handler="TransformSlider_PreviewKeyUp"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Border Background="{DynamicResource PanelBackgroundBrush}"
+            BorderBrush="{DynamicResource ControlBorderBrush}"
+            BorderThickness="0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="9,7,9,12">
+                <TextBlock x:Name="TxtTargetSheet"
+                           Text="No sheet open"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ControlForegroundBrush}"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="TxtPanelStatus"
+                           Text="Open a sheet to configure its overlay."
+                           Margin="0,2,0,0"
+                           FontSize="10"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+
+                <TextBlock Text="Source" Style="{StaticResource OverlaySectionHeader}"/>
+                <Border BorderBrush="{DynamicResource ControlBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="2"
+                        Padding="6,4"
+                        Margin="0,0,0,5">
+                    <TextBlock x:Name="TxtSourceSheet"
+                               Text="Not set"
+                               FontSize="10.5"
+                               Foreground="{DynamicResource ControlForegroundBrush}"
+                               TextTrimming="CharacterEllipsis"/>
+                </Border>
+                <CheckBox x:Name="ChkVisible"
+                          Content="Show overlay"
+                          Margin="1,0,0,5"
+                          Click="Visibility_Click"/>
+                <WrapPanel>
+                    <Button x:Name="BtnOpenSource"
+                            Content="Open Source"
+                            Tag="OpenSource"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                    <Button x:Name="BtnChooseReplace"
+                            Content="Choose / Replace..."
+                            Tag="ChooseReplace"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                    <Button x:Name="BtnNextMatch"
+                            Content="Next Match"
+                            Tag="NextMatch"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                    <Button x:Name="BtnClear"
+                            Content="Clear"
+                            Tag="Clear"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                </WrapPanel>
+
+                <Border Height="1"
+                        Background="{DynamicResource ControlBorderBrush}"
+                        Margin="0,4,0,0"/>
+                <TextBlock Text="Alignment" Style="{StaticResource OverlaySectionHeader}"/>
+                <WrapPanel>
+                    <Button x:Name="BtnAutoFit"
+                            Content="Auto Fit"
+                            Tag="AutoFit"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                    <Button x:Name="BtnFindBest"
+                            Content="Find Best"
+                            Tag="FindBest"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                    <Button x:Name="BtnEditPoints"
+                            Content="Edit by Points"
+                            Tag="EditByPoints"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                </WrapPanel>
+
+                <Border Height="1"
+                        Background="{DynamicResource ControlBorderBrush}"
+                        Margin="0,4,0,0"/>
+                <DockPanel Margin="0,0,0,1">
+                    <Button x:Name="BtnReset"
+                            DockPanel.Dock="Right"
+                            Content="Reset"
+                            Tag="ResetTransform"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                    <TextBlock Text="Transform" Style="{StaticResource OverlaySectionHeader}"/>
+                </DockPanel>
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="52"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="X (pt)" VerticalAlignment="Center"/>
+                    <Slider x:Name="SldOffsetX"
+                            Grid.Column="1"
+                            Tag="OffsetX"
+                            Minimum="-720"
+                            Maximum="720"
+                            Style="{StaticResource OverlayTransformSlider}"/>
+                    <TextBox x:Name="TxtOffsetX"
+                             Grid.Column="2"
+                             Tag="OffsetX"
+                             TextChanged="TransformTextBox_TextChanged"
+                             LostKeyboardFocus="TransformTextBox_LostKeyboardFocus"
+                             PreviewKeyDown="TransformTextBox_PreviewKeyDown"
+                             Style="{StaticResource OverlayValueBox}"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="52"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Y (pt)" VerticalAlignment="Center"/>
+                    <Slider x:Name="SldOffsetY"
+                            Grid.Column="1"
+                            Tag="OffsetY"
+                            Minimum="-720"
+                            Maximum="720"
+                            Style="{StaticResource OverlayTransformSlider}"/>
+                    <TextBox x:Name="TxtOffsetY"
+                             Grid.Column="2"
+                             Tag="OffsetY"
+                             TextChanged="TransformTextBox_TextChanged"
+                             LostKeyboardFocus="TransformTextBox_LostKeyboardFocus"
+                             PreviewKeyDown="TransformTextBox_PreviewKeyDown"
+                             Style="{StaticResource OverlayValueBox}"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="52"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Scale" VerticalAlignment="Center"/>
+                    <Slider x:Name="SldScale"
+                            Grid.Column="1"
+                            Tag="Scale"
+                            Minimum="0.25"
+                            Maximum="4"
+                            SmallChange="0.01"
+                            LargeChange="0.05"
+                            Style="{StaticResource OverlayTransformSlider}"/>
+                    <TextBox x:Name="TxtScale"
+                             Grid.Column="2"
+                             Tag="Scale"
+                             TextChanged="TransformTextBox_TextChanged"
+                             LostKeyboardFocus="TransformTextBox_LostKeyboardFocus"
+                             PreviewKeyDown="TransformTextBox_PreviewKeyDown"
+                             ToolTip="Scale multiplier; numeric entry accepts 0.05 to 20."
+                             Style="{StaticResource OverlayValueBox}"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="52"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Rotation" VerticalAlignment="Center"/>
+                    <Slider x:Name="SldRotation"
+                            Grid.Column="1"
+                            Tag="Rotation"
+                            Minimum="-180"
+                            Maximum="180"
+                            SmallChange="0.25"
+                            LargeChange="1"
+                            Style="{StaticResource OverlayTransformSlider}"/>
+                    <TextBox x:Name="TxtRotation"
+                             Grid.Column="2"
+                             Tag="Rotation"
+                             TextChanged="TransformTextBox_TextChanged"
+                             LostKeyboardFocus="TransformTextBox_LostKeyboardFocus"
+                             PreviewKeyDown="TransformTextBox_PreviewKeyDown"
+                             Style="{StaticResource OverlayValueBox}"/>
+                </Grid>
+                <TextBlock Text="Drag sliders for live preview. Esc restores the saved transform."
+                           Margin="0,0,0,2"
+                           FontSize="9.5"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+
+                <Border Height="1"
+                        Background="{DynamicResource ControlBorderBrush}"
+                        Margin="0,5,0,0"/>
+                <TextBlock Text="Color" Style="{StaticResource OverlaySectionHeader}"/>
+                <WrapPanel>
+                    <Button x:Name="BtnColorRed" Tag="#E53935" ToolTip="Red"
+                            Click="ColorButton_Click" Width="25" Height="22" Margin="0,0,4,4"
+                            Background="#E53935" BorderThickness="1"/>
+                    <Button x:Name="BtnColorBlue" Tag="#1E88E5" ToolTip="Blue"
+                            Click="ColorButton_Click" Width="25" Height="22" Margin="0,0,4,4"
+                            Background="#1E88E5" BorderThickness="1"/>
+                    <Button x:Name="BtnColorGreen" Tag="#43A047" ToolTip="Green"
+                            Click="ColorButton_Click" Width="25" Height="22" Margin="0,0,4,4"
+                            Background="#43A047" BorderThickness="1"/>
+                    <Button x:Name="BtnColorOrange" Tag="#FB8C00" ToolTip="Orange"
+                            Click="ColorButton_Click" Width="25" Height="22" Margin="0,0,4,4"
+                            Background="#FB8C00" BorderThickness="1"/>
+                    <Button x:Name="BtnColorMagenta" Tag="#D81B60" ToolTip="Magenta"
+                            Click="ColorButton_Click" Width="25" Height="22" Margin="0,0,4,4"
+                            Background="#D81B60" BorderThickness="1"/>
+                    <Button x:Name="BtnColorGray" Tag="#546E7A" ToolTip="Gray"
+                            Click="ColorButton_Click" Width="25" Height="22" Margin="0,0,4,4"
+                            Background="#546E7A" BorderThickness="1"/>
+                </WrapPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</UserControl>

@@ -152,6 +152,7 @@ public sealed partial class PdfViewport
         !_pdfLayerTraceEnabled &&
         !IsSheetOverlayPointEditing &&
         !_draggingSheetOverlay &&
+        !_sheetOverlayTransformPreviewActive &&
         canvasInfo.Width > 0 &&
         canvasInfo.Height > 0 &&
         (long)canvasInfo.Width * canvasInfo.Height <= StaticPageFrameMaxPixels;

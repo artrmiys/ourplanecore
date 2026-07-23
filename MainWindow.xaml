@@ -1190,6 +1190,7 @@
                         <TabControl x:Name="PagesSideTabs"
                                     Grid.Row="0"
                                     AutomationProperties.AutomationId="PagesSideTabs"
+                                    SelectionChanged="PagesSideTabs_SelectionChanged"
                                     ItemContainerStyle="{StaticResource WorkspaceTabItem}"
                                     Background="{DynamicResource PanelBackgroundBrush}"
                                     Foreground="{DynamicResource ControlForegroundBrush}"
@@ -1304,6 +1305,11 @@
                                         <StackPanel x:Name="LayersPanel" Margin="0"/>
                                     </ScrollViewer>
                                 </DockPanel>
+                            </TabItem>
+                            <TabItem x:Name="SheetOverlayPropertiesTab"
+                                     Header="Overlay">
+                                <controls:SheetOverlayPropertiesPanel x:Name="OverlayPropertiesPanel"
+                                                                      Loaded="SheetOverlayPropertiesPanel_Loaded"/>
                             </TabItem>
                         </TabControl>
                         <GridSplitter x:Name="BookmarksDockSplitter"
@@ -1932,36 +1938,45 @@
                         <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" ToolTip="Import PDF measurement annotations into takeoff items"/>
                         <Button x:Name="BtnSheetManagerExportPdf" Content="Export PDF" Click="BtnExportPdf_Click" Margin="0,0,12,4" ToolTip="Export selected or all sheets to PDF"/>
                         <TextBlock Text="Raster" Style="{StaticResource ManagerGroupLabel}"/>
-                        <ComboBox x:Name="SheetManagerRasterDpiBox"
-                                  Width="88"
-                                  Height="24"
-                                  Margin="0,0,4,4"
-                                  SelectedIndex="0"
-                                  ToolTip="Raster quality for selected sheets; Auto uses the best ready cache, or builds 200 DPI when none exists">
-                            <ComboBoxItem Content="Auto" Tag="auto"/>
-                            <ComboBoxItem Content="150 DPI" Tag="150"/>
-                            <ComboBoxItem Content="200 DPI" Tag="200"/>
-                            <ComboBoxItem Content="300 DPI" Tag="300"/>
-                            <ComboBoxItem Content="400 DPI" Tag="400"/>
-                        </ComboBox>
-                        <ComboBox x:Name="SheetManagerRasterFormatBox"
-                                  Width="76"
-                                  Height="24"
-                                  Margin="0,0,4,4"
-                                  SelectedIndex="0"
-                                  ToolTip="Raster cache format for selected sheets; Auto keeps the existing WebP-preferred cache behavior, PNG is useful for difficult raster-like PDFs">
-                            <ComboBoxItem Content="Auto" Tag="auto"/>
-                            <ComboBoxItem Content="WebP" Tag="webp"/>
-                            <ComboBoxItem Content="PNG" Tag="png"/>
-                        </ComboBox>
-                        <Button x:Name="SheetManagerBuildRasterButton" Content="Build Raster" Click="BtnSheetManagerBuildRaster_Click" ToolTip="Build compact raster working images in the background at the selected DPI for selected sheets, or all sheets if none are selected"/>
-                        <Button x:Name="SheetManagerPrepareRasterButton" Content="Prepare" Click="BtnSheetManagerPrepareRaster_Click" ToolTip="Build selected raster DPI caches in the background so the UI stays usable"/>
-                        <Button x:Name="SheetManagerCancelRasterButton" Content="Cancel" Click="BtnSheetManagerCancelRaster_Click" IsEnabled="False" ToolTip="Cancel the background raster preparation after the current sheet finishes"/>
-                        <Button x:Name="SheetManagerRasterOnButton" Content="Raster On" Click="BtnSheetManagerRasterOn_Click" ToolTip="Use existing raster working sheets for selected sheets; builds missing caches at the selected DPI"/>
-                        <Button x:Name="SheetManagerRasterOffButton" Content="Raster Off" Click="BtnSheetManagerRasterOff_Click" ToolTip="Return selected sheets to live PDF rendering without deleting the raster cache"/>
-                        <Button x:Name="SheetManagerRasterFirstOnButton" Content="First On" Click="BtnSheetManagerRasterFirstOn_Click" ToolTip="Open selected raster sheets from the pre-rendered raster image as the first frame"/>
-                        <Button x:Name="SheetManagerRasterFirstOffButton" Content="First Off" Click="BtnSheetManagerRasterFirstOff_Click" ToolTip="Keep selected raster sheets on the normal PDF/preview-first opening path"/>
-                        <Button x:Name="SheetManagerCleanRasterButton" Content="Clean Raster" Click="BtnSheetManagerCompactRaster_Click" Margin="0,0,12,4" ToolTip="Delete unused raster image variants for selected sheets, or all sheets if none are selected; keeps the active raster image"/>
+                        <TextBlock x:Name="TxtSheetManagerRasterSelection" Text="Selected: 0" VerticalAlignment="Center" Margin="0,0,6,4" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                        <StackPanel x:Name="SheetManagerRasterPresetControls" Orientation="Horizontal" IsEnabled="False">
+                            <Button Content="PDF" Tag="pdf" Click="BtnSheetManagerRasterPreset_Click" ToolTip="Disable raster rendering for the selected sheets"/>
+                            <Button Content="Auto" Tag="auto" Click="BtnSheetManagerRasterPreset_Click" ToolTip="Restore adaptive raster DPI for the selected sheets"/>
+                            <ItemsControl x:Name="SheetManagerRasterPresetItems">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding}" Tag="{Binding}" Click="BtnSheetManagerRasterPreset_Click" Style="{StaticResource ManagerButton}" ToolTip="Build or reuse this exact DPI and keep it fixed for the selected sheets"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="DPI" VerticalAlignment="Center" Margin="0,0,6,4"/>
+                        </StackPanel>
+                        <Button x:Name="SheetManagerRasterOptionsButton" Content="Options…" Click="BtnSheetManagerRasterOptions_Click" IsEnabled="False" Margin="0,0,12,4" ToolTip="Raster format, prepare, first-frame, cleanup, and cancel options"/>
+                        <Popup x:Name="SheetManagerRasterOptionsPopup" PlacementTarget="{Binding ElementName=SheetManagerRasterOptionsButton}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                            <Border Padding="10" BorderThickness="1" CornerRadius="4" BorderBrush="{DynamicResource ControlBorderBrush}" Background="{DynamicResource SurfaceBackgroundBrush}">
+                                <StackPanel>
+                                    <TextBlock Text="Raster options" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <WrapPanel>
+                                        <TextBlock Text="Format" Style="{StaticResource ManagerGroupLabel}"/>
+                                        <ComboBox x:Name="SheetManagerRasterFormatBox" Width="76" Height="24" Margin="0,0,8,4" SelectedIndex="0" ToolTip="Auto keeps the existing WebP-preferred cache behavior; PNG is useful for difficult raster-like PDFs">
+                                            <ComboBoxItem Content="Auto" Tag="auto"/>
+                                            <ComboBoxItem Content="WebP" Tag="webp"/>
+                                            <ComboBoxItem Content="PNG" Tag="png"/>
+                                        </ComboBox>
+                                        <Button x:Name="SheetManagerPrepareRasterButton" Content="Prepare" Click="BtnSheetManagerPrepareRaster_Click" Style="{StaticResource ManagerButton}" ToolTip="Build the last selected DPI cache without changing PDF/raster state"/>
+                                        <Button x:Name="SheetManagerRasterFirstOnButton" Content="First On" Click="BtnSheetManagerRasterFirstOn_Click" Style="{StaticResource ManagerButton}" ToolTip="Open selected raster sheets from the pre-rendered raster image as the first frame"/>
+                                        <Button x:Name="SheetManagerRasterFirstOffButton" Content="First Off" Click="BtnSheetManagerRasterFirstOff_Click" Style="{StaticResource ManagerButton}" ToolTip="Keep selected raster sheets on the normal PDF/preview-first opening path"/>
+                                        <Button x:Name="SheetManagerCleanRasterButton" Content="Clean" Click="BtnSheetManagerCompactRaster_Click" Style="{StaticResource ManagerButton}" ToolTip="Delete unused raster image variants for selected sheets; keeps the active raster image"/>
+                                        <Button x:Name="SheetManagerCancelRasterButton" Content="Cancel" Click="BtnSheetManagerCancelRaster_Click" Style="{StaticResource ManagerButton}" IsEnabled="False" ToolTip="Cancel background raster work after the current sheet finishes"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
                         <TextBlock Text="Metadata" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Refresh" Click="BtnSheetManagerRefresh_Click" ToolTip="Reload the sheet table from current page folders"/>
                         <Button Content="Analyze" Click="BtnSheetManagerAnalyze_Click" ToolTip="Read PDF text/layers and preview sheet metadata"/>
@@ -1995,7 +2010,8 @@
                               HeadersVisibility="Column"
                               IsReadOnly="False"
                               SelectionMode="Extended"
-                              SelectionUnit="FullRow">
+                              SelectionUnit="FullRow"
+                              SelectionChanged="SheetManagerGrid_SelectionChanged">
                         <DataGrid.Columns>
                             <DataGridCheckBoxColumn Header="Rename" Binding="{Binding ApplyRename}"/>
                             <DataGridComboBoxColumn Header="Scale Action"
@@ -2016,20 +2032,6 @@
                             <DataGridTextColumn Header="Scale Source" Binding="{Binding ScaleSource}" Width="110" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Scale Conf." Binding="{Binding ScaleConfidence}" Width="90" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Raster" Binding="{Binding RasterStatus}" Width="180" IsReadOnly="True"/>
-                            <DataGridTemplateColumn Header="Raster Action" Width="266" IsReadOnly="True">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,1,0,1">
-                                            <Button Content="PDF" MinWidth="36" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRasterPdf_Click" ToolTip="Use live PDF rendering for this sheet"/>
-                                            <Button Content="Auto" MinWidth="40" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRasterAuto_Click" ToolTip="Use the best ready raster cache for this sheet, or build 200 DPI if none exists"/>
-                                            <Button Content="150" MinWidth="34" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRaster150_Click" ToolTip="Use or build 150 DPI raster for this sheet"/>
-                                            <Button Content="200" MinWidth="34" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRaster200_Click" ToolTip="Use or build 200 DPI raster for this sheet"/>
-                                            <Button Content="300" MinWidth="34" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRaster300_Click" ToolTip="Use or build 300 DPI raster for this sheet"/>
-                                            <Button Content="400" MinWidth="34" Height="22" Padding="4,0" Click="BtnSheetManagerRowRaster400_Click" ToolTip="Use or build 400 DPI raster for this sheet"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Why" Binding="{Binding Reason}" Width="320" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Warnings" Binding="{Binding Warnings}" Width="280" IsReadOnly="True"/>
                         </DataGrid.Columns>

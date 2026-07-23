@@ -906,6 +906,9 @@ internal static class PageStore
         copy.OverviewImage = (copy.OverviewImage ?? "").Trim();
         copy.Format = string.IsNullOrWhiteSpace(copy.Format) ? "png" : copy.Format.Trim().ToLowerInvariant();
         copy.RenderProfile = (copy.RenderProfile ?? "").Trim().ToLowerInvariant();
+        copy.PinnedDpi = RasterSheetCacheService.IsSourceImageRasterProfile(copy)
+            ? 0
+            : RasterSheetCacheService.NormalizePinnedRasterDpi(copy.PinnedDpi);
         copy.RenderScale = double.IsNaN(copy.RenderScale) || double.IsInfinity(copy.RenderScale)
             ? 0
             : Math.Clamp(copy.RenderScale, 0, 8);

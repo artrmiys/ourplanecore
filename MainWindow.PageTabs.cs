@@ -353,7 +353,9 @@ public partial class MainWindow
         PageInfo viewportPage = page;
         int deferredVersion = ++_pageOpenDeferredVersion;
         _currentPageAnnotationsLoaded = false;
+        OnSheetOverlayPageChanging();
         _currentPage = viewportPage;
+        OnSheetOverlayPageOpened(viewportPage);
         _currentPdfPath = viewportPage.PdfPath;
         TxtStatusPage.Text = viewportPage.Name;
         _viewport.ScaleMetersPerPt = viewportPage.ScaleMetersPerPt;
@@ -975,6 +977,7 @@ public partial class MainWindow
         }
 
         RefreshPageTabs(null);
+        OnSheetOverlayPageCleared();
         _currentPage = null;
         _currentPdfPath = "";
         TxtStatusPage.Text = "—";

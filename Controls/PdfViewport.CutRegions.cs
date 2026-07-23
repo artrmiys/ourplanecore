@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows;
 using OurPlanCore;
 using SkiaSharp;
 
@@ -8,15 +9,39 @@ namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    // Clipboard ownership is in PdfViewport.CutRegionClipboard.cs, where copy
+    // commits the shared payload with MarkCutRegionClipboardCurrent();
     private enum HoleSelectMode { Replace, Add, Remove }
 
-    // Copied cut regions (area holes), stored in PDF coordinates.
-    private readonly List<List<SKPoint>> _holeClipboard = [];
+    private readonly HashSet<CutRegionRef> _selectedCutRegions = [];
 
-    private static IEnumerable<int> HoleGlobalIndices(Measurement measurement, int holeIndex) =>
-        MeasurementVertices(measurement)
-            .Where(v => v.HoleIndex == holeIndex)
-            .Select(v => v.GlobalIndex);
+    public int SelectedCutRegionCount => SelectedCutRegions().Count;
+
+    internal IReadOnlyList<CutRegionRef> GetSelectedCutRegions() =>
+        SelectedCutRegions();
+
+    private IReadOnlyList<CutRegionRef> SelectedCutRegions() =>
+        _selectedCutRegions
+            .Where(IsValidCutRegion)
+            .ToList();
+
+    private bool IsValidCutRegion(CutRegionRef cutRegion) =>
+        _measurementSet.Contains(cutRegion.Parent) &&
+        IsMeasurementOnActivePage(cutRegion.Parent) &&
+        cutRegion.Parent.MType == "area" &&
+        cutRegion.HoleIndex >= 0 &&
+        cutRegion.HoleIndex < cutRegion.Parent.Holes.Count &&
+        cutRegion.Parent.Holes[cutRegion.HoleIndex].Count >= 3;
+
+    private bool HasSelectedCutRegion(Measurement measurement) =>
+        _selectedCutRegions.Any(cutRegion =>
+            ReferenceEquals(cutRegion.Parent, measurement) &&
+            IsValidCutRegion(cutRegion));
+
+    private void PruneCutRegionSelection(Measurement measurement) =>
+        _selectedCutRegions.RemoveWhere(cutRegion =>
+            ReferenceEquals(cutRegion.Parent, measurement) &&
+            !IsValidCutRegion(cutRegion));
 
     private bool TryHitMeasurementHole(SKPoint pdf, out Measurement measurement, out int holeIndex)
     {
@@ -24,16 +49,16 @@ public sealed partial class PdfViewport
         IReadOnlyList<Measurement> candidates = ActivePageMeasurementsNear(pointRect);
         for (int i = candidates.Count - 1; i >= 0; i--)
         {
-            Measurement m = candidates[i];
-            if (m.MType != "area")
+            Measurement candidate = candidates[i];
+            if (candidate.MType != "area")
                 continue;
 
-            for (int h = 0; h < m.Holes.Count; h++)
+            for (int h = 0; h < candidate.Holes.Count; h++)
             {
-                List<SKPoint> hole = m.Holes[h];
+                List<SKPoint> hole = candidate.Holes[h];
                 if (hole.Count >= 3 && PointInPolygon(pdf, hole))
                 {
-                    measurement = m;
+                    measurement = candidate;
                     holeIndex = h;
                     return true;
                 }
@@ -56,221 +81,141 @@ public sealed partial class PdfViewport
 
     private void SelectMeasurementHole(Measurement measurement, int holeIndex, HoleSelectMode mode)
     {
-        var indices = HoleGlobalIndices(measurement, holeIndex).ToList();
-        if (indices.Count == 0)
+        var cutRegion = new CutRegionRef(measurement, holeIndex);
+        if (!IsValidCutRegion(cutRegion))
             return;
 
         if (mode == HoleSelectMode.Replace)
         {
-            ClearMeasurementVertexSelection();
-            SetSelectedMeasurements([measurement], measurement, -1);
-        }
-        else if (!_selectedMeasurements.Contains(measurement))
-        {
-            SetSelectedMeasurements([measurement], measurement, -1);
+            SetSelectedMeasurements([], null, -1, preserveCutRegions: true);
+            _selectedCutRegions.Clear();
         }
 
         if (mode == HoleSelectMode.Remove)
-        {
-            if (_selectedMeasurementVertexIndices.TryGetValue(measurement, out HashSet<int>? existing))
-            {
-                foreach (int gi in indices)
-                    existing.Remove(gi);
-                if (existing.Count == 0)
-                    _selectedMeasurementVertexIndices.Remove(measurement);
-            }
-        }
+            _selectedCutRegions.Remove(cutRegion);
         else
-        {
-            HashSet<int> set = VertexSelectionSet(measurement, create: true);
-            foreach (int gi in indices)
-                set.Add(gi);
-        }
+            _selectedCutRegions.Add(cutRegion);
 
-        _selectedMeasurement = measurement;
-        _selectedVertexIndex = IsMeasurementVertexSelected(measurement, indices[0])
-            ? indices[0]
-            : LastSelectedVertexIndex();
+        ClearMeasurementVertexSelection();
+        ClearAnnotationSelection();
+        _annotationSelectionDomain = false;
         RequestRepaint();
+        PublishTransformSelectionChanged();
 
-        int holeCount = SelectedWholeHoles().Count;
+        int holeCount = SelectedCutRegionCount;
+        int measurementCount = GetSelectedMeasurements().Count;
         PostStatus(mode == HoleSelectMode.Remove
-            ? $"Cut region deselected. {holeCount} cut region(s) selected."
-            : $"Cut region selected ({holeCount} total). Ctrl+C copies; Ctrl-click adds more; drag handles or Delete to edit.");
+            ? $"Cutout deselected. {measurementCount} measurement(s) and {holeCount} cutout(s) selected."
+            : $"Cutout selected. {measurementCount} measurement(s) and {holeCount} cutout(s) selected; the parent Area is unchanged.");
     }
 
-    // Returns (measurement, holeIndex) for every cut region that is *fully*
-    // selected. Returns an empty list when the vertex selection mixes outer
-    // boundary points or only partially covers a hole.
-    private List<(Measurement Measurement, int HoleIndex)> SelectedWholeHoles()
+    private void SetMixedMeasurementSelection(
+        IReadOnlyList<Measurement> measurements,
+        IReadOnlyList<CutRegionRef> cutRegions,
+        Measurement? primary)
     {
-        var result = new List<(Measurement, int)>();
-        foreach (var (measurement, set) in _selectedMeasurementVertexIndices)
+        SetSelectedMeasurements(measurements, primary, -1, preserveCutRegions: true);
+        _selectedCutRegions.Clear();
+        foreach (CutRegionRef cutRegion in cutRegions.Where(IsValidCutRegion))
         {
-            if (set.Count == 0)
-                continue;
-
-            var byHole = new Dictionary<int, int>();
-            foreach (int gi in set)
-            {
-                if (!TryResolveMeasurementVertex(measurement, gi, out MeasurementVertexRef v) || !v.IsHole)
-                    return [];
-
-                byHole[v.HoleIndex] = byHole.GetValueOrDefault(v.HoleIndex) + 1;
-            }
-
-            foreach (var (holeIndex, count) in byHole)
-            {
-                if (holeIndex >= 0 &&
-                    holeIndex < measurement.Holes.Count &&
-                    measurement.Holes[holeIndex].Count >= 3 &&
-                    count == measurement.Holes[holeIndex].Count)
-                {
-                    result.Add((measurement, holeIndex));
-                }
-                else
-                {
-                    return [];
-                }
-            }
+            if (!measurements.Contains(cutRegion.Parent))
+                _selectedCutRegions.Add(cutRegion);
         }
 
-        return result;
-    }
-
-    private bool CopySelectedCutRegions()
-    {
-        var holes = SelectedWholeHoles();
-        if (holes.Count == 0)
-            return false;
-
-        _holeClipboard.Clear();
-        foreach (var (measurement, holeIndex) in holes)
+        if (_selectedCutRegions.Count > 0)
         {
-            _holeClipboard.Add(measurement.Holes[holeIndex]
-                .Select(p => new SKPoint(p.X, p.Y))
-                .ToList());
+            ClearAnnotationSelection();
+            _annotationSelectionDomain = false;
         }
 
-        MarkCutRegionClipboardCurrent();
-        PostStatus($"Copied {_holeClipboard.Count} cut region(s). Ctrl+V pastes using the copied set's top-left corner as the cursor anchor.");
-        return true;
-    }
-
-    private bool PasteCutRegions(SKPoint? atPdf)
-    {
-        if (_holeClipboard.Count == 0)
-            return false;
-
-        // Anchor probe: the cursor when we have one, otherwise the selected
-        // Area's centre so a keyboard-only Ctrl+V still resolves a target.
-        SKPoint probe = atPdf ?? (_selectedMeasurement is { MType: "area" } a && a.Points.Count >= 3
-            ? Centroid(a.Points)
-            : default);
-
-        if (!TryResolvePasteCutTarget(probe, out Measurement target, out string status))
-        {
-            PostStatus(status);
-            return true;
-        }
-
-        // Land the cut at the cursor; without one, drop it onto the target Area's
-        // centre so the paste is always visible rather than flung to the origin.
-        SKPoint at = atPdf ?? Centroid(target.Points);
-        // Anchor the paste by the copied cut's top-left corner, matching how
-        // measurement paste maps the cursor (CalculateMeasurementPasteOffset).
-        var allPts = _holeClipboard.SelectMany(h => h).ToList();
-        SKPoint src = new(allPts.Min(p => p.X), allPts.Min(p => p.Y));
-        SKPoint offset = new(at.X - src.X, at.Y - src.Y);
-
-        List<SKPoint> beforePoints = target.Points.ToList();
-        List<List<SKPoint>> beforeHoles = CloneHoles(target.Holes);
-        int added = 0;
-        // Paste is intentionally permissive: a copied cut region is dropped in as-is
-        // even if it pokes past the Area edge or overlaps another hole. The area math
-        // (Measurement.PolygonAreaPt) already subtracts holes and clamps to >= 0, so an
-        // out-of-bounds cut is harmless. Only the live Area-Cut draw tool keeps the
-        // stricter containment guard.
-        foreach (var hole in _holeClipboard)
-        {
-            var moved = hole.Select(p => new SKPoint(p.X + offset.X, p.Y + offset.Y)).ToList();
-            if (moved.Count < 3)
-                continue;
-
-            target.Holes.Add(moved);
-            added++;
-        }
-
-        if (added == 0)
-        {
-            PostStatus("Paste cut region: the copied cut region is empty.");
-            return true;
-        }
-
-        PushMeasurementUndoSnapshot(target, beforePoints, beforeHoles, "paste cut region", "cut-region-paste");
-        SelectMeasurement(target, -1);
-        NotifyMeasurementsChanged([target]);
         RequestRepaint();
-        PostStatus($"Pasted {added} cut region(s). New area {target.Label(ScaleMetersPerPt, UnitMode)}.");
+        PublishTransformSelectionChanged();
+    }
+
+    private bool TryBeginSelectedCutRegionBundleMove(SKPoint pdf, Point screen)
+    {
+        IReadOnlyList<CutRegionRef> cutRegions = SelectedTransformCutRegions();
+        if (cutRegions.Count == 0)
+            return false;
+
+        if (TryHitVertexAmong(SelectedTransformMeasurements(), pdf, out _, out _))
+            return false;
+
+        bool hitCutout = cutRegions.Any(cutRegion =>
+            PointInPolygon(pdf, cutRegion.Parent.Holes[cutRegion.HoleIndex]));
+        bool hitMeasurement = TryHitSelectedMeasurement(pdf, out _);
+        if (!hitCutout && !hitMeasurement || !CaptureTransformOriginals())
+            return false;
+
+        _draggingTransformMove = true;
+        _dragScreenStart = screen;
+        _transformStartPdf = pdf;
+        CaptureMouse();
+        PostStatus("Moving selected measurements and cutouts together.");
         return true;
     }
 
-    // Lenient target lookup for *pasting* cut regions. Unlike the live Area-Cut
-    // draw tool, paste must not require the anchor to sit inside an Area's fill —
-    // cuts are routinely placed on edges or over existing holes.
-    private bool TryResolvePasteCutTarget(SKPoint probe, out Measurement target, out string status)
+    private bool TryDeleteSelectedCutRegions()
     {
-        target = null!;
-        status = "";
+        IReadOnlyList<CutRegionRef> selected = SelectedCutRegions();
+        if (selected.Count == 0)
+            return false;
 
-        // 1. Cursor genuinely inside an Area fill — the ideal anchor.
-        if (TryResolveAreaCutTarget(probe, out Measurement direct, out _))
+        var parents = selected.Select(cutRegion => cutRegion.Parent).Distinct().ToList();
+        var beforePoints = parents.ToDictionary(parent => parent, parent => parent.Points.ToList());
+        var beforeHoles = parents.ToDictionary(parent => parent, parent => CloneHoles(parent.Holes));
+        foreach (var group in selected.GroupBy(cutRegion => cutRegion.Parent))
         {
-            target = direct;
-            return true;
+            foreach (int holeIndex in group.Select(cutRegion => cutRegion.HoleIndex).Distinct().OrderByDescending(index => index))
+                group.Key.Holes.RemoveAt(holeIndex);
         }
 
-        // 2. A selected Area is the natural destination even when the cursor
-        //    (and the pasted cut) lands outside its fill or on a hole.
-        if (_selectedMeasurement is { MType: "area" } selected &&
-            selected.Points.Count >= 3 &&
-            IsMeasurementOnActivePage(selected))
-        {
-            target = selected;
-            return true;
-        }
+        PushMeasurementUndoSnapshots(beforePoints, beforeHoles, "restore deleted cutouts", "delete-cutouts");
+        _selectedCutRegions.Clear();
+        NotifyMeasurementsChanged(parents);
+        RequestRepaint();
+        PublishTransformSelectionChanged();
+        PostStatus($"Deleted {selected.Count} cutout(s); parent Area remains.");
+        return true;
+    }
 
-        // 3. Otherwise pick an Area on the active sheet: the one whose outer
-        //    outline contains the probe (holes ignored), else the nearest.
-        Measurement? nearest = null;
-        double nearestDist = double.MaxValue;
-        foreach (Measurement m in ActivePageMeasurements())
-        {
-            if (m.MType != "area" || m.Points.Count < 3)
-                continue;
+    private void DrawSelectedCutRegionOverlay(SKCanvas canvas, Measurement measurement)
+    {
+        var selected = SelectedCutRegions()
+            .Where(cutRegion => ReferenceEquals(cutRegion.Parent, measurement))
+            .ToList();
+        if (selected.Count == 0)
+            return;
 
-            if (PointInPolygon(probe, m.Points))
+        float safeZoom = Math.Max(_zoom, 0.001f);
+        using var stroke = new SKPaint
+        {
+            Color = new SKColor(0x16, 0xC7, 0xD9),
+            StrokeWidth = 2.4f / safeZoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
+        using var handleFill = new SKPaint
+        {
+            Color = SKColors.White,
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        float radius = 4.5f / safeZoom;
+        foreach (CutRegionRef cutRegion in selected)
+        {
+            IReadOnlyList<SKPoint> points = measurement.Holes[cutRegion.HoleIndex];
+            using var path = new SKPath();
+            path.MoveTo(points[0]);
+            for (int i = 1; i < points.Count; i++)
+                path.LineTo(points[i]);
+            path.Close();
+            canvas.DrawPath(path, stroke);
+            foreach (SKPoint point in points)
             {
-                target = m;
-                return true;
-            }
-
-            SKPoint c = Centroid(m.Points);
-            double d = (c.X - probe.X) * (c.X - probe.X) + (c.Y - probe.Y) * (c.Y - probe.Y);
-            if (d < nearestDist)
-            {
-                nearestDist = d;
-                nearest = m;
+                canvas.DrawCircle(point, radius, handleFill);
+                canvas.DrawCircle(point, radius, stroke);
             }
         }
-
-        if (nearest != null)
-        {
-            target = nearest;
-            return true;
-        }
-
-        status = "Paste cut region: this sheet has no Area to paste into. Draw an Area first.";
-        return false;
     }
 }

@@ -112,7 +112,7 @@ public sealed partial class PdfViewport
 
                 result = await Task.Run(() => overviewOnly
                     ? RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(page)
-                    : RasterSheetCacheService.BuildAndEnable(page)).ConfigureAwait(false);
+                    : BuildReadableRasterSheetPreservingPinnedDpi(page)).ConfigureAwait(false);
             }
             finally
             {
@@ -199,6 +199,20 @@ public sealed partial class PdfViewport
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(rebuildKey);
         }
+    }
+
+    private static RasterSheetBuildResult BuildReadableRasterSheetPreservingPinnedDpi(PageInfo page)
+    {
+        PageInfo currentPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        int pinnedDpi = RasterSheetCacheService.PinnedRasterDpi(currentPage.RasterSheet);
+        if (pinnedDpi <= 0)
+            return RasterSheetCacheService.BuildAndEnable(currentPage);
+
+        return RasterSheetCacheService.BuildAndEnable(
+            currentPage,
+            RasterSheetCacheService.RasterDpiToRenderScale(pinnedDpi),
+            allowPinnedDpiChange: true,
+            pinnedDpiOverride: pinnedDpi);
     }
 
     private async Task<bool> WaitForCurrentPageRasterRebuildWindowAsync(
@@ -506,7 +520,8 @@ public sealed partial class PdfViewport
 
     private bool ShouldKeepRasterSheetAtLowZoom() =>
         _rasterSheetSource?.Enabled == true &&
-        RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) &&
-        (RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) ||
-         _usingRasterSheetOverviewRender);
+        (RasterSheetCacheService.IsRasterDpiPinned(_rasterSheetSource) ||
+         RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) &&
+         (RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) ||
+          _usingRasterSheetOverviewRender));
 }

@@ -182,7 +182,9 @@ public sealed partial class PdfViewport
                 // missing DPI on every page open) is pure churn — warm only what
                 // already exists. The single chosen-DPI build is handled separately
                 // by QueueStaticRasterDpiApplyIfNeeded.
-                buildMissingDpis: !ViewportRenderPolicy.StaticRasterModeEnabled,
+                buildMissingDpis:
+                    !ViewportRenderPolicy.StaticRasterModeEnabled &&
+                    !RasterSheetCacheService.IsRasterDpiPinned(rasterSheet),
                 out rasterWorkZoomWarmupQueuedForOpen);
         }
 
@@ -245,7 +247,9 @@ public sealed partial class PdfViewport
                 pageFolder,
                 rasterSheet,
                 allowLowZoomFullRasterApply: hasSheetOverlayConfigured,
-                buildMissingDpis: hasSheetOverlayConfigured,
+                buildMissingDpis:
+                    hasSheetOverlayConfigured &&
+                    !RasterSheetCacheService.IsRasterDpiPinned(rasterSheet),
                 out rasterWorkZoomWarmupQueuedForOpen);
         }
         if (!shouldUseRasterSheetForOpen &&

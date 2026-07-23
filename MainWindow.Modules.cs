@@ -126,6 +126,7 @@ public partial class MainWindow
         if (!IsModuleEnabled(ModuleId.SheetOverlay))
         {
             _sheetOverlayLoadVersion++;
+            _viewport.SetSheetOverlaySelectionActive(false);
             _viewport.ClearSheetOverlay();
         }
         else if (_moduleUiApplied && _currentPage != null)
@@ -188,6 +189,7 @@ public partial class MainWindow
     {
         SetVisible(AnnotationCommandTab, IsModuleEnabled(ModuleId.Annotations));
         SetVisible(PdfLayersSideTab, IsModuleEnabled(ModuleId.PdfLayers));
+        SetVisible(SheetOverlayPropertiesTab, IsModuleEnabled(ModuleId.SheetOverlay));
         SetVisible(SheetManagerWorkspaceTab, IsModuleEnabled(ModuleId.SheetManager));
         SetVisible(TakeoffManagerWorkspaceTab, IsModuleEnabled(ModuleId.TakeoffManager));
         SetVisible(ReportBuilderWorkspaceTab, IsModuleEnabled(ModuleId.ReportBuilder));

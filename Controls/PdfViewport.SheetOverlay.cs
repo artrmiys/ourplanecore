@@ -54,14 +54,24 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfLayerInfo>? overlayLayers = null,
         float bitmapScale = 0)
     {
+        bool preserveTransformPreview =
+            _sheetOverlayTransformPreviewActive &&
+            _sheetOverlayBitmap != null;
+        float liveOffsetXPt = _sheetOverlayOffsetXPt;
+        float liveOffsetYPt = _sheetOverlayOffsetYPt;
+        float liveOverlayScale = _sheetOverlayScale;
+        float liveOverlayRotationDegrees = _sheetOverlayRotationDegrees;
+
         ClearSheetOverlay();
         _sheetOverlayBitmap = bitmap;
         _sheetOverlayWidthPt = widthPt;
         _sheetOverlayHeightPt = heightPt;
-        _sheetOverlayOffsetXPt = offsetXPt;
-        _sheetOverlayOffsetYPt = offsetYPt;
-        _sheetOverlayScale = NormalizeSheetOverlayScale(overlayScale);
-        _sheetOverlayRotationDegrees = NormalizeSheetOverlayRotation(overlayRotationDegrees);
+        _sheetOverlayOffsetXPt = preserveTransformPreview ? liveOffsetXPt : offsetXPt;
+        _sheetOverlayOffsetYPt = preserveTransformPreview ? liveOffsetYPt : offsetYPt;
+        _sheetOverlayScale = NormalizeSheetOverlayScale(
+            preserveTransformPreview ? liveOverlayScale : overlayScale);
+        _sheetOverlayRotationDegrees = NormalizeSheetOverlayRotation(
+            preserveTransformPreview ? liveOverlayRotationDegrees : overlayRotationDegrees);
         _sheetOverlayBitmapScale = bitmapScale > 0 ? bitmapScale : InferSheetOverlayBitmapScale(bitmap, widthPt);
         _lastSheetOverlayRefreshRequestScale = _sheetOverlayBitmapScale;
         _sheetOverlayName = overlayName ?? "";
@@ -551,6 +561,8 @@ public sealed partial class PdfViewport
             _sheetOverlayRotationDegrees,
             status));
         PostStatus(status);
+        MaybeRequestSheetOverlayRenderScaleRefresh();
+        RequestRepaint();
     }
 
     private static string BuildSheetOverlayTransformStatus(
@@ -811,11 +823,17 @@ public sealed partial class PdfViewport
 
     private void MaybeRequestSheetOverlayRenderScaleRefresh()
     {
-        if (_sheetOverlayBitmap == null || _sheetOverlayBitmapScale <= 0 || _zoom <= 0 || _isFastNavigating)
+        if (_sheetOverlayTransformPreviewActive ||
+            _sheetOverlayBitmap == null ||
+            _sheetOverlayBitmapScale <= 0 ||
+            _zoom <= 0 ||
+            _isFastNavigating)
+        {
             return;
+        }
 
         float desired = ViewportRenderPolicy.SelectSheetOverlayRenderScale(
-            _zoom,
+            _zoom * _sheetOverlayScale,
             _sheetOverlayWidthPt,
             _sheetOverlayHeightPt);
         if (desired <= _sheetOverlayBitmapScale * 1.18f ||

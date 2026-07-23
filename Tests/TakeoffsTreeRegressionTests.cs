@@ -2145,12 +2145,9 @@ internal static class TakeoffsTreeRegressionTests
         string pdfImport = ReadRepoFile("MainWindow.PdfImport.cs");
         string pagesPdfMetadata = ReadRepoFile("MainWindow.PagesPdfMetadata.cs");
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
-        string buildRasterMethod = SliceMethod(workspaceManagers, "private Task BuildSheetManagerRasterCacheAsync(");
-        string buildRasterBackgroundMethod = SliceMethod(workspaceManagers, "private async Task BuildSheetManagerRasterCacheInBackgroundAsync(");
         string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
         string compactRasterMethod = SliceMethod(workspaceManagers, "private async Task CompactSheetManagerRasterCacheAsync(");
         string compactRasterBackgroundMethod = SliceMethod(workspaceManagers, "private async Task CompactSheetManagerRasterCacheInBackgroundAsync(");
-        string rowRasterMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterRowEnabledAsync(");
         string rasterOnMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterEnabledAsync(");
         string rasterOnReadyMethod = SliceMethod(workspaceManagers, "private async Task<SheetManagerRasterReadyBatch> EnableSheetManagerReadyRasterPagesAsync(");
         string rasterOnBackgroundMethod = SliceMethod(workspaceManagers, "private async Task EnableMissingSheetManagerRasterOnInBackgroundAsync(");
@@ -2262,43 +2259,35 @@ internal static class TakeoffsTreeRegressionTests
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
             "ordinary readable raster sheets should keep the preview-first open path unless Raster First is enabled, while later navigation can still swap to lower ready DPI tiers and source-image rasters keep their overview path");
         AssertTrue(
-            xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"TxtSheetManagerRasterSelection\"", StringComparison.Ordinal) &&
+            xaml.Contains("Text=\"Selected: 0\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerRasterPresetControls\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerRasterPresetItems\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"PDF\" Tag=\"pdf\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&
-            xaml.Contains("Content=\"150 DPI\"", StringComparison.Ordinal) &&
-            xaml.Contains("Content=\"200 DPI\"", StringComparison.Ordinal) &&
-            xaml.Contains("Content=\"300 DPI\"", StringComparison.Ordinal) &&
-            xaml.Contains("Content=\"400 DPI\"", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRasterPreset_Click", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerRasterOptionsButton\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerRasterOptionsPopup\"", StringComparison.Ordinal) &&
             xaml.Contains("SheetManagerRasterFormatBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"PNG\" Tag=\"png\"", StringComparison.Ordinal) &&
-            xaml.Contains("x:Name=\"SheetManagerBuildRasterButton\"", StringComparison.Ordinal) &&
             xaml.Contains("SheetManagerPrepareRasterButton", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerPrepareRaster_Click", StringComparison.Ordinal) &&
             xaml.Contains("SheetManagerCancelRasterButton", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerCancelRaster_Click", StringComparison.Ordinal) &&
-            xaml.Contains("Content=\"Clean Raster\"", StringComparison.Ordinal) &&
-            xaml.Contains("x:Name=\"SheetManagerRasterOnButton\"", StringComparison.Ordinal) &&
-            xaml.Contains("x:Name=\"SheetManagerRasterOffButton\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"Clean\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerRasterFirstOnButton\"", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRasterFirstOn_Click", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerRasterFirstOffButton\"", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRasterFirstOff_Click", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerCleanRasterButton\"", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerCompactRaster_Click", StringComparison.Ordinal) &&
-            xaml.Contains("Header=\"Raster Action\"", StringComparison.Ordinal) &&
+            !xaml.Contains("Header=\"Raster Action\"", StringComparison.Ordinal) &&
             xaml.Contains("Header=\"Raster\" Binding=\"{Binding RasterStatus}\" Width=\"180\"", StringComparison.Ordinal) &&
-            xaml.Contains("BtnSheetManagerRowRasterPdf_Click", StringComparison.Ordinal) &&
-            xaml.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
-            xaml.Contains("BtnSheetManagerRowRaster150_Click", StringComparison.Ordinal) &&
-            xaml.Contains("BtnSheetManagerRowRaster200_Click", StringComparison.Ordinal) &&
-            xaml.Contains("BtnSheetManagerRowRaster300_Click", StringComparison.Ordinal) &&
-            xaml.Contains("BtnSheetManagerRowRaster400_Click", StringComparison.Ordinal) &&
-            xaml.Contains("Content=\"Auto\" MinWidth=\"40\"", StringComparison.Ordinal) &&
+            xaml.Contains("SelectionChanged=\"SheetManagerGrid_SelectionChanged\"", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private CancellationTokenSource? _sheetManagerRasterPrepareCts;", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private const int SheetManagerAutoRasterDpi = 0;", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private int SelectedSheetManagerRasterDpi()", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private string SelectedSheetManagerRasterFormat()", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("string.Equals(raw.Trim(), \"auto\"", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SheetManagerRasterDpiBox?.SelectedItem is ComboBoxItem", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterFormatBox?.SelectedItem is ComboBoxItem", StringComparison.Ordinal) &&
             workspaceManagers.Contains("NormalizeReadableRasterFormat", StringComparison.Ordinal) &&
             workspaceManagers.Contains("EffectiveSheetManagerRasterDpi", StringComparison.Ordinal) &&
@@ -2309,18 +2298,15 @@ internal static class TakeoffsTreeRegressionTests
             pagesPdfMetadata.Contains("readyRasterDpisByPageFolder = null", StringComparison.Ordinal) &&
             pagesPdfMetadata.Contains("DisplayStatus(result.Page, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterDpiProgressLabel", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("ApplySheetManagerRowRasterDpiAsync", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SheetManagerRowFromButton", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SheetManagerPageFromRow", StringComparison.Ordinal) &&
+            !workspaceManagers.Contains("SelectedSheetManagerPagesForRaster", StringComparison.Ordinal) &&
+            !workspaceManagers.Contains("BtnSheetManagerRowRaster", StringComparison.Ordinal) &&
             pagesTree.Contains("private void RefreshPageTreePageSnapshots(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
             pagesTree.Contains("private bool TryRefreshPageTreeItemFromStore(TreeViewItem item, string pageFolder", StringComparison.Ordinal) &&
             pagesTree.Contains("OurPlanCoreJobStore.TryReadPage(pageFolder) is not { } refreshedPage", StringComparison.Ordinal) &&
             pagesTree.Contains("item.Tag = refreshedPage", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTakeoffNodes(item, refreshedPage)", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTreeItemIndex()", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SheetManagerBuildRasterButton.IsEnabled = !running", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SheetManagerRasterOnButton.IsEnabled = !running", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SheetManagerRasterOffButton.IsEnabled = !running", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterPresetControls.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterFirstOnButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterFirstOffButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerCleanRasterButton.IsEnabled = !running", StringComparison.Ordinal) &&
@@ -2335,53 +2321,42 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("private bool RefreshSheetManagerRasterRows(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (!RefreshSheetManagerRasterRows(pages))", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.DisplayStatus(refreshedPage, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
-            buildRasterMethod.Contains("BuildSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
-            buildRasterMethod.Contains("_sheetManagerRasterBackgroundLabel = \"Build\"", StringComparison.Ordinal) &&
-            buildRasterMethod.Contains("SetSheetManagerRasterPrepareRunning(true)", StringComparison.Ordinal) &&
-            !buildRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
-            buildRasterBackgroundMethod.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
-            buildRasterBackgroundMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
-            buildRasterBackgroundMethod.Contains("RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager: true, reloadCurrentPage: true)", StringComparison.Ordinal) &&
-            buildRasterBackgroundMethod.Contains("SetSheetManagerRasterPrepareRunning(false)", StringComparison.Ordinal) &&
-            buildRasterBackgroundMethod.Contains("Sheet Manager Raster Build {rasterDpiLabel} done", StringComparison.Ordinal) &&
-            !buildRasterBackgroundMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(pages, rasterDpi, rasterFormat)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("pinRequestedDpi", StringComparison.Ordinal) &&
             workspaceManagers.Contains("bool fastRowsRefreshed = true", StringComparison.Ordinal) &&
             workspaceManagers.Contains("readyBatch.MissingPages.Count == 0", StringComparison.Ordinal) &&
             workspaceManagers.Contains("!fastRowsRefreshed", StringComparison.Ordinal) &&
             rasterOnMethod.Contains("QueueSheetManagerRasterOnMissingInBackground(", StringComparison.Ordinal) &&
             !rasterOnMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private void QueueSheetManagerRasterOnMissingInBackground(", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("_sheetManagerRasterBackgroundLabel = \"On\"", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("_sheetManagerRasterBackgroundLabel = operationLabel;", StringComparison.Ordinal) &&
             workspaceManagers.Contains("EnableMissingSheetManagerRasterOnInBackgroundAsync", StringComparison.Ordinal) &&
             workspaceManagers.Contains("ready {readyBatch.Ready}, queued {readyBatch.MissingPages.Count} missing sheet(s)", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("return await Task.Run(() =>", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("var missingPages = new List<PageInfo>();", StringComparison.Ordinal) &&
-            rasterOnReadyMethod.Contains("HasReadyReadableRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
-            rasterOnReadyMethod.Contains("missingPages.Add(page)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("HasReadyReadableRaster(currentPage, renderScale, rasterFormat)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("missingPages.Add(currentPage)", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("fastPages.Add(plan.Page)", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("new SheetManagerRasterReadyBatch", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("TryEnableReadyReadableRaster", StringComparison.Ordinal) &&
             !rasterOnReadyMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             rasterOnBackgroundMethod.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
-            rasterOnBackgroundMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
-            rasterOnBackgroundMethod.Contains("SetSheetManagerRasterPrepareRunning(false)", StringComparison.Ordinal) &&
+            rasterOnBackgroundMethod.Contains("allowPinnedDpiChange: true", StringComparison.Ordinal) &&
+            rasterOnBackgroundMethod.Contains("FinishSheetManagerRasterOperation(cts)", StringComparison.Ordinal) &&
             rasterOnBackgroundMethod.Contains("ReloadCurrentPageIfRasterChanged(pages)", StringComparison.Ordinal) &&
             rasterOnBackgroundMethod.Contains("Sheet Manager Raster On {rasterDpiLabel} done", StringComparison.Ordinal) &&
             !rasterOnBackgroundMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SetSheetManagerRasterOffFastAsync(pages, refreshSheetManager)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SetSheetManagerRasterOffFastAsync(pages, refreshSheetManager, cts.Token)", StringComparison.Ordinal) &&
             rasterOffMethod.Contains("Task.Run(", StringComparison.Ordinal) &&
-            rasterOffMethod.Contains("TrySetEnabled(page, enabled: false", StringComparison.Ordinal) &&
+            rasterOffMethod.Contains("TrySetEnabledAndPinnedDpi(", StringComparison.Ordinal) &&
+            rasterOffMethod.Contains("pinnedDpi: 0", StringComparison.Ordinal) &&
             rasterOffMethod.Contains("RefreshSheetManagerRasterRows(pages)", StringComparison.Ordinal) &&
             !rasterOffMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private async Task SetSheetManagerRasterFirstAsync(IReadOnlyList<PageInfo> pages, bool enabled)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("TrySetUseAsPageOpenRaster(page, enabled", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Sheet Manager Raster First {mode}: changed {changed}, already {already}, failed {failed}.", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SetSheetManagerRasterRowEnabledAsync", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("Sheet Manager Raster Row", StringComparison.Ordinal) &&
-            rowRasterMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("private static RasterSheetBuildResult BuildAndWarmSheetManagerRaster(PageInfo page, float renderScale, string rasterFormat = \"\")", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private static RasterSheetBuildResult BuildAndWarmSheetManagerRaster(", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("bool allowPinnedDpiChange = false", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private static RasterSheetBuildResult PrepareAndWarmSheetManagerRaster(PageInfo page, float renderScale, string rasterFormat = \"\")", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private static void WarmSheetManagerRasterBitmap(PageInfo page, RasterSheetBuildResult result)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("PdfViewport.WarmRasterSheetBitmapCache(page, result.Source)", StringComparison.Ordinal) &&
@@ -2391,15 +2366,13 @@ internal static class TakeoffsTreeRegressionTests
             importedRasterMethod.Contains("RasterSheetCacheService.BuildAndEnable(page, renderScale)", StringComparison.Ordinal) &&
             importedRasterMethod.Contains("RasterSheetCacheService.TrySetUseAsPageOpenRaster(refreshed, true", StringComparison.Ordinal) &&
             importedRasterMethod.Contains("PdfViewport.WarmRasterSheetBitmapCache(refreshed, warmSource)", StringComparison.Ordinal) &&
-            rowRasterMethod.Contains("RefreshSheetManagerRasterRow(row)", StringComparison.Ordinal) &&
-            !rowRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (refreshSheetManager)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("already {already}", StringComparison.Ordinal) &&
             previewDialog.Contains("private string _rasterStatus = \"\";", StringComparison.Ordinal) &&
             previewDialog.Contains("set => SetField(ref _rasterStatus, value ?? \"\");", StringComparison.Ordinal) &&
             workspaceManagers.Contains("TryBlockSheetManagerRasterCommandDuringPrepare", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SetSheetManagerRasterPrepareRunning", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("CompactSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster())", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("CompactSheetManagerRasterCacheAsync(SelectedSheetManagerPages())", StringComparison.Ordinal) &&
             compactRasterMethod.Contains("CompactSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
             compactRasterMethod.Contains("_sheetManagerRasterBackgroundLabel = \"Cleanup\"", StringComparison.Ordinal) &&
             compactRasterMethod.Contains("SetSheetManagerRasterPrepareRunning(true)", StringComparison.Ordinal) &&
@@ -2455,7 +2428,7 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("AppendCachedDpiSummary", StringComparison.Ordinal) &&
             raster.Contains("| ready", StringComparison.Ordinal) &&
             raster.Contains("out bool changed", StringComparison.Ordinal) &&
-            raster.Contains("if (!enabled)", StringComparison.Ordinal) &&
+            raster.Contains("bool useAsPageOpenRaster = enabled && source.UseAsPageOpenRaster;", StringComparison.Ordinal) &&
             raster.Contains("public static bool UseAsPageOpenRaster(RasterSheetSource? source)", StringComparison.Ordinal) &&
             raster.Contains("public static bool TrySetUseAsPageOpenRaster(", StringComparison.Ordinal) &&
             raster.Contains("source.UseAsPageOpenRaster = useAsPageOpenRaster", StringComparison.Ordinal) &&
@@ -2697,7 +2670,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("WaitForRasterSheetRefreshPrefetchCadenceAsync", StringComparison.Ordinal) &&
             renderCache.Contains("WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             viewTransform.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs)", StringComparison.Ordinal) &&
-            renderCache.Contains("ShouldQueueRasterSheetRefreshPrefetch(page)", StringComparison.Ordinal) &&
+            renderCache.Contains("ShouldQueueRasterSheetRefreshPrefetch(currentPage)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("RasterSheetRefreshPrefetchSemaphore.Release();", StringComparison.Ordinal) &&
             renderCache.Contains("Task.Run(() =>", StringComparison.Ordinal) &&
@@ -2705,7 +2678,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("Viewport raster refresh prefetched", StringComparison.Ordinal) &&
             renderCache.Contains("ShouldRebuildForReadableDisplay", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("BuildOverviewForExistingSourceImageRaster(page)", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("BuildAndEnable(page)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("BuildReadableRasterSheetPreservingPinnedDpi(page)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("WaitForCurrentPageRasterRebuildWindowAsync", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("Viewport raster sheet self-heal skipped stale page", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("IsCurrentPageRasterTarget", StringComparison.Ordinal) &&
@@ -2761,8 +2734,9 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             viewTransform.Contains("if (!IsStaticRasterDisplayActive())", StringComparison.Ordinal) &&
-            renderCache.Contains("if (ViewportRenderPolicy.StaticRasterModeEnabled)", StringComparison.Ordinal),
-            "static raster mode must skip motion-warmup renders and the whole-job raster refresh cadence");
+            renderCache.Contains("PageInfo currentPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;", StringComparison.Ordinal) &&
+            renderCache.Contains("if (!ShouldQueueRasterSheetRefreshPrefetch(currentPage))", StringComparison.Ordinal),
+            "static raster mode must skip motion warmup while still allowing stale or missing fixed-DPI rasters to self-heal");
 
         AssertTrue(
             staticPageFrame.Contains("DrawBlackVectorInkOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
@@ -2798,7 +2772,8 @@ internal static class TakeoffsTreeRegressionTests
             staticRasterPrefetchPolicy.Contains("ResolveEffectiveTargetDpi(source.WidthPt, source.HeightPt)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.BuildAndEnable(buildPage, targetScale)", StringComparison.Ordinal) &&
             layers.Contains("QueueStaticRasterDpiApplyIfNeeded()", StringComparison.Ordinal) &&
-            pageApi.Contains("buildMissingDpis: !ViewportRenderPolicy.StaticRasterModeEnabled", StringComparison.Ordinal),
+            pageApi.Contains("!ViewportRenderPolicy.StaticRasterModeEnabled &&", StringComparison.Ordinal) &&
+            pageApi.Contains("!RasterSheetCacheService.IsRasterDpiPinned(rasterSheet)", StringComparison.Ordinal),
             "static DPI apply must migrate once in either direction to the exact pixel-budget-clamped target and skip the python zoom-ladder warmup on page open in static mode");
 
         AssertTrue(
@@ -3603,37 +3578,31 @@ internal static class TakeoffsTreeRegressionTests
         string callbacks = ReadRepoFile("MainWindow.ViewportCallbacks.cs");
 
         AssertTrue(
-            menus.Contains("BuildSheetOverlayAdjustmentMenu", StringComparison.Ordinal) &&
-            menus.Contains("Auto Select + Fit This Sheet", StringComparison.Ordinal) &&
-            menus.Contains("Auto Select + Fit Sheet Overlay", StringComparison.Ordinal) &&
-            menus.Contains("Auto Select + Replace Overlay", StringComparison.Ordinal) &&
+            menus.Contains("BuildSheetOverlayMenu", StringComparison.Ordinal) &&
+            menus.Contains("Overlay Properties...", StringComparison.Ordinal) &&
+            menus.Contains("Use This Sheet as Current Overlay", StringComparison.Ordinal) &&
+            menus.Contains("Clear Current Sheet Overlay", StringComparison.Ordinal) &&
             menus.Contains("Open Overlay Sheet", StringComparison.Ordinal) &&
             menus.Contains("Hide Overlay", StringComparison.Ordinal) &&
             menus.Contains("Show Overlay", StringComparison.Ordinal) &&
             menus.Contains("Clear Overlay", StringComparison.Ordinal) &&
-            menus.Contains("Auto Fit", StringComparison.Ordinal) &&
-            menus.Contains("Edit by Points", StringComparison.Ordinal) &&
-            menus.Contains("Edit Transform...", StringComparison.Ordinal) &&
-            menus.Contains("Move Left 6 pt", StringComparison.Ordinal) &&
-            menus.Contains("Move Left 1 pt", StringComparison.Ordinal) &&
-            menus.Contains("Scale Up 5%", StringComparison.Ordinal) &&
-            menus.Contains("Scale Up 1%", StringComparison.Ordinal) &&
-            menus.Contains("Rotate Left 1 deg", StringComparison.Ordinal) &&
-            menus.Contains("Rotate Left 0.25 deg", StringComparison.Ordinal) &&
-            menus.Contains("Reset Transform", StringComparison.Ordinal),
-            "sheet overlay adjustment commands should share one discoverable submenu with coarse and fine transform steps instead of only living on the hidden overlay-node context menu");
+            menus.Contains("Auto Fit Overlay", StringComparison.Ordinal),
+            "sheet overlay context menus should expose compact setup and properties commands");
         AssertTrue(
-            menus.Contains("OpenSheetOverlaySource(page)", StringComparison.Ordinal) &&
-            menus.Contains("TogglePageOverlayVisibility(page)", StringComparison.Ordinal) &&
-            menus.Contains("ClearPageOverlay(page)", StringComparison.Ordinal),
-            "sheet overlay adjustment menus should let the user jump to, hide/show, or clear the selected overlay without hunting for the overlay node");
+            !menus.Contains("Move Left", StringComparison.Ordinal) &&
+            !menus.Contains("Scale Up", StringComparison.Ordinal) &&
+            !menus.Contains("Rotate Left", StringComparison.Ordinal) &&
+            !menus.Contains("Edit Transform...", StringComparison.Ordinal) &&
+            !menus.Contains("BuildSheetOverlayAdjustmentMenu", StringComparison.Ordinal),
+            "fine transform commands should live in Overlay Properties instead of the context menu");
         AssertTrue(
-            menus.Contains("BuildSheetOverlayAdjustmentMenu(candidatePage", StringComparison.Ordinal) &&
-            menus.Contains("BuildSheetOverlayAdjustmentMenu(node.Page", StringComparison.Ordinal),
-            "page context menus and overlay-node context menus should both expose the same sheet overlay adjustment surface");
+            menus.Contains("ShowSheetOverlayProperties(propertiesPage)", StringComparison.Ordinal) &&
+            menus.Contains("ShowSheetOverlayProperties(node.Page)", StringComparison.Ordinal) &&
+            menus.Contains("ShowSheetOverlayProperties(currentPage)", StringComparison.Ordinal),
+            "page, overlay-node, and viewport context menus should route advanced editing to Overlay Properties");
         AssertTrue(
             callbacks.Contains("AddCurrentSheetOverlayAdjustmentMenuItems(menu)", StringComparison.Ordinal),
-            "viewport right-click should expose current sheet overlay setup or adjustment commands");
+            "viewport right-click should expose current sheet overlay properties");
     }
 
     public static void SheetOverlayTransformShortcutsAreWired()
@@ -3799,7 +3768,8 @@ internal static class TakeoffsTreeRegressionTests
         string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");
         string autoSelect = ReadRepoFile("MainWindow.SheetOverlay.AutoSelect.cs");
         string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
-        string menus = ReadRepoFile("MainWindow.SheetOverlay.Menus.cs");
+        string properties = ReadRepoFile("MainWindow.SheetOverlay.Properties.cs");
+        string propertiesPanel = ReadRepoFile(Path.Combine("Controls", "SheetOverlayPropertiesPanel.xaml"));
         string service = ReadRepoFile(Path.Combine("Models", "SheetOverlayAutoFitCandidateSearchService.cs"));
         string candidateDialog = ReadRepoFile(Path.Combine("Dialogs", "SheetOverlayCandidateDialog.cs"));
 
@@ -3863,19 +3833,14 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("TrySelectNextMatch", StringComparison.Ordinal),
             "overlay auto-select should rank candidates by verified geometry quality with deterministic sheet-order tie breaking, expose alternatives, allow review-only candidates in the chooser, and cycle through ranked matches");
         AssertTrue(
-            menus.Contains("\"Auto Select + Fit This Sheet\"", StringComparison.Ordinal) &&
-            menus.Contains("\"Auto Select + Fit Sheet Overlay\"", StringComparison.Ordinal) &&
-            menus.Contains("\"Auto Select + Replace Overlay\"", StringComparison.Ordinal) &&
-            menus.Contains("\"Auto Select + Choose Candidate...\"", StringComparison.Ordinal) &&
-            menus.Contains("\"Auto Select + Next Candidate\"", StringComparison.Ordinal) &&
-            menus.Contains("ChooseSheetOverlayAutoSelectCandidate(candidatePage)", StringComparison.Ordinal) &&
-            menus.Contains("ChooseSheetOverlayAutoSelectCandidate(currentPage)", StringComparison.Ordinal) &&
-            menus.Contains("ChooseSheetOverlayAutoSelectCandidate(page)", StringComparison.Ordinal) &&
-            menus.Contains("AutoSelectAndFitSheetOverlay(candidatePage, replaceExistingOverlay: true)", StringComparison.Ordinal) &&
-            menus.Contains("AutoSelectAndFitSheetOverlay(currentPage, replaceExistingOverlay: false)", StringComparison.Ordinal) &&
-            menus.Contains("AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)", StringComparison.Ordinal) &&
-            menus.Contains("AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true, skipCurrentOverlay: true)", StringComparison.Ordinal),
-            "auto-selected overlay fitting must be reachable from page and viewport menus, replace a wrong overlay, choose a ranked match directly, and cycle to the next ranked candidate");
+            properties.Contains("ChooseSheetOverlayAutoSelectCandidate(page)", StringComparison.Ordinal) &&
+            properties.Contains("AutoSelectAndFitSheetOverlay(", StringComparison.Ordinal) &&
+            properties.Contains("replaceExistingOverlay: true", StringComparison.Ordinal) &&
+            properties.Contains("skipCurrentOverlay: true", StringComparison.Ordinal) &&
+            propertiesPanel.Contains("x:Name=\"BtnChooseReplace\"", StringComparison.Ordinal) &&
+            propertiesPanel.Contains("x:Name=\"BtnFindBest\"", StringComparison.Ordinal) &&
+            propertiesPanel.Contains("x:Name=\"BtnNextMatch\"", StringComparison.Ordinal),
+            "auto-selected overlay fitting must be reachable from Overlay Properties, replace a wrong overlay, choose a ranked match directly, and cycle to the next ranked candidate");
         AssertTrue(
             candidateDialog.Contains("public sealed class SheetOverlayCandidateDialog : Window", StringComparison.Ordinal) &&
             candidateDialog.Contains("DataGrid", StringComparison.Ordinal) &&

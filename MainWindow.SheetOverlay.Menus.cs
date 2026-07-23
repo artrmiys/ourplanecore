@@ -1,4 +1,3 @@
-using System;
 using System.Windows.Controls;
 
 namespace OurPlanCore;
@@ -13,70 +12,78 @@ public partial class MainWindow
         bool currentHasOverlay = hasCurrentPage &&
                                  !string.IsNullOrWhiteSpace(_currentPage!.OverlayPageFolder);
         bool candidateHasOverlay = !string.IsNullOrWhiteSpace(candidatePage.OverlayPageFolder);
-        bool candidateIsCurrent = hasCurrentPage && SameFolder(_currentPage!.FolderPath, candidatePage.FolderPath);
+        bool candidateIsCurrent = hasCurrentPage &&
+                                  SameFolder(_currentPage!.FolderPath, candidatePage.FolderPath);
+        PageInfo propertiesPage = candidateIsCurrent || candidateHasOverlay
+            ? candidatePage
+            : _currentPage ?? candidatePage;
 
         var menu = new MenuItem { Header = "Sheet Overlay" };
         if (IsCurrentJobReadOnly)
         {
-            menu.Items.Add(MakeMenuItem("Open This Sheet", true, () => OpenPageInActiveTab(candidatePage)));
-            menu.Items.Add(MakeMenuItem("Read-only: overlay editing is disabled", false, () => { }));
+            menu.Items.Add(MakeMenuItem(
+                "Overlay Properties...",
+                true,
+                () => ShowSheetOverlayProperties(propertiesPage)));
+            menu.Items.Add(MakeMenuItem(
+                "Read-only: overlay editing is disabled",
+                false,
+                () => { }));
             return menu;
         }
 
-        menu.Items.Add(MakeMenuItem("Use This Sheet as Current Overlay", canSetOverlay, () => SetCurrentSheetOverlay(candidatePage)));
         menu.Items.Add(MakeMenuItem(
-            "Auto Select + Fit This Sheet",
-            _currentJob != null,
-            () => AutoSelectAndFitSheetOverlay(candidatePage, replaceExistingOverlay: true)));
+            "Use This Sheet as Current Overlay",
+            canSetOverlay,
+            () => SetCurrentSheetOverlay(candidatePage)));
         menu.Items.Add(MakeMenuItem(
-            "Auto Select + Choose Candidate...",
-            _currentJob != null,
-            () => ChooseSheetOverlayAutoSelectCandidate(candidatePage)));
-        menu.Items.Add(MakeMenuItem("Clear Current Sheet Overlay", currentHasOverlay, ClearCurrentSheetOverlay));
-        if (currentHasOverlay)
-            menu.Items.Add(BuildSheetOverlayAdjustmentMenu(_currentPage!, "Adjust Current Overlay"));
-        if (candidateHasOverlay && !candidateIsCurrent)
-            menu.Items.Add(BuildSheetOverlayAdjustmentMenu(candidatePage, "Adjust This Sheet Overlay"));
-        menu.Items.Add(new Separator());
-
-        var colorMenu = new MenuItem { Header = "Current Overlay Color", IsEnabled = currentHasOverlay };
-        foreach ((string label, string hex) in SheetOverlayColors)
-            colorMenu.Items.Add(MakeCurrentSheetOverlayColorMenuItem(label, hex, currentHasOverlay));
-        menu.Items.Add(colorMenu);
-
-        if (!candidateHasOverlay && !currentHasOverlay)
-            menu.Items.Add(MakeMenuItem("No overlay configured", false, () => { }));
-
+            "Overlay Properties...",
+            hasCurrentPage || candidateHasOverlay,
+            () => ShowSheetOverlayProperties(propertiesPage)));
+        menu.Items.Add(MakeMenuItem(
+            "Clear Current Sheet Overlay",
+            currentHasOverlay,
+            ClearCurrentSheetOverlay));
         return menu;
     }
 
     private ContextMenu BuildPageOverlayContextMenu(PageOverlayNode node)
     {
         var menu = new ContextMenu();
-        bool isCurrent = _currentPage != null && SameFolder(_currentPage.FolderPath, node.Page.FolderPath);
+        bool hasOverlay = !string.IsNullOrWhiteSpace(node.Page.OverlayPageFolder);
+        menu.Items.Add(MakeMenuItem(
+            "Overlay Properties...",
+            true,
+            () => ShowSheetOverlayProperties(node.Page)));
         if (IsCurrentJobReadOnly)
         {
-            if (!isCurrent)
-                menu.Items.Add(MakeMenuItem("Open Sheet", true, () => OpenPageInActiveTab(node.Page)));
-            menu.Items.Add(MakeMenuItem("Read-only: overlay editing is disabled", false, () => { }));
+            menu.Items.Add(MakeMenuItem(
+                "Open Overlay Sheet",
+                hasOverlay,
+                () => OpenSheetOverlaySource(node.Page)));
+            menu.Items.Add(MakeMenuItem(
+                "Read-only: overlay editing is disabled",
+                false,
+                () => { }));
             return menu;
         }
 
         menu.Items.Add(MakeMenuItem(
             node.Page.OverlayVisible ? "Hide Overlay" : "Show Overlay",
-            true,
-            () => TogglePageOverlayVisibility(node.Page)));
-        menu.Items.Add(BuildSheetOverlayAdjustmentMenu(node.Page, "Adjust Overlay"));
+            hasOverlay,
+            () => SetSheetOverlayVisibility(node.Page, !node.Page.OverlayVisible)));
+        menu.Items.Add(MakeMenuItem(
+            "Open Overlay Sheet",
+            hasOverlay,
+            () => OpenSheetOverlaySource(node.Page)));
         menu.Items.Add(new Separator());
-
-        var colorMenu = new MenuItem { Header = "Color" };
-        foreach ((string label, string hex) in SheetOverlayColors)
-            colorMenu.Items.Add(MakePageOverlayColorMenuItem(node.Page, label, hex));
-        menu.Items.Add(colorMenu);
-        menu.Items.Add(MakeMenuItem("Clear Overlay", true, () =>
-            ClearPageOverlay(node.Page)));
-        if (!isCurrent)
-            menu.Items.Add(MakeMenuItem("Open Sheet", true, () => OpenPageInActiveTab(node.Page)));
+        menu.Items.Add(MakeMenuItem(
+            "Clear Overlay",
+            hasOverlay,
+            () =>
+            {
+                ClearPageOverlay(node.Page);
+            }));
         return menu;
     }
 
@@ -84,96 +91,16 @@ public partial class MainWindow
     {
         if (_currentPage == null)
             return false;
-        if (IsCurrentJobReadOnly)
-            return false;
 
         PageInfo currentPage = _currentPage;
-        if (string.IsNullOrWhiteSpace(currentPage.OverlayPageFolder))
-        {
-            menu.Items.Add(MakeMenuItem(
-                "Auto Select + Fit Sheet Overlay",
-                _currentJob != null,
-                () => AutoSelectAndFitSheetOverlay(currentPage, replaceExistingOverlay: false)));
-            menu.Items.Add(MakeMenuItem(
-                "Auto Select + Choose Candidate...",
-                _currentJob != null,
-                () => ChooseSheetOverlayAutoSelectCandidate(currentPage)));
-            return true;
-        }
-
-        menu.Items.Add(BuildSheetOverlayAdjustmentMenu(currentPage, "Compare Overlay"));
+        menu.Items.Add(MakeMenuItem(
+            "Overlay Properties...",
+            true,
+            () => ShowSheetOverlayProperties(currentPage)));
+        menu.Items.Add(MakeMenuItem(
+            "Auto Fit Overlay",
+            !IsCurrentJobReadOnly && _currentJob != null,
+            () => AutoFitSheetOverlay(currentPage)));
         return true;
-    }
-
-    private MenuItem BuildSheetOverlayAdjustmentMenu(PageInfo page, string header)
-    {
-        bool hasOverlay = !string.IsNullOrWhiteSpace(page.OverlayPageFolder);
-        var menu = new MenuItem { Header = header, IsEnabled = hasOverlay };
-        if (IsCurrentJobReadOnly)
-        {
-            menu.Items.Add(MakeMenuItem("Open Overlay Sheet", hasOverlay, () => OpenSheetOverlaySource(page)));
-            menu.Items.Add(MakeMenuItem("Read-only: overlay editing is disabled", false, () => { }));
-            return menu;
-        }
-
-        menu.Items.Add(MakeMenuItem("Auto Fit", hasOverlay, () => AutoFitSheetOverlay(page)));
-        menu.Items.Add(MakeMenuItem(
-            "Auto Select + Replace Overlay",
-            _currentJob != null,
-            () => AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)));
-        menu.Items.Add(MakeMenuItem(
-            "Auto Select + Choose Candidate...",
-            _currentJob != null,
-            () => ChooseSheetOverlayAutoSelectCandidate(page)));
-        menu.Items.Add(MakeMenuItem(
-            "Auto Select + Next Candidate",
-            hasOverlay && _currentJob != null,
-            () => AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true, skipCurrentOverlay: true)));
-        menu.Items.Add(MakeMenuItem("Open Overlay Sheet", hasOverlay, () => OpenSheetOverlaySource(page)));
-        menu.Items.Add(MakeMenuItem(
-            page.OverlayVisible ? "Hide Overlay" : "Show Overlay",
-            hasOverlay,
-            () => TogglePageOverlayVisibility(page)));
-        menu.Items.Add(MakeMenuItem("Clear Overlay", hasOverlay, () => ClearPageOverlay(page)));
-        menu.Items.Add(MakeMenuItem("Edit by Points", hasOverlay, () => BeginSheetOverlayPointEdit(page)));
-        menu.Items.Add(MakeMenuItem("Edit Transform...", hasOverlay, () => EditSheetOverlayTransform(page)));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Move Left 6 pt", hasOverlay, () => NudgeSheetOverlay(page, -6, 0)));
-        menu.Items.Add(MakeMenuItem("Move Right 6 pt", hasOverlay, () => NudgeSheetOverlay(page, 6, 0)));
-        menu.Items.Add(MakeMenuItem("Move Up 6 pt", hasOverlay, () => NudgeSheetOverlay(page, 0, -6)));
-        menu.Items.Add(MakeMenuItem("Move Down 6 pt", hasOverlay, () => NudgeSheetOverlay(page, 0, 6)));
-        menu.Items.Add(MakeMenuItem("Move Left 1 pt", hasOverlay, () => NudgeSheetOverlay(page, -1, 0)));
-        menu.Items.Add(MakeMenuItem("Move Right 1 pt", hasOverlay, () => NudgeSheetOverlay(page, 1, 0)));
-        menu.Items.Add(MakeMenuItem("Move Up 1 pt", hasOverlay, () => NudgeSheetOverlay(page, 0, -1)));
-        menu.Items.Add(MakeMenuItem("Move Down 1 pt", hasOverlay, () => NudgeSheetOverlay(page, 0, 1)));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Scale Up 5%", hasOverlay, () => ScaleSheetOverlay(page, 1.05)));
-        menu.Items.Add(MakeMenuItem("Scale Down 5%", hasOverlay, () => ScaleSheetOverlay(page, 1 / 1.05)));
-        menu.Items.Add(MakeMenuItem("Scale Up 1%", hasOverlay, () => ScaleSheetOverlay(page, 1.01)));
-        menu.Items.Add(MakeMenuItem("Scale Down 1%", hasOverlay, () => ScaleSheetOverlay(page, 1 / 1.01)));
-        menu.Items.Add(MakeMenuItem("Rotate Left 1 deg", hasOverlay, () => RotateSheetOverlay(page, -1)));
-        menu.Items.Add(MakeMenuItem("Rotate Right 1 deg", hasOverlay, () => RotateSheetOverlay(page, 1)));
-        menu.Items.Add(MakeMenuItem("Rotate Left 0.25 deg", hasOverlay, () => RotateSheetOverlay(page, -0.25)));
-        menu.Items.Add(MakeMenuItem("Rotate Right 0.25 deg", hasOverlay, () => RotateSheetOverlay(page, 0.25)));
-        menu.Items.Add(MakeMenuItem("Reset Transform", hasOverlay, () =>
-            SetSheetOverlayTransform(page, 0, 0, 1, 0, "Overlay transform reset.")));
-        return menu;
-    }
-
-    private MenuItem MakePageOverlayColorMenuItem(PageInfo page, string label, string hex)
-    {
-        var item = MakeMenuItem(label, true, () => SetPageSheetOverlayColor(page, hex));
-        item.IsCheckable = true;
-        item.IsChecked = string.Equals(page.OverlayColor, hex, StringComparison.OrdinalIgnoreCase);
-        return item;
-    }
-
-    private MenuItem MakeCurrentSheetOverlayColorMenuItem(string label, string hex, bool isEnabled)
-    {
-        var item = MakeMenuItem(label, isEnabled, () => SetCurrentSheetOverlayColor(hex));
-        item.IsCheckable = true;
-        item.IsChecked = _currentPage != null &&
-                         string.Equals(CurrentSheetOverlayColor(), hex, StringComparison.OrdinalIgnoreCase);
-        return item;
     }
 }

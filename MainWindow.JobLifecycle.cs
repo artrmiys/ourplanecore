@@ -242,6 +242,7 @@ public partial class MainWindow
         try
         {
         ApplyFolderTemplateProviders();
+        OnSheetOverlayPageCleared();
         _currentPage = null;
         _currentPdfPath = "";
         _pagesClipboard = null;

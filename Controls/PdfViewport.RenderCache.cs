@@ -695,6 +695,7 @@ public sealed partial class PdfViewport
     {
         if (page.RasterSheet?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(page.RasterSheet) ||
+            RasterSheetCacheService.IsRasterDpiPinned(page.RasterSheet) ||
             string.IsNullOrWhiteSpace(page.FolderPath) ||
             string.IsNullOrWhiteSpace(page.PdfPath) ||
             page.PdfPage < 0 ||
@@ -761,31 +762,28 @@ public sealed partial class PdfViewport
 
     public static void PrefetchRasterSheetRefresh(PageInfo page)
     {
-        // Static raster mode pins each page to one fixed bitmap, so the whole-job
-        // adaptive-DPI refresh cadence (a background python render ~every 6.5s) is
-        // pure churn — skip it. Self-heal on real PDF changes stays on its own path.
-        if (ViewportRenderPolicy.StaticRasterModeEnabled)
-            return;
-
-        if (page.RasterSheet?.Enabled != true ||
-            string.IsNullOrWhiteSpace(page.FolderPath) ||
-            string.IsNullOrWhiteSpace(page.PdfPath) ||
-            page.PdfPage < 0)
+        // Healthy fixed-DPI pages skip this path through the rebuild predicate.
+        // Stale or missing rasters still reach pin-preserving self-heal.
+        PageInfo currentPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        if (currentPage.RasterSheet?.Enabled != true ||
+            string.IsNullOrWhiteSpace(currentPage.FolderPath) ||
+            string.IsNullOrWhiteSpace(currentPage.PdfPath) ||
+            currentPage.PdfPage < 0)
         {
             return;
         }
 
-        if (!ShouldQueueRasterSheetRefreshPrefetch(page))
+        if (!ShouldQueueRasterSheetRefreshPrefetch(currentPage))
             return;
 
         string cacheKey;
         try
         {
-            cacheKey = RasterSheetRefreshPrefetchKey(page);
+            cacheKey = RasterSheetRefreshPrefetchKey(currentPage);
         }
         catch (Exception ex)
         {
-            AppLog.Warn(ex, $"Viewport raster refresh prefetch skipped for {page.Name}");
+            AppLog.Warn(ex, $"Viewport raster refresh prefetch skipped for {currentPage.Name}");
             return;
         }
 
@@ -795,7 +793,7 @@ public sealed partial class PdfViewport
                 return;
         }
 
-        _ = PrefetchRasterSheetRefreshAsync(page.FolderPath, cacheKey);
+        _ = PrefetchRasterSheetRefreshAsync(currentPage.FolderPath, cacheKey);
     }
 
     private static async Task PrefetchRasterSheetBitmapAsync(
@@ -860,7 +858,8 @@ public sealed partial class PdfViewport
             {
                 PageInfo page = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
                 if (page.RasterSheet?.Enabled != true ||
-                    RasterSheetCacheService.IsSourceImageRaster(page.RasterSheet))
+                    RasterSheetCacheService.IsSourceImageRaster(page.RasterSheet) ||
+                    RasterSheetCacheService.IsRasterDpiPinned(page.RasterSheet))
                 {
                     return;
                 }
@@ -900,7 +899,8 @@ public sealed partial class PdfViewport
 
         float scale = RasterSheetCacheService.RasterDpiToRenderScale(dpi);
         PageInfo currentPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
-        if (currentPage.RasterSheet?.Enabled != true)
+        if (currentPage.RasterSheet?.Enabled != true ||
+            RasterSheetCacheService.IsRasterDpiPinned(currentPage.RasterSheet))
             return;
 
         if (!RasterSheetCacheService.HasReadyReadableRaster(currentPage, scale))
@@ -1412,7 +1412,7 @@ public sealed partial class PdfViewport
                 RasterSheetBuildResult result = await Task.Run(() =>
                     shouldBuildOverview && !shouldRebuild
                         ? RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(page)
-                        : RasterSheetCacheService.BuildAndEnable(page)).ConfigureAwait(false);
+                        : BuildReadableRasterSheetPreservingPinnedDpi(page)).ConfigureAwait(false);
                 string reason = shouldRebuild ? rebuildReason : overviewReason;
                 if (result.Ok)
                 {

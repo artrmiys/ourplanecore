@@ -133,6 +133,12 @@ public sealed class RasterSheetSource
     [JsonPropertyName("render_scale")]
     public double RenderScale { get; set; }
 
+    // 0 keeps the adaptive viewport DPI policy. A positive value pins the
+    // readable raster to the exact Sheet Manager preset selected by the user.
+    [JsonPropertyName("pinned_dpi")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int PinnedDpi { get; set; }
+
     [JsonPropertyName("overview_render_scale")]
     public double OverviewRenderScale { get; set; }
 
@@ -183,6 +189,7 @@ public sealed class RasterSheetSource
             Format = Format,
             RenderProfile = RenderProfile,
             RenderScale = RenderScale,
+            PinnedDpi = PinnedDpi,
             OverviewRenderScale = OverviewRenderScale,
             WidthPt = WidthPt,
             HeightPt = HeightPt,

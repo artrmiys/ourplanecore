@@ -160,6 +160,7 @@ public sealed partial class PdfViewport
             _draggingAnnotationVertex ||
             _draggingTransformScale ||
             _draggingTransformRotate ||
+            _draggingTransformMove ||
             _boxSelecting ||
             _aiCropNoteDragging ||
             IsSheetOverlayPointEditing;

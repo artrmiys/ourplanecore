@@ -44,14 +44,17 @@ public sealed partial class PdfViewport
         foreach (var m in renderCandidates)
         {
             bool selected = IsMeasurementSelected(m);
-            if (!drawGeometry && !selected)
+            bool selectedCutRegion = HasSelectedCutRegion(m);
+            if (!drawGeometry && !selected && !selectedCutRegion)
                 continue;
-            if (!selected && !IsMeasurementVisible(m, visiblePdf))
+            if (!selected && !selectedCutRegion && !IsMeasurementVisible(m, visiblePdf))
                 continue;
 
             visibleMeasurements ??= new List<Measurement>(Math.Min(renderCandidates.Count, 256));
             visibleMeasurements.Add(m);
-            DrawMeasurement(canvas, m, selected, drawLabels: false, drawDetails: drawDetails, simplifyAreaPaint: simplifyAreaPaint && !selected);
+            DrawMeasurement(canvas, m, selected, drawLabels: false, drawDetails: drawDetails, simplifyAreaPaint: simplifyAreaPaint && !selected && !selectedCutRegion);
+            if (!_renderNavigationFastFrame && m.MType == "area")
+                DrawSelectedCutRegionOverlay(canvas, m);
             if (!_renderNavigationFastFrame && selected && !ReferenceEquals(m, _selectedMeasurement))
                 DrawSelectionBounds(canvas, m);
             if (!_renderNavigationFastFrame && ShouldDrawMeasurementHandles(m))
@@ -384,6 +387,7 @@ public sealed partial class PdfViewport
         _draggingAnnotation ||
         _draggingTransformScale ||
         _draggingTransformRotate ||
+        _draggingTransformMove ||
         _joistDirectionMeasurement != null;
     private float MeasurementStrokeScaleFactor() =>
         (float)Math.Clamp(MeasurementStrokeScale, 0.25, 4.0);

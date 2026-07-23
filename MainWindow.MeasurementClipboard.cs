@@ -62,32 +62,50 @@ public partial class MainWindow
     {
         if (_currentJob == null || _currentPage == null)
         {
+            _viewport.CancelPendingMixedCutRegionPaste();
             TxtStatus.Text = "Open a job and sheet before pasting measurements.";
             return;
         }
 
         if (_measurementClipboard == null || _measurementClipboard.Entries.Count == 0)
         {
+            _viewport.CancelPendingMixedCutRegionPaste();
             TxtStatus.Text = "No copied measurements to paste.";
             return;
         }
 
         if (!ConfirmMeasurementPasteScale(_measurementClipboard))
+        {
+            _viewport.CancelPendingMixedCutRegionPaste();
             return;
+        }
 
+        SKPoint pasteOffset = CalculateMeasurementPasteOffset(_measurementClipboard.Entries, pasteAtPdf);
+        if (!_viewport.TryPreflightPendingMixedCutRegionPaste(pasteOffset, out string preflightFailure))
+        {
+            TxtStatus.Text = preflightFailure;
+            return;
+        }
         MeasurementPasteMode? pasteMode = PromptMeasurementPasteMode(_measurementClipboard.Entries.Count);
         if (pasteMode == null)
+        {
+            _viewport.CancelPendingMixedCutRegionPaste();
             return;
+        }
+        if (!_viewport.ValidatePendingMixedCutRegionPasteReservation(out string reservationFailure))
+        {
+            TxtStatus.Text = reservationFailure;
+            return;
+        }
 
+        PdfViewport.ViewState viewBeforePaste = _viewport.CaptureViewState();
+        var pasted = new List<Measurement>();
+        var pastedNodes = new List<TakeoffMeasurementNode>();
+        var changedItems = new HashSet<TakeoffItem>();
+        var createdTargets = new Dictionary<string, TakeoffItem>(StringComparer.OrdinalIgnoreCase);
+        bool pasteCommitted = false;
         try
         {
-            PdfViewport.ViewState viewBeforePaste = _viewport.CaptureViewState();
-            var pasted = new List<Measurement>();
-            var pastedNodes = new List<TakeoffMeasurementNode>();
-            var changedItems = new HashSet<TakeoffItem>();
-            var createdTargets = new Dictionary<string, TakeoffItem>(StringComparer.OrdinalIgnoreCase);
-            SKPoint pasteOffset = CalculateMeasurementPasteOffset(_measurementClipboard.Entries, pasteAtPdf);
-
             foreach (MeasurementClipboardEntry entry in _measurementClipboard.Entries)
             {
                 TakeoffItem target = ResolveMeasurementPasteTarget(entry, pasteMode.Value, createdTargets);
@@ -100,26 +118,33 @@ public partial class MainWindow
                 changedItems.Add(target);
             }
 
+            _viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
+            bool mixedPasteHandled = _viewport.CompletePendingMixedCutRegionPaste(
+                pasted,
+                out int pastedCutouts,
+                out string cutoutStatus);
+            if (!mixedPasteHandled)
+                _viewport.RegisterAddedMeasurementsUndo(pasted, $"remove pasted {pasted.Count} measurement(s)");
+            pasteCommitted = true;
+
+            QueueTakeoffAutosave(changedItems);
             bool previousSuppressFocus = _suppressCanvasFocusFromTakeoffSelection;
             _suppressCanvasFocusFromTakeoffSelection = true;
             try
             {
                 foreach (TakeoffItem item in changedItems)
-                {
-                    QueueTakeoffAutosave(item);
                     RefreshTreeItem(item);
-                }
             }
             finally
             {
                 _suppressCanvasFocusFromTakeoffSelection = previousSuppressFocus;
             }
 
-            _viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
-            _viewport.RegisterAddedMeasurementsUndo(pasted, $"remove pasted {pasted.Count} measurement(s)");
             _viewport.RestoreViewState(viewBeforePaste);
             SelectTakeoffSectionNodesSilently(pastedNodes);
             SelectTakeoffSectionMeasurementsOnCanvas(pastedNodes);
+            if (mixedPasteHandled)
+                _viewport.RestoreCompletedMixedPasteSelection(pasted);
             using (UsePageMeasurementLookup())
             {
                 RefreshPageTakeoffIndicatorsForFolder(_currentPage.FolderPath);
@@ -131,11 +156,42 @@ public partial class MainWindow
             string modeLabel = pasteMode.Value == MeasurementPasteMode.SameTakeoffs
                 ? "same takeoff item(s)"
                 : "new takeoff item(s)";
-            TxtStatus.Text = $"Pasted {pasted.Count} measurement(s) to {_currentPage.Name} into {modeLabel}.";
+            TxtStatus.Text = $"Pasted {pasted.Count} measurement(s) to {_currentPage.Name} into {modeLabel}." +
+                             (mixedPasteHandled
+                                 ? cutoutStatus
+                                 : pastedCutouts > 0
+                                     ? $" Attached {pastedCutouts} cutout(s)."
+                                     : "");
         }
         catch (Exception ex)
         {
-            ShowOperationError("Paste Measurements", ex);
+            Exception reported = ex;
+            if (!pasteCommitted)
+            {
+                try
+                {
+                    Exception? rollbackFailure = RollBackUncommittedMeasurementPaste(
+                        pastedNodes,
+                        createdTargets.Values,
+                        viewBeforePaste);
+                    if (rollbackFailure != null)
+                    {
+                        reported = new AggregateException(
+                            "Paste failed and one or more provisional takeoff folders could not be moved to recovery storage.",
+                            ex,
+                            rollbackFailure);
+                    }
+                }
+                catch (Exception rollbackEx)
+                {
+                    reported = new AggregateException(
+                        "Paste failed and its in-memory rollback also encountered an error.",
+                        ex,
+                        rollbackEx);
+                }
+            }
+            _viewport.CancelPendingMixedCutRegionPaste();
+            ShowOperationError("Paste Measurements", reported);
         }
     }
 
@@ -219,6 +275,7 @@ public partial class MainWindow
         target.UnitPrice = entry.SourceTakeoffUnitPrice;
         target.Notes = entry.SourceTakeoffNotes;
         ApplyTakeoffJoistClipboard(target, entry.SourceTakeoffJoist, measurementType);
+        createdTargets[key] = target;
         _takeoffItems.Add(target);
 
         ItemsControl parent = FindTakeoffTreeItemByFolder(Path.GetDirectoryName(target.FolderPath) ?? "") ?? (ItemsControl)TakeoffsTree;
@@ -226,8 +283,90 @@ public partial class MainWindow
         if (parent is TreeViewItem parentTvi)
             parentTvi.IsExpanded = true;
 
-        createdTargets[key] = target;
         return target;
+    }
+
+    private Exception? RollBackUncommittedMeasurementPaste(
+        IReadOnlyList<TakeoffMeasurementNode> pastedNodes,
+        IEnumerable<TakeoffItem> createdTargets,
+        PdfViewport.ViewState viewBeforePaste)
+    {
+        foreach (TakeoffMeasurementNode node in pastedNodes)
+            node.Item.Measurements.Remove(node.Measurement);
+
+        var created = createdTargets.Distinct().ToHashSet();
+        Exception? folderRollbackFailure = MoveUncommittedTakeoffFoldersToRecovery(created);
+        foreach (TakeoffItem item in created)
+        {
+            if (FindTakeoffTreeItem(item) is { } treeItem)
+                RemoveTreeItem(treeItem);
+            _takeoffItems.Remove(item);
+        }
+
+        foreach (TakeoffItem item in pastedNodes.Select(node => node.Item).Distinct())
+        {
+            if (!created.Contains(item))
+                RefreshTreeItem(item);
+        }
+
+        _viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
+        _viewport.RestoreViewState(viewBeforePaste);
+        return folderRollbackFailure;
+    }
+
+    private Exception? MoveUncommittedTakeoffFoldersToRecovery(IReadOnlyCollection<TakeoffItem> created)
+    {
+        if (created.Count == 0)
+            return null;
+        if (_currentJob == null)
+            return new InvalidOperationException("The job closed before provisional takeoff folders could be recovered.");
+
+        string trashRoot;
+        try
+        {
+            trashRoot = CreateTakeoffUndoTrashRoot(_currentJob);
+        }
+        catch (Exception ex)
+        {
+            return ex;
+        }
+
+        var failures = new List<Exception>();
+        int index = 0;
+        foreach (TakeoffItem item in created)
+        {
+            string sourcePath = NormalizePath(item.FolderPath);
+            try
+            {
+                if (!Directory.Exists(sourcePath))
+                    continue;
+                if (!OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, sourcePath) ||
+                    string.Equals(
+                        sourcePath,
+                        NormalizePath(_currentJob.TakeoffsRoot),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Refusing to recover provisional takeoff folder outside the active job: {sourcePath}");
+                }
+
+                string trashPath = UniqueTakeoffUndoTrashPath(trashRoot, sourcePath, index++);
+                JobWriteAccess.Demand(sourcePath, "roll back a provisional takeoff item");
+                JobWriteAccess.Demand(trashPath, "recover a provisional takeoff item");
+                Directory.Move(sourcePath, trashPath);
+            }
+            catch (Exception ex)
+            {
+                failures.Add(ex);
+            }
+        }
+
+        return failures.Count switch
+        {
+            0 => null,
+            1 => failures[0],
+            _ => new AggregateException("Several provisional takeoff folders could not be recovered.", failures),
+        };
     }
 
     private static string MeasurementPasteTargetDisplayName(string sourceTakeoffName, string measurementType) =>
@@ -299,10 +438,13 @@ public partial class MainWindow
         return CountDisplaySymbol.Circle;
     }
 
-    private static SKPoint CalculateMeasurementPasteOffset(
+    private SKPoint CalculateMeasurementPasteOffset(
         IReadOnlyList<MeasurementClipboardEntry> entries,
         SKPoint? pasteAtPdf)
     {
+        if (_viewport.TryGetMixedClipboardPasteOffset(pasteAtPdf, out SKPoint mixedOffset))
+            return mixedOffset;
+
         if (!pasteAtPdf.HasValue || !TryGetClipboardBounds(entries, out SKRect bounds))
             return new SKPoint(0, 0);
 

@@ -24,16 +24,6 @@ public partial class MainWindow
         maxBytes: ResolveSheetOverlayBitmapCacheBudgetBytes());
     private int _sheetOverlayLoadVersion;
 
-    private static readonly IReadOnlyList<(string Label, string Hex)> SheetOverlayColors =
-    [
-        ("Red", "#E53935"),
-        ("Blue", "#1E88E5"),
-        ("Green", "#43A047"),
-        ("Orange", "#FB8C00"),
-        ("Magenta", "#D81B60"),
-        ("Gray", "#546E7A"),
-    ];
-
     private void SetCurrentSheetOverlay(PageInfo overlayPage)
     {
         if (!RequireModule(ModuleId.SheetOverlay, "Set Sheet Overlay"))
@@ -75,9 +65,8 @@ public partial class MainWindow
         OurPlanCoreJobStore.ClearPageOverlay(_currentPage.FolderPath);
         if (OurPlanCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
             _currentPage = updated;
-        _viewport.ClearSheetOverlay();
-        RefreshPageOverlayTreeNode(_currentPage);
-        TxtStatus.Text = "Sheet overlay cleared.";
+        ClearSheetOverlayViewportAndSelection();
+        FinishSheetOverlayStateRefresh(_currentPage, "Sheet overlay cleared.");
     }
 
     private void SetCurrentSheetOverlayColor(string color)
@@ -277,14 +266,18 @@ public partial class MainWindow
         {
             if (OurPlanCoreJobStore.TryReadPage(page.FolderPath) is { } updated)
                 _currentPage = updated;
-            _viewport.ClearSheetOverlay();
+            ClearSheetOverlayViewportAndSelection();
         }
 
         if (OurPlanCoreJobStore.TryReadPage(page.FolderPath) is { } refreshed)
-            RefreshPageOverlayTreeNode(refreshed);
+        {
+            FinishSheetOverlayStateRefresh(refreshed, "Sheet overlay cleared.");
+        }
         else
+        {
             RefreshPagesTakeoffIndicators();
-        TxtStatus.Text = "Sheet overlay cleared.";
+            TxtStatus.Text = "Sheet overlay cleared.";
+        }
     }
 
     private void ClearReciprocalSheetOverlay(PageInfo page)
@@ -308,8 +301,7 @@ public partial class MainWindow
             LoadSheetOverlay(updated);
         }
 
-        RefreshPageOverlayTreeNode(updated);
-        TxtStatus.Text = status;
+        FinishSheetOverlayStateRefresh(updated, status);
     }
 
     private void OpenSheetOverlaySource(PageInfo page)
@@ -383,8 +375,7 @@ public partial class MainWindow
             _currentPage = updated;
 
         LoadSheetOverlay(_currentPage);
-        RefreshPageOverlayTreeNode(_currentPage);
-        TxtStatus.Text = status;
+        FinishSheetOverlayStateRefresh(_currentPage, status);
     }
 
     private void LoadSheetOverlay(
@@ -395,6 +386,7 @@ public partial class MainWindow
     {
         if (!IsModuleEnabled(ModuleId.SheetOverlay))
         {
+            _viewport.SetSheetOverlaySelectionActive(false);
             _viewport.ClearSheetOverlay();
             return;
         }
@@ -404,6 +396,7 @@ public partial class MainWindow
             _viewport.ClearSheetOverlay();
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
         {
+            _viewport.SetSheetOverlaySelectionActive(false);
             _viewport.ClearSheetOverlay();
             return;
         }
@@ -431,6 +424,7 @@ public partial class MainWindow
     {
         if (!IsModuleEnabled(ModuleId.SheetOverlay))
         {
+            _viewport.SetSheetOverlaySelectionActive(false);
             _viewport.ClearSheetOverlay();
             return;
         }
@@ -438,6 +432,7 @@ public partial class MainWindow
         int version = ++_sheetOverlayLoadVersion;
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
         {
+            _viewport.SetSheetOverlaySelectionActive(false);
             _viewport.ClearSheetOverlay();
             return;
         }
@@ -511,6 +506,7 @@ public partial class MainWindow
             !latest.OverlayVisible)
         {
             result.Bitmap?.Dispose();
+            _viewport.SetSheetOverlaySelectionActive(false);
             _viewport.ClearSheetOverlay();
             return;
         }
@@ -559,6 +555,7 @@ public partial class MainWindow
             overlayPage?.PdfPage ?? 0,
             OverlaySnapLayers(overlayPage),
             bitmapScale: renderScale);
+        ActivateCurrentSheetOverlayFrameAfterBitmapLoad(page);
     }
 
     private static IReadOnlyList<PdfLayerInfo>? OverlaySnapLayers(PageInfo? overlayPage) =>
@@ -952,10 +949,11 @@ public partial class MainWindow
             LoadSheetOverlay(updated);
         }
 
-        RefreshPageOverlayTreeNode(updated);
-        TxtStatus.Text = visible
-            ? $"Sheet overlay shown on {updated.Name}."
-            : $"Sheet overlay hidden on {updated.Name}.";
+        FinishSheetOverlayStateRefresh(
+            updated,
+            visible
+                ? $"Sheet overlay shown on {updated.Name}."
+                : $"Sheet overlay hidden on {updated.Name}.");
     }
 
     private static SKBitmap BuildTintedSheetOverlayBitmap(SKBitmap source, string colorHex, double opacity)

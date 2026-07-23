@@ -16,7 +16,11 @@ public sealed partial class PdfViewport
         SetSelectedMeasurements([measurement], measurement, vertexIndex);
     }
 
-    private void SetSelectedMeasurements(IReadOnlyList<Measurement> measurements, Measurement? primary, int vertexIndex)
+    private void SetSelectedMeasurements(
+        IReadOnlyList<Measurement> measurements,
+        Measurement? primary,
+        int vertexIndex,
+        bool preserveCutRegions = false)
     {
         var next = measurements
             .Where(m => _measurementSet.Contains(m) && IsMeasurementOnActivePage(m))
@@ -37,6 +41,7 @@ public sealed partial class PdfViewport
                           next.Any(m => !_selectedMeasurements.Contains(m));
         bool primaryChanged = !ReferenceEquals(_selectedMeasurement, nextPrimary);
         bool vertexChanged = _selectedVertexIndex != vertexIndex;
+        bool cutRegionsChanged = !preserveCutRegions && _selectedCutRegions.Count > 0;
 
         _selectedMeasurements.Clear();
         foreach (Measurement measurement in next)
@@ -44,6 +49,8 @@ public sealed partial class PdfViewport
 
         _selectedMeasurement = nextPrimary;
         _selectedVertexIndex = nextPrimary == null ? -1 : vertexIndex;
+        if (!preserveCutRegions)
+            _selectedCutRegions.Clear();
         if (next.Count > 0)
             _annotationSelectionDomain = false;
         ClearMeasurementVertexSelection();
@@ -57,7 +64,7 @@ public sealed partial class PdfViewport
             MeasurementSelectionChanged?.Invoke(nextPrimary);
         if (setChanged)
             MeasurementsSelectionChanged?.Invoke(next);
-        if (primaryChanged || setChanged || vertexChanged)
+        if (primaryChanged || setChanged || vertexChanged || cutRegionsChanged)
             RequestRepaint();
         PublishTransformSelectionChanged();
     }
@@ -73,10 +80,14 @@ public sealed partial class PdfViewport
         else
             selected.Add(measurement);
 
-        SetSelectedMeasurements(selected, selected.Contains(measurement) ? measurement : selected.LastOrDefault(), -1);
-        PostStatus(selected.Count == 0
+        SetSelectedMeasurements(
+            selected,
+            selected.Contains(measurement) ? measurement : selected.LastOrDefault(),
+            -1,
+            preserveCutRegions: true);
+        PostStatus(selected.Count == 0 && SelectedCutRegionCount == 0
             ? "Selection cleared."
-            : $"Selected {selected.Count} measurement(s). Ctrl+C copies, Ctrl+V pastes.");
+            : $"Selected {selected.Count} measurement(s) and {SelectedCutRegionCount} cutout(s). Ctrl+C copies, Ctrl+V pastes.");
     }
 
     private void SelectAllActivePageMeasurements()
@@ -135,12 +146,15 @@ public sealed partial class PdfViewport
         bool vertexChanged = _selectedAnnotationVertexIndex != vertexIndex;
 
         if (next.Count > 0 &&
-            (_selectedMeasurements.Count > 0 || _selectedMeasurement != null))
+            (_selectedMeasurements.Count > 0 ||
+             _selectedMeasurement != null ||
+             _selectedCutRegions.Count > 0))
         {
             _selectedMeasurements.Clear();
             _selectedMeasurement = null;
             _selectedVertexIndex = -1;
             ClearMeasurementVertexSelection();
+            _selectedCutRegions.Clear();
             MeasurementSelectionChanged?.Invoke(null);
             MeasurementsSelectionChanged?.Invoke(Array.Empty<Measurement>());
         }
@@ -208,10 +222,12 @@ public sealed partial class PdfViewport
         CancelExtraJoistPlacement(postStatus: false);
         bool changed = _selectedMeasurement != null ||
                        _selectedMeasurements.Count > 0 ||
+                       _selectedCutRegions.Count > 0 ||
                        _selectedAnnotation != null ||
                        _selectedAnnotations.Count > 0;
         _selectedMeasurement = null;
         _selectedMeasurements.Clear();
+        _selectedCutRegions.Clear();
         _selectedVertexIndex = -1;
         ClearMeasurementVertexSelection();
         ClearAnnotationSelection();
@@ -221,6 +237,7 @@ public sealed partial class PdfViewport
         _draggingAnnotation = false;
         _draggingTransformScale = false;
         _draggingTransformRotate = false;
+        _draggingTransformMove = false;
         _dragMeasurementChanged = false;
         _dragAnnotationChanged = false;
         _dragMeasurementOriginalPoints.Clear();
@@ -237,6 +254,8 @@ public sealed partial class PdfViewport
         _transformMeasurementOriginalJoistDirections.Clear();
         _transformMeasurementOriginalExtraJoists.Clear();
         _transformAnnotationOriginalPoints.Clear();
+        _transformWholeMeasurements.Clear();
+        _transformCutRegions.Clear();
         if (changed)
         {
             MeasurementSelectionChanged?.Invoke(null);
@@ -254,6 +273,9 @@ public sealed partial class PdfViewport
 
     private void DeleteSelectedOverlay()
     {
+        if (TryDeleteSelectedCutRegions())
+            return;
+
         if (TryDeleteSelectedMeasurementVertices())
             return;
 
@@ -542,6 +564,7 @@ public sealed partial class PdfViewport
         if (ReferenceEquals(_extraJoistPlacementMeasurement, measurement))
             CancelExtraJoistPlacement(postStatus: false);
         _selectedMeasurements.Remove(measurement);
+        _selectedCutRegions.RemoveWhere(cutRegion => ReferenceEquals(cutRegion.Parent, measurement));
         _selectedMeasurementVertexIndices.Remove(measurement);
         _dragMeasurementVertexOriginalPoints.Remove(measurement);
         _dragSelectionOriginalPoints.Remove(measurement);
@@ -563,11 +586,21 @@ public sealed partial class PdfViewport
 
     private void PruneHiddenMeasurementSelection()
     {
+        int cutRegionCount = _selectedCutRegions.Count;
+        _selectedCutRegions.RemoveWhere(cutRegion => !IsValidCutRegion(cutRegion));
+        bool cutRegionsChanged = cutRegionCount != _selectedCutRegions.Count;
         var hiddenSelected = _selectedMeasurements
             .Where(measurement => !IsMeasurementOnActivePage(measurement))
             .ToList();
         if (hiddenSelected.Count == 0)
+        {
+            if (cutRegionsChanged)
+            {
+                RequestRepaint();
+                PublishTransformSelectionChanged();
+            }
             return;
+        }
 
         foreach (Measurement measurement in hiddenSelected)
             ForgetMeasurementState(measurement);

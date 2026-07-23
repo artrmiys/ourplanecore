@@ -149,6 +149,74 @@ internal static class StaticRasterPrefetchPolicyTests
         }
     }
 
+    public static void PerSheetPinOverridesTheGlobalStaticTarget()
+    {
+        string tempRoot = Path.Combine(Path.GetTempPath(), "onc_static_prefetch_tests", Guid.NewGuid().ToString("N"));
+        bool previousEnabled = ViewportRenderPolicy.StaticRasterModeEnabled;
+        int previousTargetDpi = ViewportRenderPolicy.StaticRasterTargetDpi;
+        bool previousPdfLayersEnabled = PdfLayerRenderService.PdfLayersEnabled;
+        try
+        {
+            string pageFolder = Path.Combine(tempRoot, "Pages", "A101");
+            string rasterFolder = Path.Combine(pageFolder, RasterSheetCacheService.CacheFolderName);
+            Directory.CreateDirectory(rasterFolder);
+            string pdfPath = Path.Combine(tempRoot, "source.pdf");
+            File.WriteAllBytes(pdfPath, [1, 2, 3, 4]);
+            string raster100 = Path.Combine(rasterFolder, "working-100dpi.webp");
+            WriteRaster(raster100, 100);
+
+            var pdfInfo = new FileInfo(pdfPath);
+            var source = new RasterSheetSource
+            {
+                Enabled = true,
+                UseAsPageOpenRaster = true,
+                Image = Path.GetRelativePath(pageFolder, raster100),
+                Format = RasterSheetCacheService.WebpRasterFormat,
+                RenderProfile = RasterSheetCacheService.ReadableRasterProfile,
+                RenderScale = RasterSheetCacheService.RasterDpiToRenderScale(100),
+                PinnedDpi = 100,
+                WidthPt = 72,
+                HeightPt = 72,
+                PdfLength = pdfInfo.Length,
+                PdfLastWriteUtcTicks = pdfInfo.LastWriteTimeUtc.Ticks,
+            };
+            var page = new PageInfo
+            {
+                Name = "A101",
+                FolderPath = pageFolder,
+                PdfPath = pdfPath,
+                PdfPage = 0,
+                RasterSheet = source,
+            };
+
+            ViewportRenderPolicy.StaticRasterModeEnabled = true;
+            ViewportRenderPolicy.StaticRasterTargetDpi = 150;
+            PdfLayerRenderService.PdfLayersEnabled = false;
+            AssertTrue(
+                StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page),
+                "a ready 100 DPI per-sheet pin must override the 150 DPI global static target");
+
+            File.Delete(raster100);
+            AssertFalse(
+                StaticRasterPrefetchPolicy.HasReadyPageOpenRaster(page),
+                "a missing exact pinned raster must retain the live fallback until self-heal rebuilds it");
+        }
+        finally
+        {
+            ViewportRenderPolicy.StaticRasterModeEnabled = previousEnabled;
+            ViewportRenderPolicy.StaticRasterTargetDpi = previousTargetDpi;
+            PdfLayerRenderService.PdfLayersEnabled = previousPdfLayersEnabled;
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, recursive: true);
+            }
+            catch
+            {
+            }
+        }
+    }
+
     private static void WriteRaster(string path, int pixels)
     {
         using var bitmap = new SKBitmap(pixels, pixels);

@@ -32,6 +32,7 @@ public partial class MainWindow
         if (!OurPlanCoreJobStore.IsSameOrDescendant(affectedPath, _currentPage.FolderPath))
             return;
 
+        OnSheetOverlayPageCleared();
         _currentPage = null;
         _currentPdfPath = "";
         _viewport.ClearPage();

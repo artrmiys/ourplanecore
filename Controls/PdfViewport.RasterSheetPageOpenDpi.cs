@@ -13,6 +13,7 @@ public sealed partial class PdfViewport
         if (RasterSheetCacheService.UseAsPageOpenRaster(rasterSheet) ||
             rasterSheet?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(rasterSheet) ||
+            RasterSheetCacheService.IsRasterDpiPinned(rasterSheet) ||
             _pdfLayersLoadedForPage ||
             _usingLayerRenderer)
         {

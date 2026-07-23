@@ -68,6 +68,7 @@ public partial class MainWindow
         bool reloadActiveTab = activeAffected && !TryRebindCurrentPageAfterMovedPath(normalizedMoves);
         if (reloadActiveTab)
         {
+            OnSheetOverlayPageCleared();
             _currentPage = null;
             _currentPdfPath = "";
         }

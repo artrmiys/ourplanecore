@@ -550,6 +550,7 @@ public sealed partial class PdfViewport
                 snapshot.Target.JoistDirectionDegrees = snapshot.JoistDirectionDegrees;
                 RestoreExtraJoists(snapshot.Target.ExtraJoists, snapshot.ExtraJoists);
                 PruneMeasurementVertexSelection(snapshot.Target);
+                PruneCutRegionSelection(snapshot.Target);
                 changedMeasurements.Add(snapshot.Target);
                 changed = true;
             }

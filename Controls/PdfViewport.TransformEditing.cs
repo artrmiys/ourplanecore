@@ -10,6 +10,10 @@ namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    private bool _draggingTransformMove;
+    private readonly HashSet<Measurement> _transformWholeMeasurements = [];
+    private readonly List<CutRegionRef> _transformCutRegions = [];
+
     public bool HasTransformSelection => HasSelectedTransformTargets();
 
     public bool MirrorSelectedHorizontal()
@@ -72,7 +76,12 @@ public sealed partial class PdfViewport
         bool coalesceUndo,
         double? rotationDegrees = null)
     {
-        var measurements = SelectedTransformMeasurements();
+        var wholeMeasurements = SelectedTransformMeasurements();
+        var cutRegions = SelectedTransformCutRegions();
+        var measurements = wholeMeasurements
+            .Concat(cutRegions.Select(cutRegion => cutRegion.Parent))
+            .Distinct()
+            .ToList();
         var annotations = SelectedTransformAnnotations();
         if (measurements.Count == 0 && annotations.Count == 0)
         {
@@ -81,10 +90,9 @@ public sealed partial class PdfViewport
         }
 
         PushGeometryUndoSnapshot(measurements, annotations, "selection transform", undoKey, coalesceUndo);
-        foreach (Measurement measurement in measurements)
+        CutRegionSelectionService.ApplyGeometryTransform(wholeMeasurements, cutRegions, transform);
+        foreach (Measurement measurement in wholeMeasurements)
         {
-            ApplyTransform(measurement.Points, transform);
-            ApplyTransformToHoles(measurement.Holes, transform);
             ApplyTransformToExtraJoists(measurement.ExtraJoists, transform);
             ApplyJoistDirectionRotation(measurement, rotationDegrees);
         }
@@ -158,7 +166,12 @@ public sealed partial class PdfViewport
 
     private bool CaptureTransformOriginals()
     {
-        var measurements = SelectedTransformMeasurements();
+        var wholeMeasurements = SelectedTransformMeasurements();
+        var cutRegions = SelectedTransformCutRegions();
+        var measurements = wholeMeasurements
+            .Concat(cutRegions.Select(cutRegion => cutRegion.Parent))
+            .Distinct()
+            .ToList();
         var annotations = SelectedTransformAnnotations();
         if (measurements.Count == 0 && annotations.Count == 0)
             return false;
@@ -168,6 +181,11 @@ public sealed partial class PdfViewport
         _transformMeasurementOriginalJoistDirections.Clear();
         _transformMeasurementOriginalExtraJoists.Clear();
         _transformAnnotationOriginalPoints.Clear();
+        _transformWholeMeasurements.Clear();
+        _transformCutRegions.Clear();
+        foreach (Measurement measurement in wholeMeasurements)
+            _transformWholeMeasurements.Add(measurement);
+        _transformCutRegions.AddRange(cutRegions);
         foreach (Measurement measurement in measurements)
         {
             _transformMeasurementOriginalPoints[measurement] = measurement.Points.ToList();
@@ -183,10 +201,18 @@ public sealed partial class PdfViewport
 
     private void UpdateTransformDrag(SKPoint pdf)
     {
-        if (!_draggingTransformScale && !_draggingTransformRotate)
+        if (!_draggingTransformScale && !_draggingTransformRotate && !_draggingTransformMove)
             return;
 
-        if (_draggingTransformScale && ShouldScaleFromTopLeftAnchor(_transformHandle))
+        if (_draggingTransformMove)
+        {
+            SKPoint delta = ConstrainDragDeltaOrtho(new SKPoint(
+                pdf.X - _transformStartPdf.X,
+                pdf.Y - _transformStartPdf.Y));
+            ApplyTransformFromOriginal(point => new SKPoint(point.X + delta.X, point.Y + delta.Y));
+            PostDragStatus("Dragging selection", delta);
+        }
+        else if (_draggingTransformScale && ShouldScaleFromTopLeftAnchor(_transformHandle))
         {
             UpdateTopLeftAnchoredScaleDrag(pdf);
         }
@@ -224,14 +250,36 @@ public sealed partial class PdfViewport
     {
         foreach (var (measurement, originalPoints) in _transformMeasurementOriginalPoints)
         {
-            for (int i = 0; i < measurement.Points.Count && i < originalPoints.Count; i++)
-                measurement.Points[i] = transform(originalPoints[i]);
+            if (_transformWholeMeasurements.Contains(measurement))
+            {
+                for (int i = 0; i < measurement.Points.Count && i < originalPoints.Count; i++)
+                    measurement.Points[i] = transform(originalPoints[i]);
 
-            if (_transformMeasurementOriginalHoles.TryGetValue(measurement, out var originalHoles))
-                RestoreTransformedHoles(measurement.Holes, originalHoles, transform);
-            if (_transformMeasurementOriginalExtraJoists.TryGetValue(measurement, out var originalExtraJoists))
-                RestoreTransformedExtraJoists(measurement.ExtraJoists, originalExtraJoists, transform);
-            ApplyJoistDirectionRotationFromOriginal(measurement, rotationDegrees);
+                if (_transformMeasurementOriginalHoles.TryGetValue(measurement, out var originalHoles))
+                    RestoreTransformedHoles(measurement.Holes, originalHoles, transform);
+                if (_transformMeasurementOriginalExtraJoists.TryGetValue(measurement, out var originalExtraJoists))
+                    RestoreTransformedExtraJoists(measurement.ExtraJoists, originalExtraJoists, transform);
+                ApplyJoistDirectionRotationFromOriginal(measurement, rotationDegrees);
+                continue;
+            }
+
+            if (!_transformMeasurementOriginalHoles.TryGetValue(measurement, out var cutoutOriginals))
+                continue;
+            foreach (CutRegionRef cutRegion in _transformCutRegions.Where(cutRegion =>
+                         ReferenceEquals(cutRegion.Parent, measurement)))
+            {
+                if (cutRegion.HoleIndex < 0 ||
+                    cutRegion.HoleIndex >= measurement.Holes.Count ||
+                    cutRegion.HoleIndex >= cutoutOriginals.Count)
+                {
+                    continue;
+                }
+
+                List<SKPoint> target = measurement.Holes[cutRegion.HoleIndex];
+                IReadOnlyList<SKPoint> original = cutoutOriginals[cutRegion.HoleIndex];
+                target.Clear();
+                target.AddRange(original.Select(transform));
+            }
         }
 
         foreach (var (annotation, originalPoints) in _transformAnnotationOriginalPoints)
@@ -341,7 +389,7 @@ public sealed partial class PdfViewport
 
     private void FinishTransformDrag()
     {
-        if (!_draggingTransformScale && !_draggingTransformRotate)
+        if (!_draggingTransformScale && !_draggingTransformRotate && !_draggingTransformMove)
             return;
 
         var changedMeasurements = _transformMeasurementOriginalPoints.Keys.ToList();
@@ -359,12 +407,15 @@ public sealed partial class PdfViewport
 
         _draggingTransformScale = false;
         _draggingTransformRotate = false;
+        _draggingTransformMove = false;
         _transformHandle = TransformHandleKind.None;
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
         _transformMeasurementOriginalJoistDirections.Clear();
         _transformMeasurementOriginalExtraJoists.Clear();
         _transformAnnotationOriginalPoints.Clear();
+        _transformWholeMeasurements.Clear();
+        _transformCutRegions.Clear();
         if (IsMouseCaptured)
             ReleaseMouseCapture();
 
@@ -497,6 +548,14 @@ public sealed partial class PdfViewport
             .Where(measurement => IsMeasurementOnActivePage(measurement))
             .ToList();
 
+    private IReadOnlyList<CutRegionRef> SelectedTransformCutRegions()
+    {
+        var wholeMeasurements = new HashSet<Measurement>(SelectedTransformMeasurements());
+        return SelectedCutRegions()
+            .Where(cutRegion => !wholeMeasurements.Contains(cutRegion.Parent))
+            .ToList();
+    }
+
     private IReadOnlyList<PageAnnotation> SelectedTransformAnnotations() =>
         _selectedAnnotations
             .Where(annotation => IsAnnotationVisibleOnActivePage(annotation))
@@ -512,6 +571,9 @@ public sealed partial class PdfViewport
                 foreach (SKPoint point in hole)
                     yield return point;
         }
+        foreach (CutRegionRef cutRegion in SelectedTransformCutRegions())
+            foreach (SKPoint point in cutRegion.Parent.Holes[cutRegion.HoleIndex])
+                yield return point;
 
         foreach (PageAnnotation annotation in SelectedTransformAnnotations())
             foreach (SKPoint point in AnnotationTransformPoints(annotation))
@@ -519,7 +581,9 @@ public sealed partial class PdfViewport
     }
 
     private bool HasSelectedTransformTargets() =>
-        SelectedTransformMeasurements().Count > 0 || SelectedTransformAnnotations().Count > 0;
+        SelectedTransformMeasurements().Count > 0 ||
+        SelectedTransformCutRegions().Count > 0 ||
+        SelectedTransformAnnotations().Count > 0;
 
     private static void ApplyJoistDirectionRotation(Measurement measurement, double? rotationDegrees)
     {

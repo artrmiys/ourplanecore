@@ -456,7 +456,7 @@ public partial class MainWindow
         }
         else if (e.NewValue is TreeViewItem { Tag: PageOverlayNode overlay })
         {
-            TxtStatus.Text = $"Sheet overlay on {overlay.Page.Name}: {overlay.OverlayName}.";
+            ShowSheetOverlayProperties(overlay.Page);
         }
     }
 
@@ -677,7 +677,7 @@ public partial class MainWindow
             if (IsPageOverlayVisibilityToggleSource(e.OriginalSource as DependencyObject))
                 TogglePageOverlayVisibility(overlay.Page);
             else
-                TxtStatus.Text = "Sheet overlay selected. Right-click it to move, scale, recolor, or clear.";
+                ShowSheetOverlayProperties(overlay.Page);
             e.Handled = true;
             return;
         }

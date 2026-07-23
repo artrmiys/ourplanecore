@@ -57,7 +57,9 @@ public static class RasterSheetCacheService
     public static RasterSheetBuildResult BuildAndEnable(
         PageInfo page,
         float renderScale = DefaultRenderScale,
-        string preferredFormat = "")
+        string preferredFormat = "",
+        bool allowPinnedDpiChange = false,
+        int? pinnedDpiOverride = null)
     {
         if (!TryValidateCurrentPageFolder(page, out string pageError))
             return Failed(pageError);
@@ -69,7 +71,19 @@ public static class RasterSheetCacheService
 
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
         string formatPreference = NormalizeReadableRasterFormat(preferredFormat);
-        if (TryEnableReadyReadableRaster(page, scale, out RasterSheetBuildResult reused, formatPreference))
+        if (!allowPinnedDpiChange &&
+            !pinnedDpiOverride.HasValue &&
+            HasPinnedDpiConflict(LatestRasterSheetSource(page), scale))
+        {
+            return Failed("Raster DPI is fixed by a Sheet Manager preset.");
+        }
+        if (TryEnableReadyReadableRaster(
+                page,
+                scale,
+                out RasterSheetBuildResult reused,
+                formatPreference,
+                allowPinnedDpiChange,
+                pinnedDpiOverride))
             return reused;
 
         if (!PdfLayerRenderService.TryRender(
@@ -108,6 +122,12 @@ public static class RasterSheetCacheService
         if (!TryValidateCurrentPageFolder(page, out pageError))
             return Failed(pageError);
 
+        RasterSheetSource? currentSource = LatestRasterSheetSource(page);
+        if (!allowPinnedDpiChange &&
+            !pinnedDpiOverride.HasValue &&
+            HasPinnedDpiConflict(currentSource, scale))
+            return Failed("Raster DPI was fixed while this cache was rendering.");
+
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         JobWriteAccess.Demand(rasterDir, "create raster cache folder");
         Directory.CreateDirectory(rasterDir);
@@ -118,7 +138,7 @@ public static class RasterSheetCacheService
         JobWriteAccess.Demand(imagePath, "publish raster cache image");
         File.Move(tempPath, imagePath, overwrite: true);
 
-        bool useAsPageOpenRaster = UseAsPageOpenRaster(CurrentRasterSheetSource(page));
+        bool useAsPageOpenRaster = UseAsPageOpenRaster(currentSource);
         var pdfInfo = new FileInfo(page.PdfPath);
         var source = new RasterSheetSource
         {
@@ -128,6 +148,9 @@ public static class RasterSheetCacheService
             Format = workingImageFormat,
             RenderProfile = ReadableRasterProfile,
             RenderScale = render.WidthPt > 0 ? decoded.Width / render.WidthPt : scale,
+            PinnedDpi = pinnedDpiOverride.HasValue
+                ? NormalizePinnedRasterDpi(pinnedDpiOverride.Value)
+                : NormalizePinnedRasterDpi(currentSource?.PinnedDpi ?? 0),
             WidthPt = render.WidthPt,
             HeightPt = render.HeightPt,
             PdfLastWriteUtcTicks = pdfInfo.LastWriteTimeUtc.Ticks,
@@ -157,7 +180,11 @@ public static class RasterSheetCacheService
             original != null &&
             (CanTrustReadableRasterMetadata(page, original) || IsSourceImageRaster(original));
 
-        RasterSheetBuildResult result = BuildAndEnable(page, renderScale, preferredFormat);
+        RasterSheetBuildResult result = BuildAndEnable(
+            page,
+            renderScale,
+            preferredFormat,
+            allowPinnedDpiChange: true);
         if (!result.Ok)
             return result;
 
@@ -204,7 +231,9 @@ public static class RasterSheetCacheService
         PageInfo page,
         float renderScale,
         out RasterSheetBuildResult result,
-        string preferredFormat = "")
+        string preferredFormat = "",
+        bool allowPinnedDpiChange = false,
+        int? pinnedDpiOverride = null)
     {
         result = new RasterSheetBuildResult(false, null, "", "");
         if (!TryValidateCurrentPageFolder(page, out string pageError))
@@ -215,6 +244,17 @@ public static class RasterSheetCacheService
         JobWriteAccess.Demand(page.FolderPath, "enable raster cache");
 
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
+        if (!allowPinnedDpiChange &&
+            !pinnedDpiOverride.HasValue &&
+            HasPinnedDpiConflict(LatestRasterSheetSource(page), scale))
+        {
+            result = new RasterSheetBuildResult(
+                false,
+                null,
+                "",
+                "Raster DPI is fixed by a Sheet Manager preset.");
+            return false;
+        }
         if (!TryFindReusableReadableRaster(page, scale, out RasterSheetSource? source, out string imagePath, preferredFormat) ||
             source == null)
         {
@@ -232,6 +272,9 @@ public static class RasterSheetCacheService
         }
 
         source.Enabled = true;
+        source.PinnedDpi = pinnedDpiOverride.HasValue
+            ? NormalizePinnedRasterDpi(pinnedDpiOverride.Value)
+            : NormalizePinnedRasterDpi(source.PinnedDpi);
         OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         result = new RasterSheetBuildResult(true, source, imagePath, "", Reused: true);
         return true;
@@ -258,15 +301,24 @@ public static class RasterSheetCacheService
 
     private static RasterSheetSource? CurrentRasterSheetSource(PageInfo page)
     {
-        RasterSheetSource? source = page.RasterSheet?.Clone();
-        if (source != null ||
-            string.IsNullOrWhiteSpace(page.FolderPath) ||
-            OurPlanCoreJobStore.TryReadPage(page.FolderPath) is not { RasterSheet: not null } persistedPage)
+        return LatestRasterSheetSource(page);
+    }
+
+    private static RasterSheetSource? LatestRasterSheetSource(PageInfo page)
+    {
+        if (!string.IsNullOrWhiteSpace(page.FolderPath) &&
+            OurPlanCoreJobStore.TryReadPage(page.FolderPath) is { } persistedPage)
         {
-            return source;
+            return persistedPage.RasterSheet?.Clone();
         }
 
-        return persistedPage.RasterSheet.Clone();
+        return page.RasterSheet?.Clone();
+    }
+
+    private static bool HasPinnedDpiConflict(RasterSheetSource? source, double renderScale)
+    {
+        int pinnedDpi = PinnedRasterDpi(source);
+        return pinnedDpi > 0 && pinnedDpi != RenderScaleToDpi(renderScale);
     }
 
     private static bool TryValidateCurrentPageFolder(PageInfo page, out string error)
@@ -449,7 +501,7 @@ public static class RasterSheetCacheService
         if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
             return Failed($"Source PDF is missing: {page.PdfPath}");
 
-        RasterSheetSource? source = page.RasterSheet?.Clone();
+        RasterSheetSource? source = LatestRasterSheetSource(page);
         if (!IsSourceImageRaster(source) || source!.WidthPt <= 0 || source.HeightPt <= 0 || source.RenderScale <= 0)
             return Failed("Source image raster is not eligible for overview.");
         if (IsStale(page.PdfPath, source))
@@ -503,12 +555,35 @@ public static class RasterSheetCacheService
 
     public static bool TrySetEnabled(PageInfo page, bool enabled, out string error, out bool changed)
     {
+        return TrySetEnabledCore(page, enabled, pinnedDpiOverride: null, out error, out changed);
+    }
+
+    public static bool TrySetEnabledAndPinnedDpi(
+        PageInfo page,
+        bool enabled,
+        int pinnedDpi,
+        out string error,
+        out bool changed)
+    {
+        return TrySetEnabledCore(page, enabled, pinnedDpi, out error, out changed);
+    }
+
+    private static bool TrySetEnabledCore(
+        PageInfo page,
+        bool enabled,
+        int? pinnedDpiOverride,
+        out string error,
+        out bool changed)
+    {
         error = "";
         changed = false;
-        RasterSheetSource? source = page.RasterSheet?.Clone();
+        if (!TryValidateCurrentPageFolder(page, out error))
+            return false;
+
+        RasterSheetSource? source = LatestRasterSheetSource(page);
         if (source == null || string.IsNullOrWhiteSpace(source.Image))
         {
-            if (!enabled)
+            if (!enabled && NormalizePinnedRasterDpi(pinnedDpiOverride ?? 0) == 0)
                 return true;
 
             error = "No raster cache exists for this sheet.";
@@ -516,20 +591,73 @@ public static class RasterSheetCacheService
         }
 
         bool useAsPageOpenRaster = enabled && source.UseAsPageOpenRaster;
+        int nextPinnedDpi = pinnedDpiOverride.HasValue
+            ? IsSourceImageRasterProfile(source)
+                ? 0
+                : NormalizePinnedRasterDpi(pinnedDpiOverride.Value)
+            : source.PinnedDpi;
         changed = source.Enabled != enabled ||
-                  source.UseAsPageOpenRaster != useAsPageOpenRaster;
+                  source.UseAsPageOpenRaster != useAsPageOpenRaster ||
+                  source.PinnedDpi != nextPinnedDpi;
         if (!changed)
             return true;
 
         JobWriteAccess.Demand(page.FolderPath, "change raster cache state");
         source.Enabled = enabled;
         source.UseAsPageOpenRaster = useAsPageOpenRaster;
+        source.PinnedDpi = nextPinnedDpi;
         OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         return true;
     }
 
     public static bool UseAsPageOpenRaster(RasterSheetSource? source) =>
         source?.Enabled == true && source.UseAsPageOpenRaster;
+
+    public static int NormalizePinnedRasterDpi(int dpi) =>
+        dpi is >= 72 and <= MaxRasterDpi ? dpi : 0;
+
+    public static int PinnedRasterDpi(RasterSheetSource? source) =>
+        source == null || IsSourceImageRasterProfile(source)
+            ? 0
+            : NormalizePinnedRasterDpi(source.PinnedDpi);
+
+    public static bool IsRasterDpiPinned(RasterSheetSource? source) =>
+        PinnedRasterDpi(source) > 0;
+
+    public static bool TrySetPinnedDpi(
+        PageInfo page,
+        int pinnedDpi,
+        out string error,
+        out bool changed)
+    {
+        error = "";
+        changed = false;
+        if (!TryValidateCurrentPageFolder(page, out error))
+            return false;
+
+        PageInfo? persistedPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath);
+        RasterSheetSource? source = persistedPage?.RasterSheet?.Clone();
+        if (source == null || string.IsNullOrWhiteSpace(source.Image))
+        {
+            if (NormalizePinnedRasterDpi(pinnedDpi) == 0)
+                return true;
+
+            error = "No raster cache exists for this sheet.";
+            return false;
+        }
+
+        int nextDpi = IsSourceImageRasterProfile(source)
+            ? 0
+            : NormalizePinnedRasterDpi(pinnedDpi);
+        changed = source.PinnedDpi != nextDpi;
+        if (!changed)
+            return true;
+
+        JobWriteAccess.Demand(page.FolderPath, "change raster DPI policy");
+        source.PinnedDpi = nextDpi;
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        return true;
+    }
 
     public static bool TrySetUseAsPageOpenRaster(
         PageInfo page,
@@ -539,7 +667,10 @@ public static class RasterSheetCacheService
     {
         error = "";
         changed = false;
-        RasterSheetSource? source = page.RasterSheet?.Clone();
+        if (!TryValidateCurrentPageFolder(page, out error))
+            return false;
+
+        RasterSheetSource? source = LatestRasterSheetSource(page);
         if (source == null)
         {
             if (!useAsPageOpenRaster)
@@ -742,7 +873,8 @@ public static class RasterSheetCacheService
             : "";
         string first = source.UseAsPageOpenRaster ? "+first" : "";
         string snap = source.SnapPointCount + source.SnapSegmentCount > 0 ? "+snap" : "";
-        return AppendCachedDpiSummary($"Raster {scale}{format}{profile}{first}{snap}", cachedDpis);
+        string fixedDpi = IsRasterDpiPinned(source) ? "+fixed" : "";
+        return AppendCachedDpiSummary($"Raster {scale}{format}{profile}{fixedDpi}{first}{snap}", cachedDpis);
     }
 
     public static string CachedReadableDpiSummary(

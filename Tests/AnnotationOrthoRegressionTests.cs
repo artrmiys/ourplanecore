@@ -91,10 +91,11 @@ internal static class AnnotationOrthoRegressionTests
             input.Contains("PasteCopiedPageAnnotations(_lastPointerPdf)", StringComparison.Ordinal),
             "viewport Ctrl+C/Ctrl+V routing must honor the current annotation clipboard payload");
 
-        string cutRegions = Read("Controls/PdfViewport.CutRegions.cs");
+        string cutRegionClipboard = Read("Controls/PdfViewport.CutRegionClipboard.cs");
         AssertTrue(
-            cutRegions.Contains("MarkCutRegionClipboardCurrent();", StringComparison.Ordinal),
-            "copying a cut region must update the shared last-payload routing");
+            cutRegionClipboard.Contains("MarkCutRegionClipboardCurrent();", StringComparison.Ordinal) &&
+            cutRegionClipboard.Contains("MarkMixedMeasurementCutRegionClipboardCurrent();", StringComparison.Ordinal),
+            "copying cutouts alone or with measurements must update the shared last-payload routing");
     }
 
     public static void ShiftOrthoUsesOrAndCoversAnnotationEditing()

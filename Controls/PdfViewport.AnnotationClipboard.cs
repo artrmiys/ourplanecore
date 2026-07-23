@@ -12,6 +12,7 @@ public sealed partial class PdfViewport
     {
         None,
         CutRegions,
+        MeasurementCutRegions,
         Measurements,
         Annotations,
     }
@@ -65,10 +66,43 @@ public sealed partial class PdfViewport
         }
     }
 
+    private bool IsMixedMeasurementCutRegionClipboardCurrent
+    {
+        get
+        {
+            lock (AnnotationClipboardGate)
+            {
+                return _currentViewportClipboardPayload == ViewportClipboardPayload.MeasurementCutRegions &&
+                       _holeClipboard.Count > 0;
+            }
+        }
+    }
+
+    public bool HasCurrentCutRegionClipboard =>
+        IsCutRegionClipboardCurrent || IsMixedMeasurementCutRegionClipboardCurrent;
+
+    public bool HasCurrentMixedMeasurementCutRegionClipboard =>
+        IsMixedMeasurementCutRegionClipboardCurrent;
+
+    public bool HasCurrentMeasurementClipboard
+    {
+        get
+        {
+            lock (AnnotationClipboardGate)
+                return _currentViewportClipboardPayload == ViewportClipboardPayload.Measurements;
+        }
+    }
+
     private void MarkCutRegionClipboardCurrent()
     {
         lock (AnnotationClipboardGate)
             _currentViewportClipboardPayload = ViewportClipboardPayload.CutRegions;
+    }
+
+    private void MarkMixedMeasurementCutRegionClipboardCurrent()
+    {
+        lock (AnnotationClipboardGate)
+            _currentViewportClipboardPayload = ViewportClipboardPayload.MeasurementCutRegions;
     }
 
     public void MarkMeasurementClipboardCurrent()
