@@ -18,9 +18,10 @@ internal static class SheetOverlayPerformanceRegressionTests
         string recorder = ReadRepoFile(Path.Combine("Models", "ViewportPerformanceRecorder.cs"));
 
         AssertTrue(
-            CountOccurrences(queueMethod, "LoadSheetOverlayAsync(page, version, renderScale)") == 1 &&
+            CountOccurrences(queueMethod, "LoadSheetOverlayAsync(") == 1 &&
             queueMethod.IndexOf("TxtStatus.Text = \"Sheet overlay loading...\";", StringComparison.Ordinal) <
-            queueMethod.IndexOf("LoadSheetOverlayAsync(page, version, renderScale)", StringComparison.Ordinal),
+            queueMethod.IndexOf("LoadSheetOverlayAsync(", StringComparison.Ordinal) &&
+            queueMethod.Contains("keepExistingUntilReady: false", StringComparison.Ordinal),
             "a page-open cache hit must not start a redundant async overlay build and bitmap copy");
         AssertTrue(
             cache.Contains("_entries.Count > _maxEntries || _totalBytes > _maxBytes", StringComparison.Ordinal) &&

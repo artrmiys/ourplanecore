@@ -62,6 +62,8 @@ public sealed partial class PdfViewport
         }
 
         _pageFolder = newPageFolder;
+        if (string.Equals(_sheetOverlayTargetPageFolder, oldPageFolder, StringComparison.OrdinalIgnoreCase))
+            _sheetOverlayTargetPageFolder = newPageFolder;
         if (_pageBitmapPdfIndex == pdfIndex &&
             string.Equals(_pageBitmapPdfPath, pdfPath, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(_pageBitmapPageFolder, oldPageFolder, StringComparison.OrdinalIgnoreCase))

@@ -284,6 +284,69 @@ internal static class SheetOverlayPropertiesRegressionTests
             "an already queued bitmap replacement must not start another reload during preview");
     }
 
+    public static void SheetOverlayAutoFitUsesUndoableTransformGateway()
+    {
+        string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");
+        string apply = SliceBetween(
+            autoFit,
+            "private void ApplySheetOverlayAutoFitResult(",
+            "private static SheetOverlayAutoFitRunResult RunSheetOverlayAutoFit(");
+        string overlay = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string gateway = SliceBetween(
+            overlay,
+            "private void SetSheetOverlayTransform(",
+            "private static PageInfo ReadLatestSheetOverlayPage(");
+        int liveCommitIndex = gateway.IndexOf(
+            "_viewport.TryCommitSheetOverlayTransform(",
+            StringComparison.Ordinal);
+        int fallbackSaveIndex = gateway.IndexOf(
+            "OurPlanCoreJobStore.SavePageOverlayTransform(",
+            StringComparison.Ordinal);
+
+        AssertTrue(
+            apply.Contains("SetSheetOverlayTransform(", StringComparison.Ordinal) &&
+            !apply.Contains("SavePageOverlayTransform(", StringComparison.Ordinal),
+            "auto fit must route a live matching overlay through the shared undoable transform gateway");
+        AssertTrue(
+            liveCommitIndex >= 0 &&
+            fallbackSaveIndex > liveCommitIndex,
+            "the shared gateway must try one viewport undo action before its non-live persistence fallback");
+    }
+
+    public static void SheetOverlayQualityRefreshFailureKeepsCurrentBitmap()
+    {
+        string overlay = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string load = SliceBetween(
+            overlay,
+            "private void LoadSheetOverlay(",
+            "private void QueueSheetOverlayLoadForPageOpen(");
+        string queue = SliceBetween(
+            overlay,
+            "private void QueueSheetOverlayLoadForPageOpen(",
+            "private bool TryApplyCachedSheetOverlay(");
+        string asyncLoad = SliceBetween(
+            overlay,
+            "private async Task LoadSheetOverlayAsync(",
+            "private void ApplySheetOverlayBitmapToViewport(");
+        string failure = SliceBetween(
+            asyncLoad,
+            "if (!result.Ok || result.Bitmap == null)",
+            "ApplySheetOverlayBitmapToViewport(");
+
+        AssertTrue(
+            load.Contains("keepExistingUntilReady);", StringComparison.Ordinal) &&
+            queue.Contains("keepExistingUntilReady: false);", StringComparison.Ordinal),
+            "quality reloads must forward keep-existing while first page loads must explicitly clear on failure");
+        AssertTrue(
+            failure.Contains(
+                "_viewport.HasSheetOverlayBinding(latest.FolderPath, latest.OverlayPageFolder)",
+                StringComparison.Ordinal) &&
+            failure.Contains("if (!retainedExistingOverlay)", StringComparison.Ordinal) &&
+            failure.IndexOf("if (!retainedExistingOverlay)", StringComparison.Ordinal) <
+            failure.IndexOf("_viewport.ClearSheetOverlay();", StringComparison.Ordinal),
+            "a failed same-binding quality refresh must retain its already visible overlay bitmap");
+    }
+
     public static void SheetOverlayFrameHonorsReadOnlyPageAndModuleLifecycle()
     {
         string selection = ReadRepoFile(Path.Combine(

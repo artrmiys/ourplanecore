@@ -145,6 +145,41 @@ internal static class SheetOverlayUndoLifecycleTests
         });
     }
 
+    public static void OverlayBindingTracksTargetRebaseAndRejectsSourceMismatch()
+    {
+        RunOnStaThread(() =>
+        {
+            string target = Path.Combine(Path.GetTempPath(), "onc_overlay_rebase_target");
+            string movedTarget = Path.Combine(Path.GetTempPath(), "onc_overlay_rebase_target_moved");
+            string source = Path.Combine(Path.GetTempPath(), "onc_overlay_rebase_source");
+            string movedSource = Path.Combine(Path.GetTempPath(), "onc_overlay_rebase_source_moved");
+            var viewport = CreateViewport(target, source);
+
+            try
+            {
+                AssertTrue(
+                    viewport.HasSheetOverlayBinding(target, source),
+                    "initial overlay binding should match its target and source");
+                AssertTrue(
+                    !viewport.HasSheetOverlayBinding(target, movedSource),
+                    "a moved source path must not retain the old bitmap as a matching binding");
+                AssertTrue(
+                    viewport.TryRebindCurrentPageFolder(target, movedTarget, "", 0),
+                    "active target page should rebind without reloading its unchanged PDF");
+                AssertTrue(
+                    viewport.HasSheetOverlayBinding(movedTarget, source),
+                    "target-page rebind must keep the live overlay binding undoable");
+                AssertTrue(
+                    !viewport.HasSheetOverlayBinding(target, source),
+                    "the old target path must stop matching after rebind");
+            }
+            finally
+            {
+                viewport.ClearSheetOverlay();
+            }
+        });
+    }
+
     private static PdfViewport CreateViewport(string target, string source)
     {
         var viewport = new PdfViewport();

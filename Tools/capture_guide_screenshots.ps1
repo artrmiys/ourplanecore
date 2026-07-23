@@ -23,6 +23,7 @@ Get-ChildItem -LiteralPath $assetDir -Filter *.png -ErrorAction SilentlyContinue
 $captureDir = Join-Path $env:TEMP ("onc_guide_capture_out_" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $captureDir | Out-Null
 $manifestPath = Join-Path $captureDir "manifest.json"
+$captureSettingsPath = Join-Path $captureDir "settings.json"
 $stdoutPath = Join-Path $env:TEMP ("onc_guide_capture_stdout_" + [guid]::NewGuid().ToString("N") + ".txt")
 $stderrPath = Join-Path $env:TEMP ("onc_guide_capture_stderr_" + [guid]::NewGuid().ToString("N") + ".txt")
 
@@ -42,12 +43,14 @@ $oldCapture = $env:OURPLANCORE_GUIDE_SCREENSHOT_CAPTURE
 $oldDir = $env:OURPLANCORE_GUIDE_SCREENSHOT_DIR
 $oldManifest = $env:OURPLANCORE_GUIDE_SCREENSHOT_MANIFEST
 $oldTimeout = $env:OURPLANCORE_GUIDE_SCREENSHOT_TIMEOUT_MS
+$oldSettingsPath = $env:OURPLANCORE_SETTINGS_PATH
 
 try {
     $env:OURPLANCORE_GUIDE_SCREENSHOT_CAPTURE = "1"
     $env:OURPLANCORE_GUIDE_SCREENSHOT_DIR = $captureDir
     $env:OURPLANCORE_GUIDE_SCREENSHOT_MANIFEST = $manifestPath
     $env:OURPLANCORE_GUIDE_SCREENSHOT_TIMEOUT_MS = [string]$CaptureTimeoutMs
+    $env:OURPLANCORE_SETTINGS_PATH = $captureSettingsPath
 
     Write-Host "Running capture (output -> $captureDir)..." -ForegroundColor Cyan
     $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
@@ -96,6 +99,7 @@ finally {
     $env:OURPLANCORE_GUIDE_SCREENSHOT_DIR = $oldDir
     $env:OURPLANCORE_GUIDE_SCREENSHOT_MANIFEST = $oldManifest
     $env:OURPLANCORE_GUIDE_SCREENSHOT_TIMEOUT_MS = $oldTimeout
+    $env:OURPLANCORE_SETTINGS_PATH = $oldSettingsPath
     foreach ($p in @($stdoutPath, $stderrPath)) {
         if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
     }

@@ -402,7 +402,11 @@ public partial class MainWindow
                 out string error) ||
             bitmap == null)
         {
-            _ = LoadSheetOverlayAsync(page, version, renderScale);
+            _ = LoadSheetOverlayAsync(
+                page,
+                version,
+                renderScale,
+                keepExistingUntilReady);
             return;
         }
 
@@ -431,7 +435,11 @@ public partial class MainWindow
         {
             _viewport.PrepareSheetOverlayReload(page.FolderPath, page.OverlayPageFolder);
             TxtStatus.Text = "Sheet overlay loading...";
-            _ = LoadSheetOverlayAsync(page, version, renderScale);
+            _ = LoadSheetOverlayAsync(
+                page,
+                version,
+                renderScale,
+                keepExistingUntilReady: false);
         }
     }
 
@@ -464,7 +472,11 @@ public partial class MainWindow
         return true;
     }
 
-    private async Task LoadSheetOverlayAsync(PageInfo page, int version, float renderScale)
+    private async Task LoadSheetOverlayAsync(
+        PageInfo page,
+        int version,
+        float renderScale,
+        bool keepExistingUntilReady)
     {
         SheetOverlayBuildResult result = await Task.Run(() =>
         {
@@ -509,8 +521,15 @@ public partial class MainWindow
 
         if (!result.Ok || result.Bitmap == null)
         {
-            _viewport.ClearSheetOverlay();
-            TxtStatus.Text = $"Sheet overlay unavailable: {result.Error}";
+            result.Bitmap?.Dispose();
+            bool retainedExistingOverlay =
+                keepExistingUntilReady &&
+                _viewport.HasSheetOverlayBinding(latest.FolderPath, latest.OverlayPageFolder);
+            if (!retainedExistingOverlay)
+                _viewport.ClearSheetOverlay();
+            TxtStatus.Text = retainedExistingOverlay
+                ? $"Sheet overlay quality refresh unavailable; existing overlay retained: {result.Error}"
+                : $"Sheet overlay unavailable: {result.Error}";
             return;
         }
 

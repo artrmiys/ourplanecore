@@ -3752,9 +3752,9 @@ internal static class TakeoffsTreeRegressionTests
             !main.Contains("SheetOverlayReciprocalService.TrySync", StringComparison.Ordinal),
             "setting, clearing, menu transforms, and viewport point-edit transforms should clear stale reciprocal overlays without writing the overlay onto the source sheet");
         AssertTrue(
-            autoFit.Contains("ClearReciprocalSheetOverlay(updatedTarget)", StringComparison.Ordinal) &&
+            autoFit.Contains("SetSheetOverlayTransform(", StringComparison.Ordinal) &&
             autoSelect.Contains("ClearReciprocalSheetOverlay(selectedTarget)", StringComparison.Ordinal),
-            "overlay Auto Fit and Auto Select should leave the chosen overlay only on the active target sheet");
+            "overlay Auto Fit must use the reciprocal-clearing transform gateway and Auto Select must clear its replaced source");
         AssertTrue(
             service.Contains("public static bool TrySync", StringComparison.Ordinal) &&
             service.Contains("public static bool TryClear", StringComparison.Ordinal) &&

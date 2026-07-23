@@ -91,21 +91,18 @@ public partial class MainWindow
             return;
         }
 
-        OurPlanCoreJobStore.SavePageOverlayTransform(
-            latestTarget.FolderPath,
-            fit.OffsetXPt,
-            fit.OffsetYPt,
-            fit.OverlayScale,
-            fit.OverlayRotationDegrees);
-        if (OurPlanCoreJobStore.TryReadPage(latestTarget.FolderPath) is { } updatedTarget)
-            ClearReciprocalSheetOverlay(updatedTarget);
-
         string status = $"{statusPrefix}{BuildSheetOverlayAutoFitStatus(read, fit)}";
         AppLog.Info(
             $"Sheet overlay auto fit applied; base='{latestTarget.FolderPath}'; overlay='{overlayPage.FolderPath}'; " +
             $"source='{read.SourceSummary}'; method='{fit.Method}'; matched={fit.MatchedSamples}/{fit.SampleCount}; " +
             $"confidence={fit.Confidence:0.###}; scale={fit.OverlayScale:0.###}; rotation={fit.OverlayRotationDegrees:0.###}");
-        RefreshPageOverlayState(latestTarget.FolderPath, status);
+        SetSheetOverlayTransform(
+            latestTarget,
+            fit.OffsetXPt,
+            fit.OffsetYPt,
+            fit.OverlayScale,
+            fit.OverlayRotationDegrees,
+            status);
     }
 
     private static SheetOverlayAutoFitRunResult RunSheetOverlayAutoFit(

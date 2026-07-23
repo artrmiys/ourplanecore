@@ -44,6 +44,11 @@ public sealed partial class PdfViewport
 
     public bool HasSheetOverlay => _sheetOverlayBitmap != null;
 
+    public bool HasSheetOverlayBinding(string targetPageFolder, string overlayPageFolder) =>
+        _sheetOverlayBitmap != null &&
+        SheetOverlayReciprocalService.SameFolder(_sheetOverlayTargetPageFolder, targetPageFolder) &&
+        SheetOverlayReciprocalService.SameFolder(_sheetOverlaySourcePageFolder, overlayPageFolder);
+
     public void SetSheetOverlay(
         SKBitmap bitmap,
         float widthPt,
