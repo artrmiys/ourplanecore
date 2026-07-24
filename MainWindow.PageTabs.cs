@@ -372,6 +372,14 @@ public partial class MainWindow
         trace?.Mark("decode");
         ApplyViewportPageTakeoffVisibilitySnapshot(viewportPage);
         trace?.Mark("visibility");
+        // Build the sheet legend eagerly so it appears with the first viewport
+        // frame instead of only after the ~1.8s deferred navigation-quiet window.
+        // The legend is a cheap per-page data build (it reads the page scale
+        // directly, so it does not depend on the deferred tree refresh or the
+        // deferred measurement-scale propagation); the deferred pass still
+        // refreshes it after the heavy tree work for consistency.
+        RefreshSheetLegend();
+        trace?.Mark("legend");
         LoadViewportPageAnnotations(viewportPage);
         trace?.Mark("annotations");
         QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView);

@@ -99,6 +99,11 @@ internal static class TakeoffsTreeRegressionTests
             loadMethod.Contains("RefreshLoadedPageTakeoffVisuals(", StringComparison.Ordinal) ||
             loadMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "page open should not run overlays, heavy takeoff visibility refresh, measurement scale propagation, takeoff tree refresh, or settings save in the immediate path");
+
+        int legendRefresh = loadMethod.IndexOf("RefreshSheetLegend();", StringComparison.Ordinal);
+        AssertTrue(
+            legendRefresh > visibilitySnapshot && legendRefresh < annotationsLoad,
+            "page open should build the cheap sheet legend eagerly (after the visibility snapshot) so it appears with the first viewport frame instead of only after the deferred navigation-quiet window");
         AssertFalse(
             loadMethod.Contains("TryApplyCachedSheetOverlay(viewportPage, restoreView)", StringComparison.Ordinal),
             "page open should not synchronously decode cached sheet overlays before the first viewport frame");
