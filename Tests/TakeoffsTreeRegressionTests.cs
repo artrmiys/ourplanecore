@@ -2188,7 +2188,7 @@ internal static class TakeoffsTreeRegressionTests
             !detailRender.Contains("_usingRasterSheetRender ||", StringComparison.Ordinal),
             "raster sheet mode must allow delayed clipped PDF detail renders");
         AssertTrue(
-            rendering.Contains("DrawPageFrame(canvas, e.Info, canvas.TotalMatrix, visiblePdf)", StringComparison.Ordinal) &&
+            rendering.Contains("DrawPageFrame(canvas, e.Info, e.RawInfo, canvas.TotalMatrix, visiblePdf)", StringComparison.Ordinal) &&
             staticPageFrame.Contains("FilterQuality = CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
             rendering.Contains("private SKFilterQuality CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
             rendering.Contains("ShouldUseSharperSourceImageRasterSampling()", StringComparison.Ordinal) &&
@@ -3329,7 +3329,7 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("CurrentRenderScale()", StringComparison.Ordinal),
             "interactive page opens should keep PDF layers lazy, use readable base renders at restored work zoom, then use clipped detail instead of launching an immediate full-sheet layer render");
         AssertTrue(
-            rendering.Contains("DrawPageFrame(canvas, e.Info, canvas.TotalMatrix, visiblePdf)", StringComparison.Ordinal) &&
+            rendering.Contains("DrawPageFrame(canvas, e.Info, e.RawInfo, canvas.TotalMatrix, visiblePdf)", StringComparison.Ordinal) &&
             staticPageFrame.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
             staticPageFrame.Contains("DetailRenderCoversVisibleViewForPaint()", StringComparison.Ordinal) &&
             staticPageFrame.Contains("if (!detailCoversVisiblePage)", StringComparison.Ordinal) &&

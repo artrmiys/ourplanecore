@@ -71,7 +71,7 @@ public sealed partial class PdfViewport
             // bitmap pixel (bx,by) → screen pixel:
             //   sx = bx * zoom/bitmapScale - panX*zoom
             long sectionStart = frameWatch.ElapsedMilliseconds;
-            pageFrame = DrawPageFrame(canvas, e.Info, canvas.TotalMatrix, visiblePdf);
+            pageFrame = DrawPageFrame(canvas, e.Info, e.RawInfo, canvas.TotalMatrix, visiblePdf);
             pageBitmapMs += frameWatch.ElapsedMilliseconds - sectionStart;
 
             if (_showingPreviousPageDuringSwitch)

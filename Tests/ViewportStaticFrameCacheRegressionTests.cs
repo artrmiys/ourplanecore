@@ -30,6 +30,11 @@ internal static class ViewportStaticFrameCacheRegressionTests
             cache.Contains("frameCanvas.SetMatrix(rootMatrix)", StringComparison.Ordinal),
             "the retained page frame must be static-raster-only and replayed 1:1 under the original DPI matrix");
         AssertTrue(
+            rendering.Contains("DrawPageFrame(canvas, e.Info, e.RawInfo, canvas.TotalMatrix, visiblePdf)", StringComparison.Ordinal) &&
+            cache.Contains("EnsureStaticPageFrameBitmap(rawInfo)", StringComparison.Ordinal) &&
+            cache.Contains("CanUseStaticPageFrameCache(rawInfo)", StringComparison.Ordinal),
+            "the retained frame must be allocated at the raw surface pixel size so 125-150% laptop displays are not cropped at the right/bottom");
+        AssertTrue(
             drawStaticBackground.Contains("DrawBlackVectorInkOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
             drawPageFrame.Contains("DrawPageBitmapAndStaticOverlays(frameCanvas, visiblePdf)", StringComparison.Ordinal) &&
             drawPageFrame.Contains("DrawSheetOverlay(frameCanvas, visiblePdf)", StringComparison.Ordinal) &&

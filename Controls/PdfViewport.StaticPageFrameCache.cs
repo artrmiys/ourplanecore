@@ -17,10 +17,16 @@ public sealed partial class PdfViewport
     private StaticPageFramePaintResult DrawPageFrame(
         SKCanvas canvas,
         SKImageInfo canvasInfo,
+        SKImageInfo rawInfo,
         SKMatrix rootMatrix,
         SKRect visiblePdf)
     {
-        if (!CanUseStaticPageFrameCache(canvasInfo))
+        // The frame bitmap must match the raw surface pixel size, not e.Info:
+        // with IgnorePixelScaling the canvas is in WPF units while rootMatrix
+        // carries the display scale, and the replay blits under ResetMatrix
+        // (device pixels). A WPF-unit bitmap on a 125-150% laptop display
+        // crops the right/bottom of the sheet.
+        if (!CanUseStaticPageFrameCache(rawInfo))
         {
             DrawPageBitmapAndStaticOverlays(canvas, visiblePdf);
             return StaticPageFramePaintResult.Bypassed;
@@ -53,7 +59,7 @@ public sealed partial class PdfViewport
             return StaticPageFramePaintResult.Bypassed;
         }
 
-        if (!EnsureStaticPageFrameBitmap(canvasInfo))
+        if (!EnsureStaticPageFrameBitmap(rawInfo))
         {
             DrawPageBitmapAndStaticOverlays(canvas, visiblePdf);
             return StaticPageFramePaintResult.Bypassed;
@@ -145,7 +151,7 @@ public sealed partial class PdfViewport
         DrawBlackVectorInkOverlay(canvas, visiblePdf);
     }
 
-    private bool CanUseStaticPageFrameCache(SKImageInfo canvasInfo) =>
+    private bool CanUseStaticPageFrameCache(SKImageInfo rawInfo) =>
         IsStaticRasterDisplayActive() &&
         _pageBitmap != null &&
         !_showingPreviousPageDuringSwitch &&
@@ -153,9 +159,9 @@ public sealed partial class PdfViewport
         !IsSheetOverlayPointEditing &&
         !_draggingSheetOverlay &&
         !_sheetOverlayTransformPreviewActive &&
-        canvasInfo.Width > 0 &&
-        canvasInfo.Height > 0 &&
-        (long)canvasInfo.Width * canvasInfo.Height <= StaticPageFrameMaxPixels;
+        rawInfo.Width > 0 &&
+        rawInfo.Height > 0 &&
+        (long)rawInfo.Width * rawInfo.Height <= StaticPageFrameMaxPixels;
 
     private bool ShouldIncludeSheetOverlayInStaticPageFrame() =>
         _sheetOverlayBitmap != null &&
@@ -166,11 +172,11 @@ public sealed partial class PdfViewport
     private static bool IncludesSheetOverlay(StaticPageFrameKey key) =>
         key.SheetOverlayBitmapIdentity != 0 && key.SheetOverlayVisible;
 
-    private bool EnsureStaticPageFrameBitmap(SKImageInfo canvasInfo)
+    private bool EnsureStaticPageFrameBitmap(SKImageInfo rawInfo)
     {
         if (_staticPageFrameBitmap is { } bitmap &&
-            bitmap.Width == canvasInfo.Width &&
-            bitmap.Height == canvasInfo.Height &&
+            bitmap.Width == rawInfo.Width &&
+            bitmap.Height == rawInfo.Height &&
             bitmap.ReadyToDraw)
         {
             return true;
@@ -183,8 +189,8 @@ public sealed partial class PdfViewport
         try
         {
             var info = new SKImageInfo(
-                canvasInfo.Width,
-                canvasInfo.Height,
+                rawInfo.Width,
+                rawInfo.Height,
                 SKColorType.Bgra8888,
                 SKAlphaType.Premul);
             var candidate = new SKBitmap(info);
@@ -192,7 +198,7 @@ public sealed partial class PdfViewport
             {
                 candidate.Dispose();
                 throw new InvalidOperationException(
-                    $"Could not allocate a {canvasInfo.Width}x{canvasInfo.Height} static page frame.");
+                    $"Could not allocate a {rawInfo.Width}x{rawInfo.Height} static page frame.");
             }
 
             _staticPageFrameBitmap = candidate;
