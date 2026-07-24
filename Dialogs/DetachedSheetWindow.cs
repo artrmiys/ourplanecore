@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using OurPlanCore.Controls;
 
 namespace OurPlanCore;
@@ -175,16 +176,13 @@ public static class DetachedSheetWindowLayout
                                     .FirstOrDefault()
                                 ?? monitors.FirstOrDefault(item => item.IsPrimary)
                                 ?? PrimaryWorkAreaFallback();
-        TileIntoBounds(windows, monitor.Left, monitor.Top, monitor.Width, monitor.Height, verticalStack);
+        TileIntoBounds(windows, monitor, verticalStack);
         return monitor.IsPrimary ? "primary monitor" : "monitor 2";
     }
 
     private static void TileIntoBounds(
         IReadOnlyList<Window> windows,
-        double left,
-        double top,
-        double width,
-        double height,
+        MonitorBounds monitor,
         bool verticalStack)
     {
         int count = Math.Min(64, windows.Count);
@@ -194,8 +192,13 @@ public static class DetachedSheetWindowLayout
         int rows = verticalStack
             ? count
             : Math.Max(1, (int)Math.Ceiling(count / (double)columns));
-        double cellWidth = Math.Max(1, width / columns);
-        double cellHeight = Math.Max(1, height / rows);
+        // Monitor bounds are physical pixels (the app is per-monitor-DPI aware),
+        // but Window.Left/Top/Width/Height are WPF units. Position through
+        // SetWindowPos in device pixels so 125-150% displays don't get windows
+        // scaled past the monitor edge; WPF units are only a no-handle fallback.
+        double cellWidth = Math.Max(1, monitor.Width / columns);
+        double cellHeight = Math.Max(1, monitor.Height / rows);
+        double dipScale = monitor.DipScale > 0 ? monitor.DipScale : 1.0;
 
         for (int i = 0; i < count; i++)
         {
@@ -203,12 +206,31 @@ public static class DetachedSheetWindowLayout
             int column = i % columns;
             Window window = windows[i];
             window.WindowState = WindowState.Normal;
-            window.MinWidth = Math.Min(window.MinWidth, cellWidth);
-            window.MinHeight = Math.Min(window.MinHeight, cellHeight);
-            window.Left = left + column * cellWidth;
-            window.Top = top + row * cellHeight;
-            window.Width = cellWidth;
-            window.Height = cellHeight;
+            window.MinWidth = Math.Min(window.MinWidth, cellWidth / dipScale);
+            window.MinHeight = Math.Min(window.MinHeight, cellHeight / dipScale);
+            int cellLeft = (int)Math.Round(monitor.Left + column * cellWidth);
+            int cellTop = (int)Math.Round(monitor.Top + row * cellHeight);
+            int cellRight = (int)Math.Round(monitor.Left + (column + 1) * cellWidth);
+            int cellBottom = (int)Math.Round(monitor.Top + (row + 1) * cellHeight);
+            IntPtr handle = new WindowInteropHelper(window).Handle;
+            if (handle != IntPtr.Zero)
+            {
+                SetWindowPos(
+                    handle,
+                    IntPtr.Zero,
+                    cellLeft,
+                    cellTop,
+                    Math.Max(1, cellRight - cellLeft),
+                    Math.Max(1, cellBottom - cellTop),
+                    SwpNoZOrder | SwpNoActivate | SwpNoOwnerZOrder);
+            }
+            else
+            {
+                window.Left = (monitor.Left + column * cellWidth) / dipScale;
+                window.Top = (monitor.Top + row * cellHeight) / dipScale;
+                window.Width = cellWidth / dipScale;
+                window.Height = cellHeight / dipScale;
+            }
         }
     }
 
@@ -225,12 +247,31 @@ public static class DetachedSheetWindowLayout
                     info.Work.Top,
                     Math.Max(1, info.Work.Right - info.Work.Left),
                     Math.Max(1, info.Work.Bottom - info.Work.Top),
-                    (info.Flags & MonitorInfoPrimary) != 0));
+                    (info.Flags & MonitorInfoPrimary) != 0,
+                    MonitorDipScale(monitor)));
             }
 
             return true;
         }, IntPtr.Zero);
         return monitors;
+    }
+
+    private static double MonitorDipScale(IntPtr monitor)
+    {
+        try
+        {
+            return GetDpiForMonitor(monitor, 0, out uint dpiX, out _) == 0 && dpiX > 0
+                ? dpiX / 96.0
+                : 1.0;
+        }
+        catch (DllNotFoundException)
+        {
+            return 1.0;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return 1.0;
+        }
     }
 
     private static MonitorBounds PrimaryWorkAreaFallback() =>
@@ -239,9 +280,13 @@ public static class DetachedSheetWindowLayout
             SystemParameters.WorkArea.Top,
             Math.Max(1, SystemParameters.WorkArea.Width),
             Math.Max(1, SystemParameters.WorkArea.Height),
-            true);
+            true,
+            1.0);
 
     private const int MonitorInfoPrimary = 1;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpNoOwnerZOrder = 0x0200;
 
     private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc, IntPtr rect, IntPtr data);
 
@@ -254,6 +299,19 @@ public static class DetachedSheetWindowLayout
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint flags);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr monitor, int dpiType, out uint dpiX, out uint dpiY);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MonitorInfo
@@ -273,5 +331,11 @@ public static class DetachedSheetWindowLayout
         public int Bottom;
     }
 
-    private sealed record MonitorBounds(double Left, double Top, double Width, double Height, bool IsPrimary);
+    private sealed record MonitorBounds(
+        double Left,
+        double Top,
+        double Width,
+        double Height,
+        bool IsPrimary,
+        double DipScale);
 }

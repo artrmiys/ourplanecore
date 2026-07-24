@@ -79,7 +79,11 @@ public sealed partial class PdfViewport
                     out preparedBitmap))
                 .ConfigureAwait(false);
             if (!hasPreparedBitmap)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                    RecoverPageOpenAfterRasterWarmupMiss(queuedPage, "bitmap-prepare-failed"));
                 return;
+            }
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -91,11 +95,15 @@ public sealed partial class PdfViewport
                 }
 
                 if (!ShouldApplyWarmedRasterSheetBitmap(rasterSheet, preferOverview, allowLowZoomFullRaster))
+                {
+                    RecoverPageOpenAfterRasterWarmupMiss(queuedPage, "apply-conditions-changed");
                     return;
+                }
 
                 if (!preferOverview && ShouldUseResponsiveRasterSheetDpiForCurrentZoom(rasterSheet))
                 {
-                    TryApplyResponsiveRasterSheetDpiForCurrentZoom();
+                    if (!TryApplyResponsiveRasterSheetDpiForCurrentZoom())
+                        RecoverPageOpenAfterRasterWarmupMiss(queuedPage, "responsive-dpi-unavailable");
                     return;
                 }
 
@@ -115,20 +123,57 @@ public sealed partial class PdfViewport
                     RequestRepaint();
                     return;
                 }
+
+                RecoverPageOpenAfterRasterWarmupMiss(queuedPage, "bitmap-apply-rejected");
             });
         }
         catch (Exception ex)
         {
             AppLog.Warn(ex, $"Viewport raster sheet bitmap warmup crashed for {queuedPage.Name}");
+            try
+            {
+                await Dispatcher.InvokeAsync(() =>
+                    RecoverPageOpenAfterRasterWarmupMiss(queuedPage, "warmup-crashed"));
+            }
+            catch
+            {
+                // Dispatcher may be shutting down; the veil recovery is best-effort.
+            }
         }
         finally
         {
-            if (hasPreparedBitmap && !preparedBitmapApplied)
+            if (!preparedBitmapApplied)
                 preparedBitmap.Bitmap.Dispose();
 
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(warmKey);
         }
+    }
+
+    // A page open that queued this warmup has no other render feeding it: if the
+    // warmup dead-ends while the previous-page veil is still up, OnPaintSurface
+    // keeps returning before the measurement overlay and the sheet shows without
+    // any takeoffs until the next navigation. Fall back to a live preview render
+    // exactly like the docnet page-open path does.
+    private void RecoverPageOpenAfterRasterWarmupMiss(PageInfo queuedPage, string reason)
+    {
+        if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath) ||
+            !_showingPreviousPageDuringSwitch ||
+            _pdfLayersLoadedForPage ||
+            _usingLayerRenderer)
+        {
+            return;
+        }
+
+        AppLog.Info(
+            $"Viewport raster warmup fallback render; reason='{reason}'; " +
+            $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
+        ClearPreviousPageBitmapDuringSwitch();
+        _showingPreviousPageDuringSwitch = false;
+        QueueDocnetRender(
+            PageSwitchLivePreviewScale(restoreView: null, fitAfter: false),
+            statusAfter: $"Loaded: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
+        RequestRepaint();
     }
 
     private bool ApplyPreparedRasterSheetBitmap(
