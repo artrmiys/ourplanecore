@@ -448,6 +448,7 @@ public partial class MainWindow
             try
             {
                 _viewport.FocusMeasurement(measurement);
+                SelectMeasurementsInDetachedSheetsByPage([measurement]);
             }
             finally
             {
@@ -488,6 +489,7 @@ public partial class MainWindow
             try
             {
                 _viewport.SelectMeasurements(measurements);
+                SelectMeasurementsInDetachedSheetsByPage(measurements);
             }
             finally
             {
@@ -765,10 +767,9 @@ public partial class MainWindow
 
     private void SelectCurrentPageTakeoffMeasurementsOnCanvas(TakeoffItem item)
     {
-        if (_currentPage == null)
-            return;
-
-        SelectTakeoffMeasurementsOnCanvas(item, _currentPage.FolderPath, _currentPage.Name);
+        if (_currentPage != null)
+            SelectTakeoffMeasurementsOnCanvas(item, _currentPage.FolderPath, _currentPage.Name);
+        SelectTakeoffMeasurementsInDetachedSheets([item]);
     }
 
     private void RenameSection(TakeoffItem item, Measurement measurement)

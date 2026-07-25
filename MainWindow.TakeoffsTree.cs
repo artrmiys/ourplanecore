@@ -101,6 +101,7 @@ public partial class MainWindow
             {
                 if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, node.Measurement.PageFolder))
                     _viewport.SelectMeasurements([node.Measurement]);
+                SelectMeasurementsInDetachedSheetsByPage([node.Measurement]);
             }
             else
             {

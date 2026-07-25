@@ -302,11 +302,15 @@ public partial class MainWindow
 
     private void SelectTakeoffSelectionMeasurementsOnCurrentPage(TreeViewItem? anchor)
     {
-        if (_currentPage == null || anchor == null || anchor.Tag is TakeoffMeasurementNode)
+        if (anchor == null || anchor.Tag is TakeoffMeasurementNode)
             return;
 
         var selectedItems = TakeoffItemsForSelection(anchor);
         if (selectedItems.Count == 0)
+            return;
+
+        SelectTakeoffMeasurementsInDetachedSheets(selectedItems);
+        if (_currentPage == null)
             return;
 
         var pageMeasurements = selectedItems

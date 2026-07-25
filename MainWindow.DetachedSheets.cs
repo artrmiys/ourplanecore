@@ -26,7 +26,10 @@ public partial class MainWindow
         ApplyDetachedTool(window, IsCurrentJobReadOnly ? "select" : _activeTool);
 
         viewport.StatusChanged += message => TxtStatus.Text = $"{window.Page.Name}: {message}";
-        viewport.ToolChanged += tool => ApplyDetachedTool(window, tool);
+        // Tool hotkeys pressed inside a detached window drive the same global
+        // tool state as the main viewport (SetTool propagates back to every
+        // detached window), keeping record/tool behavior identical everywhere.
+        viewport.ToolChanged += OnToolChanged;
         viewport.MeasurementAdded += measurement => OnDetachedMeasurementAdded(window, measurement, unitMode);
         viewport.MeasurementsAdded += measurements => OnDetachedMeasurementsAdded(window, measurements, unitMode);
         viewport.MeasurementRemoved += measurement => OnDetachedMeasurementsRemoved(window, [measurement], unitMode);
@@ -43,9 +46,11 @@ public partial class MainWindow
         window.PreviewKeyDown += (_, e) => HandleDetachedSheetPreviewKeyDown(window, e);
     }
 
-    // Space toggles record in a detached window the same way it does in the main
-    // window: MainWindow's global shortcut never fires while a detached window
-    // owns keyboard focus, so each window handles the key itself.
+    // Space in a detached window toggles the SAME global record state as in the
+    // main window (MainWindow's global shortcut never fires while a detached
+    // window owns keyboard focus). The global SetTool then propagates the tool
+    // back to every detached window, so the record indicator and target stay in
+    // sync everywhere.
     private void HandleDetachedSheetPreviewKeyDown(DetachedSheetWindow window, KeyEventArgs e)
     {
         if (e.Handled || e.IsRepeat)
@@ -63,35 +68,8 @@ public partial class MainWindow
             return;
         }
 
-        ToggleDetachedRecord(window);
+        BtnActiveTakeoffRecord_Click(this, new RoutedEventArgs());
         e.Handled = true;
-    }
-
-    private void ToggleDetachedRecord(DetachedSheetWindow window)
-    {
-        if (window.Viewport.IsTakeoffRecordToolActive)
-        {
-            ApplyDetachedTool(window, "select");
-            TxtStatus.Text = $"{window.Page.Name}: record stopped.";
-            return;
-        }
-
-        if (_activeItem == null)
-        {
-            TxtStatus.Text = $"{window.Page.Name}: select a takeoff item in the main Takeoffs tree before recording.";
-            return;
-        }
-
-        string tool = ToolForTakeoffItem(_activeItem);
-        if (RecordMeasurementType(tool) is "line" or "area" && window.Viewport.ScaleMetersPerPt <= 0)
-        {
-            TxtStatus.Text = $"{window.Page.Name}: set the sheet scale before drawing Line or Area measurements.";
-            return;
-        }
-
-        ApplyDetachedTool(window, tool);
-        if (window.Viewport.IsTakeoffRecordToolActive)
-            TxtStatus.Text = $"{window.Page.Name}: recording into {_activeItem.Name}. Space stops record.";
     }
 
     private void OnDetachedPageScaleChanged(DetachedSheetWindow window, double scaleMetersPerPt)
@@ -175,6 +153,35 @@ public partial class MainWindow
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
         {
             if (IsSamePageFolder(window.Page.FolderPath, pageFolder))
+                window.Viewport.SelectMeasurements(measurements);
+        }
+    }
+
+    private void SelectMeasurementsInDetachedSheetsByPage(IReadOnlyList<Measurement> measurements)
+    {
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
+            var onPage = measurements
+                .Where(measurement => IsSamePageFolder(measurement.PageFolder, window.Page.FolderPath))
+                .ToList();
+            if (onPage.Count > 0)
+                window.Viewport.SelectMeasurements(onPage);
+        }
+    }
+
+    // Mirrors the main-viewport behavior of highlighting a takeoff selected in
+    // the Takeoffs tree: each detached window highlights that takeoff's
+    // measurements on ITS OWN page (skipped when the takeoff has none there,
+    // matching how the main canvas keeps its selection in that case).
+    private void SelectTakeoffMeasurementsInDetachedSheets(IReadOnlyList<TakeoffItem> items)
+    {
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
+            var measurements = items
+                .SelectMany(item => MeasurementsForTakeoffOnPage(item, window.Page.FolderPath))
+                .Distinct()
+                .ToList();
+            if (measurements.Count > 0)
                 window.Viewport.SelectMeasurements(measurements);
         }
     }
