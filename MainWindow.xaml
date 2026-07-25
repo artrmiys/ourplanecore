@@ -461,13 +461,13 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,1">
                                 <TextBlock Text="Size" Style="{StaticResource RibbonRowLabel}"/>
-                                <Slider x:Name="SldLabelScale" Minimum="0.5" Maximum="3" SmallChange="0.25" LargeChange="0.5"
+                                <Slider x:Name="SldLabelScale" Minimum="0.25" Maximum="3" SmallChange="0.25" LargeChange="0.5"
                                         Style="{StaticResource RibbonSlider}"
                                         ValueChanged="SldLabelScale_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
-                                        ToolTip="Value label size 0.5 - 3.0"/>
+                                        ToolTip="Value label size 0.25 - 3.0"/>
                                 <TextBox x:Name="TxtMeasurementLabelScale" Text="1.0" Style="{StaticResource RibbonValue}"
                                          KeyDown="TxtMeasurementLabelScale_KeyDown" LostFocus="TxtMeasurementLabelScale_LostFocus"
-                                         ToolTip="Type a label size 0.5 - 3.0 and press Enter"/>
+                                         ToolTip="Type a label size 0.25 - 3.0 and press Enter"/>
                                 <CheckBox x:Name="ChkDisplayLabelsScaleWithPage" Content="w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           Margin="6,0,7,0"
                                           ToolTip="Off (default): labels keep a fixed screen size when zooming. On: labels grow/shrink with page zoom."/>
@@ -1003,6 +1003,16 @@
                     <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
                         <DockPanel LastChildFill="True">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button x:Name="BtnPagesCloseDetachedSecondMonitor"
+                                        Content="&#x2715;"
+                                        Click="BtnPagesCloseDetachedSecondMonitor_Click"
+                                        Width="22"
+                                        Height="22"
+                                        Padding="0"
+                                        FontSize="11"
+                                        Margin="0,0,4,0"
+                                        VerticalAlignment="Center"
+                                        ToolTip="Close all detached sheet windows on monitor 2"/>
                                 <Grid Margin="0,0,4,0" VerticalAlignment="Center">
                                     <Button x:Name="BtnPagesTileSecondMonitor"
                                             Content="Tile M2"

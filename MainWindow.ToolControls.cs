@@ -99,6 +99,10 @@ public partial class MainWindow
         if (IsRecordTool(tool))
             _lastDrawingTool = tool;
         _viewport.SetTool(ViewportToolName(tool));
+        // Detached sheet windows follow the main tool so takeoffs can be drawn
+        // there without re-arming the tool inside each window.
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            ApplyDetachedTool(window, tool);
         foreach (var (t, btn) in _toolBtns)
             btn.IsChecked = t == tool;
         UpdateAnnotationMenuButton();

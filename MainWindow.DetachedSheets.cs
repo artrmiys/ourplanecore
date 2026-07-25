@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows;
+using System.Windows.Input;
 using OurPlanCore.Controls;
 using SkiaSharp;
 
@@ -38,6 +40,58 @@ public partial class MainWindow
         viewport.PageAnnotationTextRequested += RequestPageAnnotationText;
         viewport.OrthoChanged += SynchronizeOrthoAcrossViewports;
         viewport.JoistDirectionCaptured += (area, start, end) => OnDetachedJoistDirectionCaptured(window, area, start, end, unitMode);
+        window.PreviewKeyDown += (_, e) => HandleDetachedSheetPreviewKeyDown(window, e);
+    }
+
+    // Space toggles record in a detached window the same way it does in the main
+    // window: MainWindow's global shortcut never fires while a detached window
+    // owns keyboard focus, so each window handles the key itself.
+    private void HandleDetachedSheetPreviewKeyDown(DetachedSheetWindow window, KeyEventArgs e)
+    {
+        if (e.Handled || e.IsRepeat)
+            return;
+
+        if (KeyboardShortcutKeys.EffectiveKey(e) != Key.Space || Keyboard.Modifiers != ModifierKeys.None)
+            return;
+
+        if (ShouldSkipTakeoffShortcut(e.OriginalSource as DependencyObject))
+            return;
+
+        if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("record takeoffs"))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        ToggleDetachedRecord(window);
+        e.Handled = true;
+    }
+
+    private void ToggleDetachedRecord(DetachedSheetWindow window)
+    {
+        if (window.Viewport.IsTakeoffRecordToolActive)
+        {
+            ApplyDetachedTool(window, "select");
+            TxtStatus.Text = $"{window.Page.Name}: record stopped.";
+            return;
+        }
+
+        if (_activeItem == null)
+        {
+            TxtStatus.Text = $"{window.Page.Name}: select a takeoff item in the main Takeoffs tree before recording.";
+            return;
+        }
+
+        string tool = ToolForTakeoffItem(_activeItem);
+        if (RecordMeasurementType(tool) is "line" or "area" && window.Viewport.ScaleMetersPerPt <= 0)
+        {
+            TxtStatus.Text = $"{window.Page.Name}: set the sheet scale before drawing Line or Area measurements.";
+            return;
+        }
+
+        ApplyDetachedTool(window, tool);
+        if (window.Viewport.IsTakeoffRecordToolActive)
+            TxtStatus.Text = $"{window.Page.Name}: recording into {_activeItem.Name}. Space stops record.";
     }
 
     private void OnDetachedPageScaleChanged(DetachedSheetWindow window, double scaleMetersPerPt)
@@ -63,6 +117,53 @@ public partial class MainWindow
         finally
         {
             _synchronizingOrthoAcrossViewports = false;
+        }
+    }
+
+    // Lightweight live push while a Display slider is being dragged: updates the
+    // detached viewports' scale properties without rebuilding legends/measurements
+    // (the full RefreshTakeoffDisplay runs on slider commit).
+    private void ApplyLiveDisplayScalesToDetachedSheets()
+    {
+        foreach (DetachedSheetWindow window in _detachedSheetWindows)
+        {
+            PdfViewport viewport = window.Viewport;
+            viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
+            viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
+            viewport.PointSizeScale = _settings.ViewportPointSizeScale;
+            viewport.RulerStrokeWidth = _settings.ViewportRulerStrokeWidth;
+            viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
+            viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
+            viewport.PdfSnapBridgeToleranceScreenPx = _settings.ViewportPdfSnapBridgeTolerancePx;
+            viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
+            viewport.InvalidateVisual();
+        }
+    }
+
+    private void RefreshDetachedSheetsForPage(string pageFolder)
+    {
+        if (_currentJob == null || _detachedSheetWindows.Count == 0)
+            return;
+
+        UnitMode unitMode = _settings.UnitMode == UnitMode.Metric.ToString()
+            ? UnitMode.Metric
+            : UnitMode.Imperial;
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
+            if (IsSamePageFolder(window.Page.FolderPath, pageFolder))
+                window.RefreshTakeoffDisplay(_currentJob, _takeoffItems, _settings, unitMode);
+        }
+    }
+
+    private bool HasDetachedSheetForPage(string pageFolder) =>
+        _detachedSheetWindows.Any(window => IsSamePageFolder(window.Page.FolderPath, pageFolder));
+
+    private void SelectMeasurementsInDetachedSheets(string pageFolder, IReadOnlyList<Measurement> measurements)
+    {
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
+            if (IsSamePageFolder(window.Page.FolderPath, pageFolder))
+                window.Viewport.SelectMeasurements(measurements);
         }
     }
 

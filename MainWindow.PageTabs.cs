@@ -130,6 +130,24 @@ public partial class MainWindow
             TxtStatus.Text = "Pages tree: select one or more sheets first.";
     }
 
+    private void BtnPagesCloseDetachedSecondMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        var targets = _detachedSheetWindows
+            .Where(DetachedSheetWindowLayout.IsOnSecondaryMonitor)
+            .ToList();
+        if (targets.Count == 0)
+        {
+            TxtStatus.Text = _detachedSheetWindows.Count == 0
+                ? "No detached sheet windows are open."
+                : "No detached sheet windows on monitor 2.";
+            return;
+        }
+
+        foreach (DetachedSheetWindow window in targets)
+            window.Close();
+        TxtStatus.Text = $"Closed {targets.Count} detached sheet window(s) on monitor 2.";
+    }
+
     private bool TileM2VerticalLayoutEnabled =>
         BtnPagesTileSecondMonitorVertical?.IsChecked == true;
 

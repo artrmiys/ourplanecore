@@ -40,11 +40,11 @@ public partial class MainWindow
     {
         string raw = TxtMeasurementLabelScale.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
         if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
-            scale < 0.50 ||
+            scale < 0.25 ||
             scale > 3.00)
         {
             TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
-            TxtStatus.Text = "Value label size must be 0.5 - 3.0.";
+            TxtStatus.Text = "Value label size must be 0.25 - 3.0.";
             return;
         }
 
@@ -288,6 +288,7 @@ public partial class MainWindow
         _viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
         TxtMeasurementStrokeScale.Text = _settings.ViewportMeasurementStrokeScale.ToString("0.##", CultureInfo.InvariantCulture);
         _viewport.InvalidateVisual();
+        ApplyLiveDisplayScalesToDetachedSheets();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Viewport line thickness: {_settings.ViewportMeasurementStrokeScale:0.##}x.";
     }
@@ -301,6 +302,7 @@ public partial class MainWindow
         _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
         TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
         _viewport.InvalidateVisual();
+        ApplyLiveDisplayScalesToDetachedSheets();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Viewport point size: {_settings.ViewportPointSizeScale:0.##}x.";
     }
@@ -314,6 +316,7 @@ public partial class MainWindow
         _viewport.RulerStrokeWidth = _settings.ViewportRulerStrokeWidth;
         TxtRulerStrokeWidth.Text = _settings.ViewportRulerStrokeWidth.ToString("0.##", CultureInfo.InvariantCulture);
         _viewport.InvalidateVisual();
+        ApplyLiveDisplayScalesToDetachedSheets();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Ruler thickness: {_settings.ViewportRulerStrokeWidth:0.##}px.";
     }
@@ -327,6 +330,7 @@ public partial class MainWindow
         _viewport.PdfSnapBridgeToleranceScreenPx = _settings.ViewportPdfSnapBridgeTolerancePx;
         TxtPdfSnapBridgeTolerance.Text = _settings.ViewportPdfSnapBridgeTolerancePx.ToString("0.#", CultureInfo.InvariantCulture);
         _viewport.InvalidateVisual();
+        ApplyLiveDisplayScalesToDetachedSheets();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"PDF Snap bridge radius: {_settings.ViewportPdfSnapBridgeTolerancePx:0.#}px.";
     }
@@ -414,6 +418,7 @@ public partial class MainWindow
         _settings.ViewportZoomWheelFactor = NormalizeZoomWheelFactor(e.NewValue);
         _viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
         TxtZoomWheelFactor.Text = _settings.ViewportZoomWheelFactor.ToString("0.##", CultureInfo.InvariantCulture);
+        ApplyLiveDisplayScalesToDetachedSheets();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Mouse-wheel zoom step: {_settings.ViewportZoomWheelFactor:0.##}x per notch.";
     }
@@ -427,6 +432,7 @@ public partial class MainWindow
         _viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
         TxtAreaEdgeScale.Text = _settings.ViewportAreaEdgeScale.ToString("0.##", CultureInfo.InvariantCulture);
         _viewport.InvalidateVisual();
+        ApplyLiveDisplayScalesToDetachedSheets();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Area edge thickness: {_settings.ViewportAreaEdgeScale:0.##}x.";
     }
@@ -440,6 +446,7 @@ public partial class MainWindow
         _viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
         TxtAreaFillOpacity.Text = Math.Round(_settings.ViewportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
         _viewport.InvalidateVisual();
+        ApplyLiveDisplayScalesToDetachedSheets();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Area fill opacity: {Math.Round(_settings.ViewportAreaFillOpacity * 100.0):0}%.";
     }
@@ -453,6 +460,7 @@ public partial class MainWindow
         _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
         TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
         _viewport.InvalidateVisual();
+        ApplyLiveDisplayScalesToDetachedSheets();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Viewport value label size: {_settings.MeasurementLabelScale:0.##}x.";
     }

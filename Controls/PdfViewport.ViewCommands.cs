@@ -65,6 +65,11 @@ public sealed partial class PdfViewport
         PostRecordPrompt();
     }
 
+    // True while a takeoff drawing tool (count/line/area) is armed — the
+    // detached-sheet Space shortcut uses this to toggle record per window.
+    public bool IsTakeoffRecordToolActive =>
+        _tool is ViewerTool.Point or ViewerTool.Line or ViewerTool.Area;
+
     public SKRect GetVisiblePdfRect()
     {
         if (_pdfW <= 0 || _pdfH <= 0 || _zoom <= 0 || !HasViewportCanvasSize)

@@ -136,6 +136,7 @@ public partial class MainWindow
         RefreshPageOverlayTreeNode(anchor.Page);
         ApplyViewportPageTakeoffVisibility(anchor.Page);
         RefreshSheetLegend();
+        RefreshDetachedSheetsForPage(anchor.Page.FolderPath);
         TxtStatus.Text = visible
             ? $"Shown {selectedNodes.Count} selected takeoff(s) on {anchor.Page.Name}."
             : $"Hidden {selectedNodes.Count} selected takeoff(s) on {anchor.Page.Name}.";
@@ -143,8 +144,11 @@ public partial class MainWindow
 
     private void SelectLinkedPageTakeoff(PageTakeoffNode node)
     {
-        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, node.Page.FolderPath))
+        if ((_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, node.Page.FolderPath)) &&
+            !HasDetachedSheetForPage(node.Page.FolderPath))
+        {
             OpenPageInActiveTab(node.Page);
+        }
 
         var selectedNodes = SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: true);
         if (selectedNodes.Count == 0)
@@ -184,7 +188,8 @@ public partial class MainWindow
 
     private void SelectPageTakeoffMeasurementsOnCanvas(PageTakeoffNode node)
     {
-        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, node.Page.FolderPath))
+        bool onCurrentPage = _currentPage != null && IsSamePageFolder(_currentPage.FolderPath, node.Page.FolderPath);
+        if (!onCurrentPage && !HasDetachedSheetForPage(node.Page.FolderPath))
             return;
 
         SelectTakeoffMeasurementsOnCanvas(node.Takeoff, node.Page.FolderPath, node.Page.Name);
@@ -192,8 +197,11 @@ public partial class MainWindow
 
     private void SelectSelectedPageTakeoffMeasurementsOnCanvas(PageTakeoffNode anchor)
     {
-        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, anchor.Page.FolderPath))
+        if ((_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, anchor.Page.FolderPath)) &&
+            !HasDetachedSheetForPage(anchor.Page.FolderPath))
+        {
             OpenPageInActiveTab(anchor.Page);
+        }
 
         var selectedNodes = SelectedPageTakeoffNodes(anchor, fallbackToAnchor: false);
         SelectPageTakeoffMeasurementsOnCanvas(selectedNodes, anchor.Page);
@@ -237,7 +245,8 @@ public partial class MainWindow
 
     private void SelectPageTakeoffMeasurementsOnCanvas(IReadOnlyList<PageTakeoffNode> nodes, PageInfo page)
     {
-        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+        bool onCurrentPage = _currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath);
+        if (!onCurrentPage && !HasDetachedSheetForPage(page.FolderPath))
             return;
 
         var measurements = nodes
@@ -248,7 +257,9 @@ public partial class MainWindow
         _syncingViewportSelectionFromTakeoffItem = true;
         try
         {
-            _viewport.SelectMeasurements(measurements);
+            if (onCurrentPage)
+                _viewport.SelectMeasurements(measurements);
+            SelectMeasurementsInDetachedSheets(page.FolderPath, measurements);
         }
         finally
         {
@@ -271,10 +282,13 @@ public partial class MainWindow
         if (pageMeasurements.Count == 0)
             return;
 
+        bool onCurrentPage = _currentPage != null && IsSamePageFolder(_currentPage.FolderPath, pageFolder);
         _syncingViewportSelectionFromTakeoffItem = true;
         try
         {
-            _viewport.SelectMeasurements(pageMeasurements);
+            if (onCurrentPage)
+                _viewport.SelectMeasurements(pageMeasurements);
+            SelectMeasurementsInDetachedSheets(pageFolder, pageMeasurements);
         }
         finally
         {

@@ -120,17 +120,17 @@ public partial class MainWindow
     private void PromptOverlaySize(string title, double currentScale, Action<double> apply)
     {
         string? raw = ShowInputDialog(
-            "Scale multiplier (0.5 - 3.0):",
+            "Scale multiplier (0.25 - 3.0):",
             NormalizeOverlayScale(currentScale).ToString("0.##", CultureInfo.InvariantCulture),
             title);
         if (raw == null)
             return;
 
         if (!double.TryParse(raw.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
-            scale < 0.5 ||
+            scale < 0.25 ||
             scale > 3.0)
         {
-            PostStatusWarning("Enter an overlay size value from 0.5 to 3.0.");
+            PostStatusWarning("Enter an overlay size value from 0.25 to 3.0.");
             return;
         }
 
@@ -139,6 +139,8 @@ public partial class MainWindow
 
     private static IReadOnlyList<(string Label, double Scale)> OverlaySizeOptions() =>
     [
+        ("Tiny", 0.25),
+        ("XS", 0.50),
         ("Small", 0.75),
         ("Normal", 1.00),
         ("Large", 1.35),
@@ -299,6 +301,7 @@ public partial class MainWindow
         SyncDisplaySettingsControls();
         RefreshSheetLegend();
         _viewport.InvalidateVisual();
+        RefreshDetachedSheetDisplaySettings();
     }
 
     private static double NormalizeOverlayScale(double scale)
@@ -306,7 +309,7 @@ public partial class MainWindow
         if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
             return 1.0;
 
-        return Math.Clamp(scale, 0.50, 3.00);
+        return Math.Clamp(scale, 0.25, 3.00);
     }
 
     private static string NormalizeSheetLegendAnchor(string? anchor)

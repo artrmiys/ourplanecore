@@ -74,6 +74,7 @@ public partial class MainWindow
         OurPlanCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, hiddenMeasurements);
         RefreshPageOverlayTreeNode(page);
         RefreshSheetLegend();
+        RefreshDetachedSheetsForPage(page.FolderPath);
         TxtStatus.Text = nowHidden
             ? $"Hidden on {page.Name}: {takeoff.Name}."
             : $"Visible on {page.Name}: {takeoff.Name}.";

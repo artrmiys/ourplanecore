@@ -100,6 +100,9 @@ public sealed class DetachedSheetWindow : Window
         _viewport.PdfSnapBridgeToleranceScreenPx =
             AppSettingsStore.NormalizePdfSnapBridgeTolerancePx(settings.ViewportPdfSnapBridgeTolerancePx);
         _viewport.PointSizeScale = ClampScale(settings.ViewportPointSizeScale);
+        _viewport.AreaEdgeScale = settings.ViewportAreaEdgeScale;
+        _viewport.AreaFillOpacity = settings.ViewportAreaFillOpacity;
+        _viewport.ZoomWheelFactor = settings.ViewportZoomWheelFactor;
         _viewport.SheetLegendAnchor = settings.SheetLegendAnchor;
         _viewport.SheetLegendScale = ClampScale(settings.SheetLegendScale);
         _viewport.SheetHeaderScale = ClampScale(settings.SheetHeaderScale);
@@ -159,7 +162,7 @@ public sealed class DetachedSheetWindow : Window
     private static double ClampScale(double scale) =>
         double.IsNaN(scale) || double.IsInfinity(scale)
             ? 1.0
-            : Math.Clamp(scale, 0.5, 3.0);
+            : Math.Clamp(scale, 0.25, 3.0);
 }
 
 public static class DetachedSheetWindowLayout
@@ -215,14 +218,16 @@ public static class DetachedSheetWindowLayout
             IntPtr handle = new WindowInteropHelper(window).Handle;
             if (handle != IntPtr.Zero)
             {
-                SetWindowPos(
-                    handle,
-                    IntPtr.Zero,
-                    cellLeft,
-                    cellTop,
-                    Math.Max(1, cellRight - cellLeft),
-                    Math.Max(1, cellBottom - cellTop),
-                    SwpNoZOrder | SwpNoActivate | SwpNoOwnerZOrder);
+                // First call moves the window onto the target monitor, which can
+                // fire WM_DPICHANGED when the monitors' scales differ; WPF then
+                // resizes the window to keep its DIP size and breaks the grid.
+                // Re-applying the exact cell (immediately and once more after
+                // WPF's deferred layout pass) pins the tile on mixed-DPI setups.
+                ApplyDevicePixelBounds(handle, cellLeft, cellTop, cellRight, cellBottom);
+                ApplyDevicePixelBounds(handle, cellLeft, cellTop, cellRight, cellBottom);
+                window.Dispatcher.BeginInvoke(
+                    new Action(() => ApplyDevicePixelBounds(handle, cellLeft, cellTop, cellRight, cellBottom)),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
             }
             else
             {
@@ -233,6 +238,30 @@ public static class DetachedSheetWindowLayout
             }
         }
     }
+
+    public static bool IsOnSecondaryMonitor(Window window)
+    {
+        IntPtr handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero)
+            return false;
+
+        IntPtr monitor = MonitorFromWindow(handle, MonitorDefaultToNearest);
+        if (monitor == IntPtr.Zero)
+            return false;
+
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        return GetMonitorInfo(monitor, ref info) && (info.Flags & MonitorInfoPrimary) == 0;
+    }
+
+    private static void ApplyDevicePixelBounds(IntPtr handle, int left, int top, int right, int bottom) =>
+        SetWindowPos(
+            handle,
+            IntPtr.Zero,
+            left,
+            top,
+            Math.Max(1, right - left),
+            Math.Max(1, bottom - top),
+            SwpNoZOrder | SwpNoActivate | SwpNoOwnerZOrder);
 
     private static IReadOnlyList<MonitorBounds> EnumerateMonitors()
     {
@@ -284,6 +313,7 @@ public static class DetachedSheetWindowLayout
             1.0);
 
     private const int MonitorInfoPrimary = 1;
+    private const uint MonitorDefaultToNearest = 2;
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpNoOwnerZOrder = 0x0200;
@@ -299,6 +329,9 @@ public static class DetachedSheetWindowLayout
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
 
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(

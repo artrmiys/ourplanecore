@@ -230,6 +230,7 @@ public partial class MainWindow
             : UnitMode.Imperial;
         SyncDisplaySettingsControls();
         _viewport.InvalidateVisual();
+        RefreshDetachedSheetDisplaySettings();
     }
 
     private void SyncDisplaySettingsControls()

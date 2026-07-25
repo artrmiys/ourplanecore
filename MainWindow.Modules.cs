@@ -212,6 +212,7 @@ public partial class MainWindow
         SetVisible(BtnTakeoffManagerCurrentExcel, IsModuleEnabled(ModuleId.ExcelIntegration));
 
         bool detachedSheets = IsModuleEnabled(ModuleId.DetachedSheets);
+        SetVisible(BtnPagesCloseDetachedSecondMonitor, detachedSheets);
         SetVisible(BtnPagesTileSecondMonitor, detachedSheets);
         SetVisible(BtnPagesTileSecondMonitorVertical, detachedSheets);
         SetVisible(BtnSheetManagerDetach, detachedSheets);
