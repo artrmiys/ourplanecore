@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using OurPlanCore.Controls;
 using SkiaSharp;
@@ -46,6 +48,7 @@ public partial class MainWindow
         viewport.SnapChanged += OnViewportSnapChanged;
         viewport.PdfSnapChanged += OnViewportPdfSnapChanged;
         viewport.BoxModeChanged += OnViewportBoxModeChanged;
+        viewport.ContextRequested += request => OnDetachedViewportContextRequested(window, request);
         viewport.ScaleChanged += scale => OnDetachedPageScaleChanged(window, scale);
         viewport.PageAnnotationAdded += _ => SaveDetachedPageAnnotations(window);
         viewport.PageAnnotationRemoved += _ => SaveDetachedPageAnnotations(window);
@@ -161,6 +164,125 @@ public partial class MainWindow
             viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
             viewport.InvalidateVisual();
         }
+    }
+
+    // Minimal takeoff-focused right-click menu for detached sheets: copy/paste
+    // to THIS sheet, takeoff/section properties, rename, joist actions, and
+    // per-sheet visibility. Page-bound extras of the main canvas menu (AI
+    // crops, sheet overlay, 3D) stay main-window-only because they write to
+    // the main window's current page.
+    private void OnDetachedViewportContextRequested(DetachedSheetWindow window, ViewportContextRequest request)
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before using the canvas context menu.";
+            return;
+        }
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = window.Viewport,
+            Placement = PlacementMode.MousePoint,
+        };
+
+        string point = $"PDF {request.PdfX:F0}, {request.PdfY:F0}";
+        menu.Items.Add(new MenuItem
+        {
+            Header = request.Measurement != null
+                ? $"Measurement - {request.Measurement.MType} @ {point}"
+                : $"{window.Page.Name} @ {point}",
+            IsEnabled = false,
+        });
+        menu.Items.Add(new Separator());
+
+        var selected = window.Viewport.GetSelectedMeasurements();
+        Measurement? clickedMeasurement = request.Measurement;
+        IReadOnlyList<Measurement> copySource = selected.Count > 0
+            ? selected
+            : clickedMeasurement != null
+                ? [clickedMeasurement]
+                : [];
+        menu.Items.Add(MakeMenuItem(
+            selected.Count > 1 ? "Copy Selected Measurements" : "Copy Measurement",
+            copySource.Count > 0,
+            () => CopyMeasurementsToClipboard(copySource)));
+
+        if (!IsCurrentJobReadOnly)
+        {
+            int clipboardCount = _measurementClipboard?.Entries.Count ?? 0;
+            menu.Items.Add(MakeWritableViewportMenuItem(
+                clipboardCount > 0
+                    ? $"Paste {clipboardCount} Measurement(s) to This Sheet"
+                    : "Paste Measurements to This Sheet",
+                clipboardCount > 0,
+                "paste measurements",
+                () => PasteMeasurementsFromClipboardInto(
+                    window.Viewport,
+                    window.Page,
+                    new SKPoint((float)request.PdfX, (float)request.PdfY))));
+        }
+
+        if (clickedMeasurement != null)
+        {
+            bool hasItem = TryResolveTakeoffItemForMeasurement(clickedMeasurement, out TakeoffItem item);
+            string entryTitle = hasItem ? MeasurementEntryTitle(item) : "Measurement";
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MakeWritableViewportMenuItem(
+                "Takeoff Properties...",
+                hasItem,
+                "edit takeoff properties",
+                () => EditViewportTakeoffProperties(item)));
+            menu.Items.Add(MakeWritableViewportMenuItem(
+                $"{entryTitle} Properties...",
+                hasItem,
+                "edit section properties",
+                () => EditSectionProperties(item, clickedMeasurement)));
+            menu.Items.Add(MakeWritableViewportMenuItem(
+                $"Rename {entryTitle}",
+                hasItem,
+                "rename a takeoff section",
+                () => RenameSection(item, clickedMeasurement)));
+
+            if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools) &&
+                OurPlanCoreJobStore.NormalizeMeasurementType(clickedMeasurement.MType) == "area")
+            {
+                menu.Items.Add(new Separator());
+                menu.Items.Add(MakeWritableViewportMenuItem(
+                    hasItem && item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
+                    hasItem,
+                    "edit joist properties",
+                    () => EditViewportTakeoffProperties(item)));
+                menu.Items.Add(MakeWritableViewportMenuItem(
+                    "Refresh Regular Joists in All Area Segments",
+                    hasItem && item.IsJoistArea,
+                    "add joists",
+                    () => AddJoistsToAllAreas(item)));
+                menu.Items.Add(MakeWritableViewportMenuItem(
+                    "Set / Reset Joist Direction",
+                    hasItem,
+                    "set a joist direction",
+                    () => BeginDetachedJoistDirectionCapture(window, item, clickedMeasurement)));
+                menu.Items.Add(MakeWritableViewportMenuItem(
+                    "Delete Nearest Extra Joist",
+                    hasItem && item.IsJoistArea && clickedMeasurement.ExtraJoists.Count > 0,
+                    "delete an Extra Joist",
+                    () => window.Viewport.DeleteNearestExtraJoist(
+                        clickedMeasurement,
+                        new SKPoint((float)request.PdfX, (float)request.PdfY))));
+            }
+
+            if (hasItem)
+            {
+                menu.Items.Add(new Separator());
+                menu.Items.Add(MakeMenuItem(
+                    IsPageTakeoffVisible(window.Page, item) ? "Hide on This Sheet" : "Show on This Sheet",
+                    true,
+                    () => TogglePageTakeoffVisibility(window.Page, item)));
+            }
+        }
+
+        menu.IsOpen = true;
     }
 
     // RefreshTakeoffDisplay rebuilds the viewport's measurement list, which
