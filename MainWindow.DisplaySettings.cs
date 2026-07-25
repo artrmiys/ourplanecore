@@ -66,6 +66,7 @@ public partial class MainWindow
         _settings.ViewportRenderQuality = mode;
         ViewportRenderPolicy.ApplyQualityMode(mode);
         _viewport.RefreshRenderQuality();
+        RefreshDetachedSheetRenderQuality();
         SaveAppSettings();
         SyncDisplaySettingsControls();
         TxtStatus.Text = $"Viewport render quality: {mode}.";
@@ -118,6 +119,8 @@ public partial class MainWindow
         {
             _viewport.RefreshRenderQuality();
             _viewport.RefreshStaticRasterDpi();
+            RefreshDetachedSheetRenderQuality();
+            RefreshDetachedSheetStaticRasterDpi();
         }
         ApplySheetOverlaySettings();
         RefreshDetachedSheetDisplaySettings();

@@ -64,8 +64,6 @@ public sealed class DetachedSheetWindow : Window
         AppSettings settings,
         UnitMode unitMode)
     {
-        _viewport.ViewBackgroundColor = settings.ViewportBackground;
-        _viewport.PageBackgroundColor = settings.PageBackground;
         _viewport.ScaleMetersPerPt = page.ScaleMetersPerPt;
         ApplyViewportDisplaySettings(settings, unitMode);
         _viewport.SetTool("pan");
@@ -87,6 +85,8 @@ public sealed class DetachedSheetWindow : Window
 
     private void ApplyViewportDisplaySettings(AppSettings settings, UnitMode unitMode)
     {
+        _viewport.ViewBackgroundColor = settings.ViewportBackground;
+        _viewport.PageBackgroundColor = settings.PageBackground;
         _viewport.UnitMode = unitMode;
         _viewport.ShowMeasurementLabels = settings.ShowMeasurementLabels;
         _viewport.ShowLineLabels = settings.ShowLineLabels;

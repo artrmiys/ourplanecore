@@ -140,6 +140,18 @@ public partial class MainWindow
         }
     }
 
+    private void RefreshDetachedSheetRenderQuality()
+    {
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            window.Viewport.RefreshRenderQuality();
+    }
+
+    private void RefreshDetachedSheetStaticRasterDpi()
+    {
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            window.Viewport.RefreshStaticRasterDpi();
+    }
+
     private void RefreshDetachedSheetsForPage(string pageFolder)
     {
         if (_currentJob == null || _detachedSheetWindows.Count == 0)

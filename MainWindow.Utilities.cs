@@ -92,6 +92,11 @@ public partial class MainWindow
         ViewportSurfaceHost.Background = backgroundBrush;
         _viewport.InvalidateVisual();
         _settings.ViewportBackground = cleanColor;
+        foreach (DetachedSheetWindow window in _detachedSheetWindows)
+        {
+            window.Viewport.ViewBackgroundColor = cleanColor;
+            window.Viewport.InvalidateVisual();
+        }
 
         if (persist)
         {
@@ -105,6 +110,11 @@ public partial class MainWindow
         _viewport.PageBackgroundColor = cleanColor;
         _settings.PageBackground = cleanColor;
         _viewport.InvalidateVisual();
+        foreach (DetachedSheetWindow window in _detachedSheetWindows)
+        {
+            window.Viewport.PageBackgroundColor = cleanColor;
+            window.Viewport.InvalidateVisual();
+        }
 
         if (persist)
             SaveAppSettings();

@@ -405,7 +405,10 @@ public partial class MainWindow
         TxtStaticRasterDpi.Text = normalized.ToString(CultureInfo.InvariantCulture);
         ApplyDisplaySettingsToViewport();
         if (changed)
+        {
             _viewport.RefreshStaticRasterDpi();
+            RefreshDetachedSheetStaticRasterDpi();
+        }
         SaveAppSettings();
         TxtStatus.Text = $"Static image resolution: {normalized} DPI.";
     }

@@ -21,6 +21,17 @@ public partial class MainWindow
         _viewport.ActiveColor = item.Color;
         _viewport.ActiveTakeoffFolder = item.FolderPath;
         _viewport.ActiveCountSymbol = item.CountSymbol;
+        // Detached windows must track the new target too: a window still
+        // recording keeps its stale ActiveTakeoffFolder otherwise and silently
+        // draws into the previous takeoff. Recording windows re-arm (validates
+        // the measurement type), idle ones just take the new target.
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
+            if (window.Viewport.IsTakeoffRecordToolActive)
+                ApplyDetachedTool(window, ToolForTakeoffItem(item));
+            else
+                ApplyDetachedActiveTakeoff(window.Viewport, item);
+        }
 
         if (tvi != null)
         {
