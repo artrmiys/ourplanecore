@@ -193,7 +193,7 @@ public partial class MainWindow
             ? UnitMode.Metric
             : UnitMode.Imperial;
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
-            window.RefreshTakeoffDisplay(_currentJob, _takeoffItems, _settings, unitMode);
+            RefreshDetachedTakeoffDisplay(window, unitMode);
     }
 
     private void ApplyDisplaySettingsToViewport()

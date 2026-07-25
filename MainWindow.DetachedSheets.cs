@@ -36,6 +36,11 @@ public partial class MainWindow
         viewport.MeasurementsRemoved += measurements => OnDetachedMeasurementsRemoved(window, measurements, unitMode);
         viewport.MeasurementChanged += measurement => OnDetachedMeasurementsChanged(window, [measurement], unitMode);
         viewport.MeasurementsChanged += measurements => OnDetachedMeasurementsChanged(window, measurements, unitMode);
+        // Selecting measurements on a detached sheet syncs the Takeoffs tree,
+        // estimate list, and page highlights exactly like the main viewport.
+        viewport.MeasurementSelectionChanged += OnViewportMeasurementSelectionChanged;
+        viewport.MeasurementsSelectionChanged += OnViewportMeasurementsSelectionChanged;
+        viewport.CopyMeasurementsRequested += CopyMeasurementsToClipboard;
         viewport.ScaleChanged += scale => OnDetachedPageScaleChanged(window, scale);
         viewport.PageAnnotationAdded += _ => SaveDetachedPageAnnotations(window);
         viewport.PageAnnotationRemoved += _ => SaveDetachedPageAnnotations(window);
@@ -118,6 +123,27 @@ public partial class MainWindow
         }
     }
 
+    // RefreshTakeoffDisplay rebuilds the viewport's measurement list, which
+    // clears its selection and raises empty selection-changed events. Those
+    // must not wipe the Takeoffs tree selection, so every refresh goes through
+    // this guard.
+    private void RefreshDetachedTakeoffDisplay(DetachedSheetWindow window, UnitMode unitMode)
+    {
+        if (_currentJob == null)
+            return;
+
+        bool wasSyncing = _syncingViewportSelectionFromTakeoffItem;
+        _syncingViewportSelectionFromTakeoffItem = true;
+        try
+        {
+            window.RefreshTakeoffDisplay(_currentJob, _takeoffItems, _settings, unitMode);
+        }
+        finally
+        {
+            _syncingViewportSelectionFromTakeoffItem = wasSyncing;
+        }
+    }
+
     private void RefreshDetachedSheetRenderQuality()
     {
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
@@ -141,7 +167,7 @@ public partial class MainWindow
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
         {
             if (IsSamePageFolder(window.Page.FolderPath, pageFolder))
-                window.RefreshTakeoffDisplay(_currentJob, _takeoffItems, _settings, unitMode);
+                RefreshDetachedTakeoffDisplay(window, unitMode);
         }
     }
 
@@ -150,23 +176,29 @@ public partial class MainWindow
 
     private void SelectMeasurementsInDetachedSheets(string pageFolder, IReadOnlyList<Measurement> measurements)
     {
-        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        RunWithDetachedSelectionSyncGuard(() =>
         {
-            if (IsSamePageFolder(window.Page.FolderPath, pageFolder))
-                window.Viewport.SelectMeasurements(measurements);
-        }
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            {
+                if (IsSamePageFolder(window.Page.FolderPath, pageFolder))
+                    window.Viewport.SelectMeasurements(measurements);
+            }
+        });
     }
 
     private void SelectMeasurementsInDetachedSheetsByPage(IReadOnlyList<Measurement> measurements)
     {
-        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        RunWithDetachedSelectionSyncGuard(() =>
         {
-            var onPage = measurements
-                .Where(measurement => IsSamePageFolder(measurement.PageFolder, window.Page.FolderPath))
-                .ToList();
-            if (onPage.Count > 0)
-                window.Viewport.SelectMeasurements(onPage);
-        }
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            {
+                var onPage = measurements
+                    .Where(measurement => IsSamePageFolder(measurement.PageFolder, window.Page.FolderPath))
+                    .ToList();
+                if (onPage.Count > 0)
+                    window.Viewport.SelectMeasurements(onPage);
+            }
+        });
     }
 
     // Mirrors the main-viewport behavior of highlighting a takeoff selected in
@@ -175,14 +207,33 @@ public partial class MainWindow
     // matching how the main canvas keeps its selection in that case).
     private void SelectTakeoffMeasurementsInDetachedSheets(IReadOnlyList<TakeoffItem> items)
     {
-        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        RunWithDetachedSelectionSyncGuard(() =>
         {
-            var measurements = items
-                .SelectMany(item => MeasurementsForTakeoffOnPage(item, window.Page.FolderPath))
-                .Distinct()
-                .ToList();
-            if (measurements.Count > 0)
-                window.Viewport.SelectMeasurements(measurements);
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            {
+                var measurements = items
+                    .SelectMany(item => MeasurementsForTakeoffOnPage(item, window.Page.FolderPath))
+                    .Distinct()
+                    .ToList();
+                if (measurements.Count > 0)
+                    window.Viewport.SelectMeasurements(measurements);
+            }
+        });
+    }
+
+    // Tree -> canvas selection pushes must not bounce back through the
+    // detached viewports' selection-changed events into the tree again.
+    private void RunWithDetachedSelectionSyncGuard(Action action)
+    {
+        bool wasSyncing = _syncingViewportSelectionFromTakeoffItem;
+        _syncingViewportSelectionFromTakeoffItem = true;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            _syncingViewportSelectionFromTakeoffItem = wasSyncing;
         }
     }
 
@@ -394,7 +445,7 @@ public partial class MainWindow
             RefreshSheetLegend();
         }
 
-        window.RefreshTakeoffDisplay(_currentJob!, _takeoffItems, _settings, unitMode);
+        RefreshDetachedTakeoffDisplay(window, unitMode);
         _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
         RefreshEstimateTable();
         UpdateTotalDisplay();
@@ -467,7 +518,7 @@ public partial class MainWindow
         if (_currentJob != null)
         {
             LoadTakeoffsForJob();
-            window.RefreshTakeoffDisplay(_currentJob, _takeoffItems, _settings, unitMode);
+            RefreshDetachedTakeoffDisplay(window, unitMode);
         }
         TxtStatus.Text = $"{window.Page.Name}: this job is read-only.";
     }
