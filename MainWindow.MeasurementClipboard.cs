@@ -58,30 +58,35 @@ public partial class MainWindow
         TxtStatus.Text = $"Copied {entries.Count} measurement(s). Paste uses the copied set's top-left corner as the cursor anchor.";
     }
 
-    private void PasteMeasurementsFromClipboard(SKPoint? pasteAtPdf)
+    private void PasteMeasurementsFromClipboard(SKPoint? pasteAtPdf) =>
+        PasteMeasurementsFromClipboardInto(_viewport, _currentPage, pasteAtPdf);
+
+    // Paste targets the sheet the request came from: the main viewport pastes
+    // to the current page, a detached window pastes to ITS page.
+    private void PasteMeasurementsFromClipboardInto(PdfViewport viewport, PageInfo? page, SKPoint? pasteAtPdf)
     {
-        if (_currentJob == null || _currentPage == null)
+        if (_currentJob == null || page == null)
         {
-            _viewport.CancelPendingMixedCutRegionPaste();
+            viewport.CancelPendingMixedCutRegionPaste();
             TxtStatus.Text = "Open a job and sheet before pasting measurements.";
             return;
         }
 
         if (_measurementClipboard == null || _measurementClipboard.Entries.Count == 0)
         {
-            _viewport.CancelPendingMixedCutRegionPaste();
+            viewport.CancelPendingMixedCutRegionPaste();
             TxtStatus.Text = "No copied measurements to paste.";
             return;
         }
 
-        if (!ConfirmMeasurementPasteScale(_measurementClipboard))
+        if (!ConfirmMeasurementPasteScale(_measurementClipboard, page))
         {
-            _viewport.CancelPendingMixedCutRegionPaste();
+            viewport.CancelPendingMixedCutRegionPaste();
             return;
         }
 
-        SKPoint pasteOffset = CalculateMeasurementPasteOffset(_measurementClipboard.Entries, pasteAtPdf);
-        if (!_viewport.TryPreflightPendingMixedCutRegionPaste(pasteOffset, out string preflightFailure))
+        SKPoint pasteOffset = CalculateMeasurementPasteOffset(viewport, _measurementClipboard.Entries, pasteAtPdf);
+        if (!viewport.TryPreflightPendingMixedCutRegionPaste(pasteOffset, out string preflightFailure))
         {
             TxtStatus.Text = preflightFailure;
             return;
@@ -89,16 +94,16 @@ public partial class MainWindow
         MeasurementPasteMode? pasteMode = PromptMeasurementPasteMode(_measurementClipboard.Entries.Count);
         if (pasteMode == null)
         {
-            _viewport.CancelPendingMixedCutRegionPaste();
+            viewport.CancelPendingMixedCutRegionPaste();
             return;
         }
-        if (!_viewport.ValidatePendingMixedCutRegionPasteReservation(out string reservationFailure))
+        if (!viewport.ValidatePendingMixedCutRegionPasteReservation(out string reservationFailure))
         {
             TxtStatus.Text = reservationFailure;
             return;
         }
 
-        PdfViewport.ViewState viewBeforePaste = _viewport.CaptureViewState();
+        PdfViewport.ViewState viewBeforePaste = viewport.CaptureViewState();
         var pasted = new List<Measurement>();
         var pastedNodes = new List<TakeoffMeasurementNode>();
         var changedItems = new HashSet<TakeoffItem>();
@@ -111,20 +116,20 @@ public partial class MainWindow
                 TakeoffItem target = ResolveMeasurementPasteTarget(entry, pasteMode.Value, createdTargets);
                 EnsureTakeoffItemFolder(target);
 
-                Measurement measurement = CloneClipboardMeasurement(entry, target, pasteOffset);
+                Measurement measurement = CloneClipboardMeasurement(entry, target, pasteOffset, page);
                 target.Measurements.Add(measurement);
                 pasted.Add(measurement);
                 pastedNodes.Add(new TakeoffMeasurementNode(target, measurement));
                 changedItems.Add(target);
             }
 
-            _viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
-            bool mixedPasteHandled = _viewport.CompletePendingMixedCutRegionPaste(
+            viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
+            bool mixedPasteHandled = viewport.CompletePendingMixedCutRegionPaste(
                 pasted,
                 out int pastedCutouts,
                 out string cutoutStatus);
             if (!mixedPasteHandled)
-                _viewport.RegisterAddedMeasurementsUndo(pasted, $"remove pasted {pasted.Count} measurement(s)");
+                viewport.RegisterAddedMeasurementsUndo(pasted, $"remove pasted {pasted.Count} measurement(s)");
             pasteCommitted = true;
 
             QueueTakeoffAutosave(changedItems);
@@ -140,14 +145,18 @@ public partial class MainWindow
                 _suppressCanvasFocusFromTakeoffSelection = previousSuppressFocus;
             }
 
-            _viewport.RestoreViewState(viewBeforePaste);
+            viewport.RestoreViewState(viewBeforePaste);
+            RefreshOtherViewportsAfterPaste(viewport);
             SelectTakeoffSectionNodesSilently(pastedNodes);
-            SelectTakeoffSectionMeasurementsOnCanvas(pastedNodes);
+            if (ReferenceEquals(viewport, _viewport))
+                SelectTakeoffSectionMeasurementsOnCanvas(pastedNodes);
+            else
+                SelectMeasurementsInDetachedSheetsByPage(pasted);
             if (mixedPasteHandled)
-                _viewport.RestoreCompletedMixedPasteSelection(pasted);
+                viewport.RestoreCompletedMixedPasteSelection(pasted);
             using (UsePageMeasurementLookup())
             {
-                RefreshPageTakeoffIndicatorsForFolder(_currentPage.FolderPath);
+                RefreshPageTakeoffIndicatorsForFolder(page.FolderPath);
                 ApplyTakeoffPageHighlights();
                 RefreshSheetLegend();
             }
@@ -156,7 +165,7 @@ public partial class MainWindow
             string modeLabel = pasteMode.Value == MeasurementPasteMode.SameTakeoffs
                 ? "same takeoff item(s)"
                 : "new takeoff item(s)";
-            TxtStatus.Text = $"Pasted {pasted.Count} measurement(s) to {_currentPage.Name} into {modeLabel}." +
+            TxtStatus.Text = $"Pasted {pasted.Count} measurement(s) to {page.Name} into {modeLabel}." +
                              (mixedPasteHandled
                                  ? cutoutStatus
                                  : pastedCutouts > 0
@@ -171,6 +180,7 @@ public partial class MainWindow
                 try
                 {
                     Exception? rollbackFailure = RollBackUncommittedMeasurementPaste(
+                        viewport,
                         pastedNodes,
                         createdTargets.Values,
                         viewBeforePaste);
@@ -190,7 +200,7 @@ public partial class MainWindow
                         rollbackEx);
                 }
             }
-            _viewport.CancelPendingMixedCutRegionPaste();
+            viewport.CancelPendingMixedCutRegionPaste();
             ShowOperationError("Paste Measurements", reported);
         }
     }
@@ -198,12 +208,33 @@ public partial class MainWindow
     private void PasteMeasurementsFromClipboard() =>
         PasteMeasurementsFromClipboard(null);
 
-    private bool ConfirmMeasurementPasteScale(MeasurementClipboard clipboard)
+    // A paste changes the shared measurement model, so every other viewport
+    // (main + all detached sheets) must re-read it.
+    private void RefreshOtherViewportsAfterPaste(PdfViewport sourceViewport)
+    {
+        if (!ReferenceEquals(sourceViewport, _viewport))
+        {
+            _viewport.SetMeasurements(
+                _takeoffItems.SelectMany(item => item.Measurements),
+                clearUndoStack: false);
+        }
+
+        UnitMode unitMode = _settings.UnitMode == UnitMode.Metric.ToString()
+            ? UnitMode.Metric
+            : UnitMode.Imperial;
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
+            if (!ReferenceEquals(window.Viewport, sourceViewport))
+                RefreshDetachedTakeoffDisplay(window, unitMode);
+        }
+    }
+
+    private bool ConfirmMeasurementPasteScale(MeasurementClipboard clipboard, PageInfo page)
     {
         var scaledEntries = clipboard.Entries
             .Where(entry => MeasurementTypeRequiresScale(entry.MeasurementType))
             .ToList();
-        if (scaledEntries.Count == 0 || _currentPage?.ScaleMetersPerPt > 0)
+        if (scaledEntries.Count == 0 || page.ScaleMetersPerPt > 0)
             return true;
 
         if (scaledEntries.Any(entry => entry.ScaleMetersPerPt <= 0))
@@ -287,6 +318,7 @@ public partial class MainWindow
     }
 
     private Exception? RollBackUncommittedMeasurementPaste(
+        PdfViewport viewport,
         IReadOnlyList<TakeoffMeasurementNode> pastedNodes,
         IEnumerable<TakeoffItem> createdTargets,
         PdfViewport.ViewState viewBeforePaste)
@@ -309,8 +341,8 @@ public partial class MainWindow
                 RefreshTreeItem(item);
         }
 
-        _viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
-        _viewport.RestoreViewState(viewBeforePaste);
+        viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
+        viewport.RestoreViewState(viewBeforePaste);
         return folderRollbackFailure;
     }
 
@@ -374,11 +406,15 @@ public partial class MainWindow
             ? MeasurementTypeTitle(measurementType)
             : sourceTakeoffName.Trim();
 
-    private Measurement CloneClipboardMeasurement(MeasurementClipboardEntry entry, TakeoffItem target, SKPoint pasteOffset)
+    private Measurement CloneClipboardMeasurement(
+        MeasurementClipboardEntry entry,
+        TakeoffItem target,
+        SKPoint pasteOffset,
+        PageInfo page)
     {
         string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(entry.MeasurementType);
-        double scale = _currentPage?.ScaleMetersPerPt > 0
-            ? _currentPage.ScaleMetersPerPt
+        double scale = page.ScaleMetersPerPt > 0
+            ? page.ScaleMetersPerPt
             : entry.ScaleMetersPerPt;
 
         return new Measurement
@@ -395,7 +431,7 @@ public partial class MainWindow
                 .Select(hole => hole.Select(p => new SKPoint(p.X + pasteOffset.X, p.Y + pasteOffset.Y)).ToList())
                 .Where(hole => hole.Count >= 3)
                 .ToList(),
-            PageFolder = _currentPage?.FolderPath ?? "",
+            PageFolder = page.FolderPath,
             TakeoffFolder = target.FolderPath,
             ScaleMetersPerPt = scale,
             JoistEnabled = entry.MeasurementJoist.Enabled,
@@ -439,10 +475,11 @@ public partial class MainWindow
     }
 
     private SKPoint CalculateMeasurementPasteOffset(
+        PdfViewport viewport,
         IReadOnlyList<MeasurementClipboardEntry> entries,
         SKPoint? pasteAtPdf)
     {
-        if (_viewport.TryGetMixedClipboardPasteOffset(pasteAtPdf, out SKPoint mixedOffset))
+        if (viewport.TryGetMixedClipboardPasteOffset(pasteAtPdf, out SKPoint mixedOffset))
             return mixedOffset;
 
         if (!pasteAtPdf.HasValue || !TryGetClipboardBounds(entries, out SKRect bounds))

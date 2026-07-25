@@ -453,6 +453,7 @@ public partial class MainWindow
             return;
 
         _viewport.SnapEnabled = enabled;
+        SynchronizeSnapAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
@@ -463,6 +464,7 @@ public partial class MainWindow
             return;
 
         _viewport.PdfSnapEnabled = enabled;
+        SynchronizePdfSnapAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
@@ -484,18 +486,21 @@ public partial class MainWindow
             return;
 
         _viewport.BoxModeEnabled = enabled;
+        SynchronizeBoxModeAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
 
     private void OnViewportSnapChanged(bool enabled)
     {
+        SynchronizeSnapAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
 
     private void OnViewportPdfSnapChanged(bool enabled)
     {
+        SynchronizePdfSnapAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
@@ -509,6 +514,7 @@ public partial class MainWindow
 
     private void OnViewportBoxModeChanged(bool enabled)
     {
+        SynchronizeBoxModeAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }

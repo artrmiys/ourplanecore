@@ -41,6 +41,11 @@ public partial class MainWindow
         viewport.MeasurementSelectionChanged += OnViewportMeasurementSelectionChanged;
         viewport.MeasurementsSelectionChanged += OnViewportMeasurementsSelectionChanged;
         viewport.CopyMeasurementsRequested += CopyMeasurementsToClipboard;
+        viewport.PasteMeasurementsRequested += at => PasteMeasurementsFromClipboardInto(viewport, window.Page, at);
+        viewport.TakeoffRenameRequested += OnViewportTakeoffRenameRequested;
+        viewport.SnapChanged += OnViewportSnapChanged;
+        viewport.PdfSnapChanged += OnViewportPdfSnapChanged;
+        viewport.BoxModeChanged += OnViewportBoxModeChanged;
         viewport.ScaleChanged += scale => OnDetachedPageScaleChanged(window, scale);
         viewport.PageAnnotationAdded += _ => SaveDetachedPageAnnotations(window);
         viewport.PageAnnotationRemoved += _ => SaveDetachedPageAnnotations(window);
@@ -48,33 +53,11 @@ public partial class MainWindow
         viewport.PageAnnotationTextRequested += RequestPageAnnotationText;
         viewport.OrthoChanged += SynchronizeOrthoAcrossViewports;
         viewport.JoistDirectionCaptured += (area, start, end) => OnDetachedJoistDirectionCaptured(window, area, start, end, unitMode);
-        window.PreviewKeyDown += (_, e) => HandleDetachedSheetPreviewKeyDown(window, e);
-    }
-
-    // Space in a detached window toggles the SAME global record state as in the
-    // main window (MainWindow's global shortcut never fires while a detached
-    // window owns keyboard focus). The global SetTool then propagates the tool
-    // back to every detached window, so the record indicator and target stay in
-    // sync everywhere.
-    private void HandleDetachedSheetPreviewKeyDown(DetachedSheetWindow window, KeyEventArgs e)
-    {
-        if (e.Handled || e.IsRepeat)
-            return;
-
-        if (KeyboardShortcutKeys.EffectiveKey(e) != Key.Space || Keyboard.Modifiers != ModifierKeys.None)
-            return;
-
-        if (ShouldSkipTakeoffShortcut(e.OriginalSource as DependencyObject))
-            return;
-
-        if (IsCurrentJobReadOnly && !EnsureCurrentJobWritable("record takeoffs"))
-        {
-            e.Handled = true;
-            return;
-        }
-
-        BtnActiveTakeoffRecord_Click(this, new RoutedEventArgs());
-        e.Handled = true;
+        // A focused detached window gets the SAME global shortcuts as the main
+        // window (Space record toggle, T new takeoff, F4 scale, F5 page setup,
+        // bookmark sequence, Ctrl+O/M/S...). MainWindow's handler never fires
+        // on its own while a detached window owns keyboard focus.
+        window.PreviewKeyDown += MainWindow_GlobalPreviewKeyDown;
     }
 
     private void OnDetachedPageScaleChanged(DetachedSheetWindow window, double scaleMetersPerPt)
@@ -96,6 +79,63 @@ public partial class MainWindow
             _viewport.OrthoEnabled = enabled;
             foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
                 window.Viewport.OrthoEnabled = enabled;
+        }
+        finally
+        {
+            _synchronizingOrthoAcrossViewports = false;
+        }
+    }
+
+    // Snap / PDF Snap / Box mode are global drawing constraints, so toggling
+    // them from any window (ribbon buttons or F3 / Ctrl+F3 / F9 hotkeys)
+    // applies to the main viewport and every detached sheet alike.
+    private void SynchronizeSnapAcrossViewports(bool enabled)
+    {
+        if (_synchronizingOrthoAcrossViewports)
+            return;
+
+        _synchronizingOrthoAcrossViewports = true;
+        try
+        {
+            _viewport.SnapEnabled = enabled;
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+                window.Viewport.SnapEnabled = enabled;
+        }
+        finally
+        {
+            _synchronizingOrthoAcrossViewports = false;
+        }
+    }
+
+    private void SynchronizePdfSnapAcrossViewports(bool enabled)
+    {
+        if (_synchronizingOrthoAcrossViewports)
+            return;
+
+        _synchronizingOrthoAcrossViewports = true;
+        try
+        {
+            _viewport.PdfSnapEnabled = enabled;
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+                window.Viewport.PdfSnapEnabled = enabled;
+        }
+        finally
+        {
+            _synchronizingOrthoAcrossViewports = false;
+        }
+    }
+
+    private void SynchronizeBoxModeAcrossViewports(bool enabled)
+    {
+        if (_synchronizingOrthoAcrossViewports)
+            return;
+
+        _synchronizingOrthoAcrossViewports = true;
+        try
+        {
+            _viewport.BoxModeEnabled = enabled;
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+                window.Viewport.BoxModeEnabled = enabled;
         }
         finally
         {
