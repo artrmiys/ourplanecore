@@ -291,6 +291,9 @@ public partial class MainWindow : Window
             ActiveAnnotationStrokeWidth = _annotationStrokeWidth,
             ActiveCountSymbol = _newCountSymbol,
         };
+        // Touching the main canvas makes it the Pages-tree navigation target
+        // again after the user has been working in a detached sheet window.
+        _viewport.PreviewMouseDown   += (_, _) => _detachedSheetNavigationTarget = null;
         _viewport.StatusChanged      += SetViewportStatus;
         _viewport.ScaleChanged       += OnScaleChanged;
         _viewport.ZoomChanged        += _ => UpdateStatusBarSegments();

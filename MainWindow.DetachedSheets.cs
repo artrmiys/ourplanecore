@@ -14,8 +14,21 @@ public partial class MainWindow
 {
     private bool _synchronizingOrthoAcrossViewports;
 
+    // The most recently focused detached sheet window. While set, clicking a
+    // sheet in the Pages tree swaps THAT window to the clicked sheet instead
+    // of navigating the main viewport ("stand on a detached sheet, pick a new
+    // sheet in the tree"). Clicking the main canvas returns tree navigation
+    // to the main viewport.
+    private DetachedSheetWindow? _detachedSheetNavigationTarget;
+
     private void ConfigureDetachedSheetWindow(DetachedSheetWindow window, UnitMode unitMode)
     {
+        window.Activated += (_, _) => _detachedSheetNavigationTarget = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_detachedSheetNavigationTarget, window))
+                _detachedSheetNavigationTarget = null;
+        };
         PdfViewport viewport = window.Viewport;
         viewport.ActiveAnnotationColor = _annotationColor;
         viewport.ActiveAnnotationStrokeWidth = _annotationStrokeWidth;
@@ -331,6 +344,34 @@ public partial class MainWindow
             if (IsSamePageFolder(window.Page.FolderPath, pageFolder))
                 RefreshDetachedTakeoffDisplay(window, unitMode);
         }
+    }
+
+    // Pages-tree navigation while a detached sheet window is the focus target:
+    // the clicked sheet replaces the sheet inside that window and the main
+    // viewport stays untouched. Returns false when tree navigation should run
+    // its normal main-viewport path instead.
+    private bool TryShowPageInFocusedDetachedSheet(PageInfo page)
+    {
+        DetachedSheetWindow? window = _detachedSheetNavigationTarget;
+        if (window == null || _currentJob == null || !_detachedSheetWindows.Contains(window))
+            return false;
+
+        PageInfo target = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        if (IsSamePageFolder(window.Page.FolderPath, target.FolderPath))
+        {
+            TxtStatus.Text = $"Detached window already shows {target.Name}.";
+            return true;
+        }
+
+        UnitMode unitMode = _settings.UnitMode == UnitMode.Metric.ToString()
+            ? UnitMode.Metric
+            : UnitMode.Imperial;
+        // ShowPage rebuilds the viewport's measurement list, which clears its
+        // selection; the guard keeps that from wiping the Takeoffs tree.
+        RunWithDetachedSelectionSyncGuard(() =>
+            window.ShowPage(_currentJob, target, _takeoffItems, _settings, unitMode));
+        TxtStatus.Text = $"Detached window now shows {target.Name}.";
+        return true;
     }
 
     private bool HasDetachedSheetForPage(string pageFolder) =>

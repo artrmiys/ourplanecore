@@ -539,6 +539,14 @@ public partial class MainWindow
         }
     }
 
+    // Record can land on the main viewport or on any detached sheet window,
+    // so the pre-record scale gate passes when at least one of those surfaces
+    // is scaled. Each viewport still blocks unscaled Line/Area draws itself
+    // at click time with its own status message.
+    private bool HasScaledRecordSurface() =>
+        _currentPage is { ScaleMetersPerPt: > 0 } ||
+        _detachedSheetWindows.Any(window => window.Viewport.ScaleMetersPerPt > 0);
+
     private bool EnsureDrawingTakeoff(string tool, bool forceNewTakeoff = false)
     {
         if (_currentJob == null)
@@ -547,7 +555,7 @@ public partial class MainWindow
             return false;
         }
 
-        if (_currentPage == null)
+        if (_currentPage == null && _detachedSheetWindows.Count == 0)
         {
             PostStatusInfo("Select a page before drawing measurements.");
             return false;
@@ -555,7 +563,7 @@ public partial class MainWindow
 
         string mtype = RecordMeasurementType(tool);
         bool joistArea = IsJoistAreaTool(tool);
-        if (mtype is "line" or "area" && _currentPage.ScaleMetersPerPt <= 0)
+        if (mtype is "line" or "area" && !HasScaledRecordSurface())
         {
             PostStatusWarning("Set the page scale before drawing Line or Area measurements.");
             return false;

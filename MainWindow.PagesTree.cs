@@ -448,7 +448,8 @@ public partial class MainWindow
         if (e.NewValue is TreeViewItem { Tag: PageInfo page })
         {
             TryRefreshDirtyPageTakeoffIndicator(page.FolderPath);
-            OpenPageInActiveTab(page);
+            if (!TryShowPageInFocusedDetachedSheet(page))
+                OpenPageInActiveTab(page);
         }
         else if (e.NewValue is TreeViewItem { Tag: PageTakeoffNode node })
         {
@@ -741,6 +742,9 @@ public partial class MainWindow
 
         SelectPagesTreeItemSilently(item);
         TryRefreshDirtyPageTakeoffIndicator(page.FolderPath);
+        if (TryShowPageInFocusedDetachedSheet(page))
+            return;
+
         OpenPageInActiveTab(page);
     }
 

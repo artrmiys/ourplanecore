@@ -13,7 +13,7 @@ public sealed class DetachedSheetWindow : Window
 {
     private readonly PdfViewport _viewport = new();
     public PdfViewport Viewport => _viewport;
-    public PageInfo Page { get; }
+    public PageInfo Page { get; private set; }
 
     public DetachedSheetWindow(
         OurPlanCoreJob job,
@@ -57,16 +57,19 @@ public sealed class DetachedSheetWindow : Window
         _viewport.ScaleMetersPerPt = scaleMetersPerPt;
     }
 
-    private void ConfigureViewport(
+    // Swaps the sheet shown in this window in place (Pages-tree navigation
+    // targeting a focused detached window). Keeps the current tool and all
+    // display settings; only the page-bound viewport state is reloaded.
+    public void ShowPage(
         OurPlanCoreJob job,
         PageInfo page,
         IReadOnlyList<TakeoffItem> takeoffItems,
         AppSettings settings,
         UnitMode unitMode)
     {
+        Page = page;
+        Title = page.Name;
         _viewport.ScaleMetersPerPt = page.ScaleMetersPerPt;
-        ApplyViewportDisplaySettings(settings, unitMode);
-        _viewport.SetTool("pan");
         _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements));
         _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, page, takeoffItems));
         _viewport.SetHiddenMeasurementIds(page.HiddenMeasurements);
@@ -81,6 +84,19 @@ public sealed class DetachedSheetWindow : Window
         _viewport.SetSheetLegend(settings.ShowSheetLegend
             ? SheetLegendBuilder.Build(job, page, takeoffItems, unitMode)
             : []);
+        _viewport.InvalidateVisual();
+    }
+
+    private void ConfigureViewport(
+        OurPlanCoreJob job,
+        PageInfo page,
+        IReadOnlyList<TakeoffItem> takeoffItems,
+        AppSettings settings,
+        UnitMode unitMode)
+    {
+        ApplyViewportDisplaySettings(settings, unitMode);
+        _viewport.SetTool("pan");
+        ShowPage(job, page, takeoffItems, settings, unitMode);
     }
 
     private void ApplyViewportDisplaySettings(AppSettings settings, UnitMode unitMode)

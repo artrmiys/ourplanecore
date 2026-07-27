@@ -270,6 +270,11 @@ public partial class MainWindow
             window.Show();
         }
 
+        // Show() activates each new window, which would arm it as the
+        // Pages-tree navigation target; only an explicit later click on a
+        // detached window should do that.
+        _detachedSheetNavigationTarget = null;
+
         string target = "";
         if (tileOnSecondMonitor)
             target = DetachedSheetWindowLayout.TileOnSecondMonitorOrPrimary(opened, verticalStack);
