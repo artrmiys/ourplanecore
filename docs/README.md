@@ -35,6 +35,10 @@ instead of scanning dozens of dated handoffs.
   - current job/page/takeoff storage flow and page-folder link contract.
 - `30-takeoffs-measurements/TAKEOFF_TEMPLATE_PRESETS_2026_06_01.md`
   - latest Takeoff Templates preset rollout.
+- `30-takeoffs-measurements/EXCEL_MACRO_EXPORT_WORKFLOW_2026_07_29.md`
+  - canonical operator and implementation contract for the vertical Excel
+    macro strip, `ALL`, Auto Tree root scope, VBA order, and protected Walls
+    cleanup.
 
 ## Folder Map
 

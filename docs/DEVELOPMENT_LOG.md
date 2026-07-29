@@ -1,5 +1,38 @@
 ﻿# Development Log
 
+## 2026-07-29 Excel Macro Export Strip and Walls Cleanup
+
+- Combined the right quick-command strip and Excel macro strip into one
+  26 px vertical surface. Existing tools remain in the upper section, Excel
+  actions remain in the lower section, and a persisted horizontal splitter
+  adjusts the default 50/50 layout.
+- Added the sequential Excel actions `SQFT`, `Walls`, `Gables`, `Truss Heel`,
+  `Parapet`, `Eve / Rakes`, and `Openings`, plus an editable `ALL` sequence.
+- `ALL` supports either one building folder or an Auto Tree placed directly
+  below the job Takeoffs root. It ascends from a selected export folder/item to
+  the common batch root and rejects mixed measured building roots.
+- Added deterministic Walls and Eve/Rakes row ordering. Walls uses corners,
+  descending exterior LF, cor/corr, dem, 2x6, 2x4, then remaining rows.
+  Eve/Rakes uses descending Eve LF followed by descending Rake LF.
+- Openings appends from `Z158`, runs `C_SumNearWindowValues` once per numeric
+  floor group, then runs `A5_Openings`.
+- Walls now runs `A3_Walls_Calc_AllGroup`, protects every configured mandatory
+  output row in `A25:H1367`, runs `B_DeleteZeroRowsOnlyIn_AtoH`, and restores
+  each protected column-C formula/value after rows shift. The same contract is
+  used by the standalone `WL` action and by `ALL`.
+- Exposed workbook, worksheet, aliases, ranges, macros, row ordering, floor
+  aliases, `ALL` order, after-macro, and `Always keep rows` through
+  `8 Settings > Excel macro actions`, with global/per-job presets and built-in
+  reset.
+- Code checkpoint: `e3ead9f` (`Protect wall cleanup output rows`).
+- Verification passed: Debug build `0 warnings / 0 errors`, C# harness
+  `647/647`, disposable real-Excel COM smoke for the complete macro chain,
+  164 protected Walls rows with no remaining temporary markers, and a fresh
+  responsive Debug runtime segment with `0 ERROR`, `Loaded takeoffs`, and
+  `Viewport` evidence.
+- Canonical operator/implementation reference:
+  `docs/30-takeoffs-measurements/EXCEL_MACRO_EXPORT_WORKFLOW_2026_07_29.md`.
+
 ## 2026-07-22 v2.2.5 High-Zoom Area Rendering
 
 - Replaced per-pointer resampling of the static sheet with a retained
