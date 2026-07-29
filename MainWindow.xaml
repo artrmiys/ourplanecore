@@ -1401,7 +1401,6 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Vertical quick-command strips; content is built in MainWindow.SideStrips.cs -->
@@ -1411,83 +1410,105 @@
                             Background="{DynamicResource PanelBackgroundBrush}"
                             BorderBrush="{DynamicResource ControlBorderBrush}"
                             BorderThickness="0,0,1,0"/>
-                    <Border x:Name="RightCommandStripHost"
-                            Grid.Row="0" Grid.RowSpan="2" Grid.Column="3"
-                            Width="26"
-                            Background="{DynamicResource PanelBackgroundBrush}"
-                            BorderBrush="{DynamicResource ControlBorderBrush}"
-                            BorderThickness="1,0,0,0"/>
-                    <Border x:Name="ExcelMacroExportPanel"
-                            Grid.Row="0" Grid.RowSpan="2" Grid.Column="2"
-                            Width="26"
-                            Background="{DynamicResource PanelBackgroundBrush}"
-                            BorderBrush="{DynamicResource ControlBorderBrush}"
-                            BorderThickness="1,0,0,0"
-                            ToolTipService.ShowDuration="18000">
-                        <ScrollViewer VerticalScrollBarVisibility="Hidden"
-                                      HorizontalScrollBarVisibility="Disabled">
-                            <StackPanel Margin="0,4,0,4">
-                                <TextBlock Text="XL"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,0,0,3"
-                                           FontSize="8"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource SecondaryForegroundBrush}"/>
-                                <Button Style="{StaticResource TopCommandButton}"
-                                        Width="18" Height="18"
-                                        Margin="4,0,4,2"
-                                        Padding="0"
-                                        Click="BtnExcelMacroAll_Click"
-                                        ToolTip="Run ALL for one selected building/root: SQFT → Walls → Gables → Truss Heel → Parapet → Eve/Rakes → Openings">
-                                    <TextBlock Text="ALL" FontSize="6.5" FontWeight="SemiBold"/>
-                                </Button>
-                                <Border Height="1" Margin="8,3,8,3"
-                                        Background="{DynamicResource ControlBorderBrush}"/>
-                                <Button Style="{StaticResource TopCommandButton}"
-                                        Width="18" Height="18" Margin="4,0,4,2" Padding="0"
-                                        Click="BtnExcelMacroSqft_Click"
-                                        ToolTip="SQFT: append to J:L, select J:K, run A2_SQFT_calc">
-                                    <TextBlock Text="SF" FontSize="7" FontWeight="SemiBold"/>
-                                </Button>
-                                <Button Style="{StaticResource TopCommandButton}"
-                                        Width="18" Height="18" Margin="4,0,4,2" Padding="0"
-                                        Click="BtnExcelMacroWalls_Click"
-                                        ToolTip="Walls: strict per-floor order, append to J:L, select J:K, run A3_Walls_Calc_AllGroup">
-                                    <TextBlock Text="WL" FontSize="7" FontWeight="SemiBold"/>
-                                </Button>
-                                <Button Style="{StaticResource TopCommandButton}"
-                                        Width="18" Height="18" Margin="4,0,4,2" Padding="0"
-                                        Click="BtnExcelMacroGables_Click"
-                                        ToolTip="Gables: append to J:L, select J:K, run A2_SQFT_calc">
-                                    <TextBlock Text="GB" FontSize="7" FontWeight="SemiBold"/>
-                                </Button>
-                                <Button Style="{StaticResource TopCommandButton}"
-                                        Width="18" Height="18" Margin="4,0,4,2" Padding="0"
-                                        Click="BtnExcelMacroTrussHeel_Click"
-                                        ToolTip="Truss Heel: append to J:L, select J:K, run A2_SQFT_calc">
-                                    <TextBlock Text="TH" FontSize="7" FontWeight="SemiBold"/>
-                                </Button>
-                                <Button Style="{StaticResource TopCommandButton}"
-                                        Width="18" Height="18" Margin="4,0,4,2" Padding="0"
-                                        Click="BtnExcelMacroParapet_Click"
-                                        ToolTip="Parapet: append to J:L, select J:K, run A4_Parapet">
-                                    <TextBlock Text="PP" FontSize="7" FontWeight="SemiBold"/>
-                                </Button>
-                                <Button Style="{StaticResource TopCommandButton}"
-                                        Width="18" Height="18" Margin="4,0,4,2" Padding="0"
-                                        Click="BtnExcelMacroEveRakes_Click"
-                                        ToolTip="Eve/Rakes: Eve by LF descending, then Rake by LF descending; run A6_Eve_Rakes">
-                                    <TextBlock Text="E/R" FontSize="6.5" FontWeight="SemiBold"/>
-                                </Button>
-                                <Button Style="{StaticResource TopCommandButton}"
-                                        Width="18" Height="18" Margin="4,0,4,2" Padding="0"
-                                        Click="BtnExcelMacroOpenings_Click"
-                                        ToolTip="Openings: append from Z158, run C_SumNearWindowValues per floor, then A5_Openings">
-                                    <TextBlock Text="OP" FontSize="7" FontWeight="SemiBold"/>
-                                </Button>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Border>
+                    <Grid x:Name="RightCombinedCommandStripHost"
+                          Grid.Row="0" Grid.RowSpan="2" Grid.Column="2"
+                          Width="26">
+                        <Grid.RowDefinitions>
+                            <RowDefinition x:Name="RightCommandStripRow"
+                                           Height="*"
+                                           MinHeight="90"/>
+                            <RowDefinition Height="5"/>
+                            <RowDefinition x:Name="ExcelMacroStripRow"
+                                           Height="*"
+                                           MinHeight="140"/>
+                        </Grid.RowDefinitions>
+                        <Border x:Name="RightCommandStripHost"
+                                Grid.Row="0"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1,0,0,0"/>
+                        <GridSplitter x:Name="ExcelMacroStripSplitter"
+                                      Grid.Row="1"
+                                      Height="5"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      ResizeDirection="Rows"
+                                      ResizeBehavior="PreviousAndNext"
+                                      Cursor="SizeNS"
+                                      Background="{DynamicResource SplitterBrush}"
+                                      DragCompleted="ExcelMacroStripSplitter_DragCompleted"
+                                      ToolTip="Drag to resize the tools and Excel sections"/>
+                        <Border x:Name="ExcelMacroExportPanel"
+                                Grid.Row="2"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1,0,0,0"
+                                ToolTipService.ShowDuration="18000">
+                            <ScrollViewer VerticalScrollBarVisibility="Hidden"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel Margin="0,4,0,4">
+                                    <TextBlock Text="XL"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,3"
+                                               FontSize="8"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18"
+                                            Margin="4,0,4,2"
+                                            Padding="0"
+                                            Click="BtnExcelMacroAll_Click"
+                                            ToolTip="Run ALL for one selected building/root: SQFT → Walls → Gables → Truss Heel → Parapet → Eve/Rakes → Openings">
+                                        <TextBlock Text="ALL" FontSize="6.5" FontWeight="SemiBold"/>
+                                    </Button>
+                                    <Border Height="1" Margin="8,3,8,3"
+                                            Background="{DynamicResource ControlBorderBrush}"/>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                            Click="BtnExcelMacroSqft_Click"
+                                            ToolTip="SQFT: append to J:L, select J:K, run A2_SQFT_calc">
+                                        <TextBlock Text="SF" FontSize="7" FontWeight="SemiBold"/>
+                                    </Button>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                            Click="BtnExcelMacroWalls_Click"
+                                            ToolTip="Walls: run A3, preserve mandatory A:H output rows, then delete zero rows">
+                                        <TextBlock Text="WL" FontSize="7" FontWeight="SemiBold"/>
+                                    </Button>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                            Click="BtnExcelMacroGables_Click"
+                                            ToolTip="Gables: append to J:L, select J:K, run A2_SQFT_calc">
+                                        <TextBlock Text="GB" FontSize="7" FontWeight="SemiBold"/>
+                                    </Button>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                            Click="BtnExcelMacroTrussHeel_Click"
+                                            ToolTip="Truss Heel: append to J:L, select J:K, run A2_SQFT_calc">
+                                        <TextBlock Text="TH" FontSize="7" FontWeight="SemiBold"/>
+                                    </Button>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                            Click="BtnExcelMacroParapet_Click"
+                                            ToolTip="Parapet: append to J:L, select J:K, run A4_Parapet">
+                                        <TextBlock Text="PP" FontSize="7" FontWeight="SemiBold"/>
+                                    </Button>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                            Click="BtnExcelMacroEveRakes_Click"
+                                            ToolTip="Eve/Rakes: Eve by LF descending, then Rake by LF descending; run A6_Eve_Rakes">
+                                        <TextBlock Text="E/R" FontSize="6.5" FontWeight="SemiBold"/>
+                                    </Button>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                            Click="BtnExcelMacroOpenings_Click"
+                                            ToolTip="Openings: append from Z158, run C_SumNearWindowValues per floor, then A5_Openings">
+                                        <TextBlock Text="OP" FontSize="7" FontWeight="SemiBold"/>
+                                    </Button>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
 
                     <TabControl x:Name="PageTabs"
                                 Grid.Row="0" Grid.Column="1"
@@ -1598,7 +1619,7 @@
                     </Grid>
                     <!-- F1 keyboard shortcuts overlay -->
                     <Grid x:Name="ShortcutsOverlay"
-                          Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                          Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
                           Panel.ZIndex="30"
                           Background="#B0000000"
                           Visibility="Collapsed">

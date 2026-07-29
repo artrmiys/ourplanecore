@@ -33,6 +33,7 @@ public partial class MainWindow
             ApplyDisplaySettingsToViewport();
             ApplySheetOverlaySettings();
             ApplySidePanelWidths();
+            ApplyExcelMacroStripFraction();
             if (string.Equals(TxtScaleRatio.Text, "100", StringComparison.OrdinalIgnoreCase))
                 TxtScaleRatio.Text = "1/8\" = 1'0\"";
             TxtScaleRatio.ToolTip = "Imperial sheet scale, e.g. 1/8\" = 1'0\". Ratio values like 1:96 are also accepted.";

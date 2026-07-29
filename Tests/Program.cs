@@ -603,6 +603,7 @@ var tests = new List<(string Name, Action Run)>
     ("excel macro walls use strict per-floor export order", ExcelMacroExportTests.WallsUseStrictPerFloorExportOrder),
     ("excel macro eves and rakes sort by LF descending", ExcelMacroExportTests.EvesAndRakesSortByLfDescending),
     ("excel macro ALL resolves one building root", ExcelMacroExportTests.AllScopeUsesOneBuildingAndRejectsMixedRoots),
+    ("excel macro cleanup keeps exact mandatory output labels", ExcelMacroExportTests.CleanupWhitelistUsesExactNormalizedLabels),
     ("joist pitch persists on takeoff item", JoistPitchPersistsOnTakeoffItem),
     ("joist pitch applies item properties", JoistPitchAppliesItemProperties),
     ("page overlay persists through source rewrites", PageOverlayPersistsThroughSourceRewrites),
@@ -1321,6 +1322,7 @@ static void OutputSettingsDefaultExportAppearance()
     AssertClose(1.2, settings.PdfExportSheetHeaderScale, "PDF header should default to the current export profile");
     AssertClose(248.0, settings.LeftPanelWidth, "left panel should default to the current width");
     AssertClose(269.0, settings.RightPanelWidth, "right panel should default to the current width");
+    AssertClose(0.5, settings.ExcelMacroStripTopFraction, "Excel strip should default to half height");
 
     settings.PdfExportMeasurementStrokeScale = 6.0;
     AppSettingsStore.NormalizeOutputSettings(settings);

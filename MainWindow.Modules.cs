@@ -218,7 +218,9 @@ public partial class MainWindow
         SetVisible(BtnExportCurrentExcelCell, IsModuleEnabled(ModuleId.ExcelIntegration));
         SetVisible(BtnTakeoffManagerExportExcel, IsModuleEnabled(ModuleId.ExcelIntegration));
         SetVisible(BtnTakeoffManagerCurrentExcel, IsModuleEnabled(ModuleId.ExcelIntegration));
-        SetVisible(ExcelMacroExportPanel, IsModuleEnabled(ModuleId.ExcelIntegration));
+        bool excelIntegrationEnabled = IsModuleEnabled(ModuleId.ExcelIntegration);
+        SetVisible(ExcelMacroExportPanel, excelIntegrationEnabled);
+        ApplyExcelMacroStripModuleVisibility(excelIntegrationEnabled);
 
         bool detachedSheets = IsModuleEnabled(ModuleId.DetachedSheets);
         SetVisible(BtnPagesCloseDetachedSecondMonitor, detachedSheets);

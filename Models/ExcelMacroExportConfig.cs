@@ -6,7 +6,7 @@ namespace OurPlanCore;
 
 public sealed class ExcelMacroExportConfig
 {
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
     public List<ExcelMacroExportActionConfig> Actions { get; set; } = [];
     public List<ExcelMacroFloorRule> FloorRules { get; set; } = [];
     public List<string> BatchActionOrder { get; set; } = [];
@@ -73,6 +73,21 @@ public sealed class ExcelMacroExportConfig
             }
             result.BatchActionOrder = [.. defaults.BatchActionOrder];
         }
+        if (sourceSchema < 4)
+        {
+            foreach (ExcelMacroExportActionConfig action in result.Actions)
+            {
+                ExcelMacroExportActionConfig? defaultAction =
+                    defaults.Actions.FirstOrDefault(item =>
+                        string.Equals(item.Id, action.Id, StringComparison.OrdinalIgnoreCase));
+                if (defaultAction == null)
+                    continue;
+                action.AfterMacroName = defaultAction.AfterMacroName;
+                action.AfterMacroRange = defaultAction.AfterMacroRange;
+                action.AfterMacroProtectedLabels =
+                    [.. defaultAction.AfterMacroProtectedLabels];
+            }
+        }
         foreach (ExcelMacroExportActionConfig action in result.Actions)
         {
             if (!string.IsNullOrWhiteSpace(action.RowOrderMode))
@@ -120,6 +135,26 @@ public sealed class ExcelMacroExportConfig
                     MacroName = "A3_Walls_Calc_AllGroup",
                     UseFloorHeaders = true,
                     RowOrderMode = ExcelMacroRowOrderModes.WallsStrict,
+                    AfterMacroName = "B_DeleteZeroRowsOnlyIn_AtoH",
+                    AfterMacroRange = "A25:H1367",
+                    AfterMacroProtectedLabels =
+                    [
+                        "Window Flashing",
+                        "Sill Flashing",
+                        "Note: The headers indicated on the plan",
+                        "Ext. Headers up to 48\" (2)",
+                        "Ext. Headers up to 60\" (3)",
+                        "Ext. Headers up to 72\" (3)",
+                        "Ext. Headers over 72\" (3)",
+                        "Int. Headers (2)",
+                        "Wall Sheathing",
+                        "Vapor Barrier",
+                        "Insulation",
+                        "Box Sheathing",
+                        "Tape",
+                        "Shear Walls",
+                        "Holdowns",
+                    ],
                 },
                 new ExcelMacroExportActionConfig
                 {
@@ -252,6 +287,9 @@ public sealed class ExcelMacroExportActionConfig
     public string UnitSystem { get; set; } = "Imperial";
     public string PerFloorPreprocessMacroName { get; set; } = "";
     public string RowOrderMode { get; set; } = ExcelMacroRowOrderModes.Source;
+    public string AfterMacroName { get; set; } = "";
+    public string AfterMacroRange { get; set; } = "";
+    public List<string> AfterMacroProtectedLabels { get; set; } = [];
 
     public ExcelMacroExportActionConfig Clone() =>
         new()
@@ -271,6 +309,9 @@ public sealed class ExcelMacroExportActionConfig
             UnitSystem = UnitSystem,
             PerFloorPreprocessMacroName = PerFloorPreprocessMacroName,
             RowOrderMode = RowOrderMode,
+            AfterMacroName = AfterMacroName,
+            AfterMacroRange = AfterMacroRange,
+            AfterMacroProtectedLabels = [.. (AfterMacroProtectedLabels ?? [])],
         };
 }
 

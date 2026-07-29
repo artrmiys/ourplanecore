@@ -20,6 +20,9 @@ public partial class MainWindow
     private TextBox? _excelSettingsBlankRows;
     private TextBox? _excelSettingsMacro;
     private TextBox? _excelSettingsPreprocessMacro;
+    private TextBox? _excelSettingsAfterMacro;
+    private TextBox? _excelSettingsAfterRange;
+    private TextBox? _excelSettingsProtectedLabels;
     private TextBox? _excelSettingsBatchOrder;
     private ComboBox? _excelSettingsUnits;
     private ComboBox? _excelSettingsRowOrder;
@@ -128,13 +131,39 @@ public partial class MainWindow
         Grid.SetRow(_excelSettingsRowOrder, 5);
         Grid.SetColumn(_excelSettingsRowOrder, 3);
         fields.Children.Add(_excelSettingsRowOrder);
-        fields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _excelSettingsAfterMacro =
+            AddExcelField(fields, 6, 0, "After VBA", 1);
+        _excelSettingsAfterMacro.ToolTip =
+            "Optional macro run after the main action, for example B_DeleteZeroRowsOnlyIn_AtoH.";
+        _excelSettingsAfterRange =
+            AddExcelField(fields, 6, 2, "After range", 3);
+        _excelSettingsAfterRange.ToolTip =
+            "The output range selected for the after-macro, for example A25:H1367.";
+
+        AddExcelLabel(fields, 7, 0, "Always keep rows");
+        _excelSettingsProtectedLabels = new TextBox
+        {
+            Margin = new Thickness(0, 0, 12, 6),
+            Height = 74,
+            AcceptsReturn = true,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            TextWrapping = TextWrapping.NoWrap,
+            ToolTip =
+                "One exact output label per line. Every occurrence is protected before the after-macro runs.",
+        };
+        Grid.SetRow(_excelSettingsProtectedLabels, 7);
+        Grid.SetColumn(_excelSettingsProtectedLabels, 1);
+        Grid.SetColumnSpan(_excelSettingsProtectedLabels, 3);
+        fields.Children.Add(_excelSettingsProtectedLabels);
+
+        while (fields.RowDefinitions.Count <= 8)
+            fields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _excelSettingsFloorHeaders = new CheckBox
         {
             Content = "Insert numeric floor group rows (0-5) before the takeoff rows",
             Margin = new Thickness(150, 2, 0, 8),
         };
-        Grid.SetRow(_excelSettingsFloorHeaders, 6);
+        Grid.SetRow(_excelSettingsFloorHeaders, 8);
         Grid.SetColumnSpan(_excelSettingsFloorHeaders, 4);
         fields.Children.Add(_excelSettingsFloorHeaders);
         content.Children.Add(fields);
@@ -295,6 +324,11 @@ public partial class MainWindow
         SetText(_excelSettingsBlankRows, action.BlankRowsBetween.ToString());
         SetText(_excelSettingsMacro, action.MacroName);
         SetText(_excelSettingsPreprocessMacro, action.PerFloorPreprocessMacroName);
+        SetText(_excelSettingsAfterMacro, action.AfterMacroName);
+        SetText(_excelSettingsAfterRange, action.AfterMacroRange);
+        SetText(
+            _excelSettingsProtectedLabels,
+            string.Join(Environment.NewLine, action.AfterMacroProtectedLabels));
         SetText(
             _excelSettingsBatchOrder,
             string.Join(", ", _excelMacroExportConfig.BatchActionOrder));
@@ -342,6 +376,22 @@ public partial class MainWindow
                  blankRows < 0)
             error = "Blank rows between blocks must be zero or greater.";
 
+        string afterMacro = TextOf(_excelSettingsAfterMacro);
+        string afterRange = TextOf(_excelSettingsAfterRange).ToUpperInvariant();
+        if (error.Length == 0 &&
+            string.IsNullOrWhiteSpace(afterMacro) != string.IsNullOrWhiteSpace(afterRange))
+        {
+            error = "After VBA and After range must be configured together.";
+        }
+        else if (error.Length == 0 &&
+                 afterRange.Length > 0 &&
+                 !ExcelMacroTakeoffExportService.TryValidateRangeAddress(
+                     afterRange,
+                     out string afterRangeError))
+        {
+            error = afterRangeError;
+        }
+
         List<string> batchOrder = SplitExcelAliases(TextOf(_excelSettingsBatchOrder));
         HashSet<string> actionIds = _excelMacroExportConfig.Actions
             .Select(item => item.Id)
@@ -372,6 +422,10 @@ public partial class MainWindow
         action.RowOrderMode =
             _excelSettingsRowOrder?.SelectedValue as string ??
             ExcelMacroRowOrderModes.Source;
+        action.AfterMacroName = afterMacro;
+        action.AfterMacroRange = afterRange;
+        action.AfterMacroProtectedLabels =
+            SplitProtectedExcelLabels(_excelSettingsProtectedLabels?.Text ?? "");
         _excelMacroExportConfig.BatchActionOrder = batchOrder;
 
         var floorRules = new List<ExcelMacroFloorRule>();
@@ -472,6 +526,14 @@ public partial class MainWindow
     private static List<string> SplitExcelAliases(string value) =>
         (value ?? "")
         .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private static List<string> SplitProtectedExcelLabels(string value) =>
+        (value ?? "")
+        .Split(
+            ['\r', '\n', ';'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToList();
 

@@ -19,6 +19,12 @@ internal static class ExcelMacroExportTests
         Equal("J", walls.WriteStartColumn, "Walls write start");
         True(walls.UseFloorHeaders, "Walls must write floor headers");
         Equal("A3_Walls_Calc_AllGroup", walls.MacroName, "Walls macro");
+        Equal(
+            "B_DeleteZeroRowsOnlyIn_AtoH",
+            walls.AfterMacroName,
+            "Walls cleanup macro");
+        Equal("A25:H1367", walls.AfterMacroRange, "Walls cleanup range");
+        Equal(15, walls.AfterMacroProtectedLabels.Count, "Walls mandatory output labels");
 
         Equal("Z", openings.ScanStartColumn, "Openings scan start");
         Equal("AB", openings.ScanEndColumn, "Openings scan end");
@@ -65,6 +71,9 @@ internal static class ExcelMacroExportTests
         legacy.Action(ExcelMacroExportActionIds.Openings).PerFloorPreprocessMacroName = "";
         legacy.Action(ExcelMacroExportActionIds.Walls).RowOrderMode =
             ExcelMacroRowOrderModes.Source;
+        legacy.Action(ExcelMacroExportActionIds.Walls).AfterMacroName = "";
+        legacy.Action(ExcelMacroExportActionIds.Walls).AfterMacroRange = "";
+        legacy.Action(ExcelMacroExportActionIds.Walls).AfterMacroProtectedLabels = [];
         legacy.BatchActionOrder = [];
         ExcelMacroExportConfig upgraded =
             ExcelMacroExportConfig.UpgradeForCurrentSchema(legacy);
@@ -77,6 +86,10 @@ internal static class ExcelMacroExportTests
             upgraded.Action(ExcelMacroExportActionIds.Walls).RowOrderMode,
             "old settings gain strict wall order");
         Equal(7, upgraded.BatchActionOrder.Count, "old settings gain ALL sequence");
+        Equal(
+            "B_DeleteZeroRowsOnlyIn_AtoH",
+            upgraded.Action(ExcelMacroExportActionIds.Walls).AfterMacroName,
+            "old settings gain Walls cleanup macro");
     }
 
     public static void WallsBuildNumericFloorGroupsAndImperialValues()
@@ -343,6 +356,38 @@ internal static class ExcelMacroExportTests
             [job.TakeoffsRoot],
             config);
         True(!mixed.Success, "ALL must reject a job-root selection with two buildings");
+    }
+
+    public static void CleanupWhitelistUsesExactNormalizedLabels()
+    {
+        ExcelMacroExportActionConfig walls =
+            ExcelMacroExportConfig.BuildDefault().Action(ExcelMacroExportActionIds.Walls);
+
+        True(
+            ExcelMacroTakeoffExportService.IsProtectedOutputLabel(
+                "Wall\u00A0Sheathing",
+                walls.AfterMacroProtectedLabels),
+            "NBSP-normalized mandatory label should match");
+        True(
+            ExcelMacroTakeoffExportService.IsProtectedOutputLabel(
+                "  note: the headers indicated on the plan  ",
+                walls.AfterMacroProtectedLabels),
+            "mandatory label matching should ignore case and outside spaces");
+        True(
+            !ExcelMacroTakeoffExportService.IsProtectedOutputLabel(
+                "Wall Sheathing Extra",
+                walls.AfterMacroProtectedLabels),
+            "cleanup whitelist should not hide unrelated output rows");
+        True(
+            ExcelMacroTakeoffExportService.TryValidateRangeAddress(
+                "A25:H1367",
+                out _),
+            "configured cleanup range should be valid");
+        True(
+            !ExcelMacroTakeoffExportService.TryValidateRangeAddress(
+                "H1367:A25",
+                out _),
+            "reversed cleanup range should be rejected");
     }
 
     private static OurPlanCoreJob Job() =>

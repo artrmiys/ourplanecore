@@ -84,6 +84,7 @@ public sealed class AppSettings
     public double MassingLevelSpacingFeet { get; set; } = SmartMassingDraftService.DefaultLevelSpacingFeet;
     public double LeftPanelWidth { get; set; } = 248.0;
     public double RightPanelWidth { get; set; } = 269.0;
+    public double ExcelMacroStripTopFraction { get; set; } = 0.5;
     // Main window placement. Width/Height == 0 means "never saved" (fresh install)
     // so startup keeps the XAML defaults untouched. Restored on next launch,
     // clamped to the visible desktop so the window can't open off-screen.

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using Microsoft.CSharp.RuntimeBinder;
 
 namespace OurPlanCore;
@@ -15,7 +16,10 @@ public sealed record ExcelMacroTakeoffExportResult(
     string SelectedRange = "",
     string MacroName = "",
     string PreprocessMacroName = "",
-    int PreprocessRunCount = 0);
+    int PreprocessRunCount = 0,
+    string AfterMacroName = "",
+    string AfterMacroRange = "",
+    int ProtectedRowCount = 0);
 
 internal sealed record ExcelMacroFloorRange(
     int Floor,
@@ -23,6 +27,12 @@ internal sealed record ExcelMacroFloorRange(
     int EndRow,
     int StartColumn,
     int EndColumn);
+
+internal sealed record ExcelMacroProtectedCellSnapshot(
+    string Token,
+    bool HasFormula,
+    object? Formula,
+    object? Value);
 
 public static class ExcelMacroTakeoffExportService
 {
@@ -139,6 +149,29 @@ public static class ExcelMacroTakeoffExportService
             automationStage = $"running {action.MacroName}";
             RunWorkbookMacro(excel, workbook, action.MacroName);
 
+            int protectedRowCount = 0;
+            if (!string.IsNullOrWhiteSpace(action.AfterMacroName))
+            {
+                automationStage =
+                    $"protecting mandatory rows in {action.AfterMacroRange}";
+                IReadOnlyList<ExcelMacroProtectedCellSnapshot> protectedRows =
+                    ProtectOutputRows(sheet, action);
+                protectedRowCount = protectedRows.Count;
+                try
+                {
+                    dynamic afterRange = sheet.Range[action.AfterMacroRange];
+                    afterRange.Select();
+                    automationStage = $"running {action.AfterMacroName}";
+                    RunWorkbookMacro(excel, workbook, action.AfterMacroName);
+                }
+                finally
+                {
+                    automationStage =
+                        $"restoring {protectedRowCount} mandatory output row(s)";
+                    RestoreProtectedOutputRows(sheet, action, protectedRows);
+                }
+            }
+
             string writtenRange =
                 $"{CellAddress(startRow, writeColumn)}:{CellAddress(endRow, endWriteColumn)}";
             string selectedRange =
@@ -149,7 +182,12 @@ public static class ExcelMacroTakeoffExportService
                 (preprocessRunCount > 0
                     ? $"ran {action.PerFloorPreprocessMacroName} for {preprocessRunCount} floor(s), "
                     : "") +
-                $"selected {selectedRange}, ran {action.MacroName}.";
+                $"selected {selectedRange}, ran {action.MacroName}" +
+                (!string.IsNullOrWhiteSpace(action.AfterMacroName)
+                    ? $", protected {protectedRowCount} mandatory row(s), " +
+                      $"selected {action.AfterMacroRange}, ran {action.AfterMacroName}"
+                    : "") +
+                ".";
             AppLog.Info($"Excel macro export completed. Workbook={action.WorkbookName}; Sheet={action.SheetName}; {message}");
             return new ExcelMacroTakeoffExportResult(
                 true,
@@ -159,7 +197,10 @@ public static class ExcelMacroTakeoffExportService
                 selectedRange,
                 action.MacroName,
                 action.PerFloorPreprocessMacroName,
-                preprocessRunCount);
+                preprocessRunCount,
+                action.AfterMacroName,
+                action.AfterMacroRange,
+                protectedRowCount);
         }
         catch (COMException ex)
         {
@@ -262,6 +303,54 @@ public static class ExcelMacroTakeoffExportService
         return new string(chars.ToArray());
     }
 
+    internal static bool IsProtectedOutputLabel(
+        string? value,
+        IReadOnlyList<string> protectedLabels)
+    {
+        string normalized = NormalizeOutputLabel(value);
+        if (normalized.Length == 0)
+            return false;
+        foreach (string label in protectedLabels)
+        {
+            if (string.Equals(
+                    normalized,
+                    NormalizeOutputLabel(label),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    internal static bool TryValidateRangeAddress(string value, out string error)
+    {
+        error = "";
+        Match match = Regex.Match(
+            value?.Trim() ?? "",
+            @"^\$?(?<c1>[A-Za-z]+)\$?(?<r1>\d+):\$?(?<c2>[A-Za-z]+)\$?(?<r2>\d+)$",
+            RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            error = "Enter a rectangular Excel range, for example A25:H1367.";
+            return false;
+        }
+
+        int firstColumn = ColumnNumber(match.Groups["c1"].Value);
+        int lastColumn = ColumnNumber(match.Groups["c2"].Value);
+        bool rowsValid =
+            int.TryParse(match.Groups["r1"].Value, out int firstRow) &&
+            int.TryParse(match.Groups["r2"].Value, out int lastRow) &&
+            firstRow >= 1 &&
+            lastRow >= firstRow;
+        if (firstColumn <= 0 || lastColumn < firstColumn || !rowsValid)
+        {
+            error = "The Excel cleanup range must run from top-left to bottom-right.";
+            return false;
+        }
+        return true;
+    }
+
     private static int FindNextStartRow(dynamic sheet, ExcelMacroExportActionConfig action)
     {
         int startColumn = ColumnNumber(action.ScanStartColumn);
@@ -309,6 +398,126 @@ public static class ExcelMacroTakeoffExportService
 
         openNames = string.Join(", ", names);
         return null;
+    }
+
+    private static IReadOnlyList<ExcelMacroProtectedCellSnapshot> ProtectOutputRows(
+        dynamic sheet,
+        ExcelMacroExportActionConfig action)
+    {
+        dynamic outputRange = sheet.Range[action.AfterMacroRange];
+        int firstRow = Convert.ToInt32(outputRange.Row, CultureInfo.InvariantCulture);
+        int rowCount = Convert.ToInt32(outputRange.Rows.Count, CultureInfo.InvariantCulture);
+        int columnCount = Convert.ToInt32(
+            outputRange.Columns.Count,
+            CultureInfo.InvariantCulture);
+        object? values = outputRange.Value2;
+        var snapshots = new List<ExcelMacroProtectedCellSnapshot>();
+        try
+        {
+            for (int rowOffset = 0; rowOffset < rowCount; rowOffset++)
+            {
+                bool protectedRow = false;
+                for (int columnOffset = 0; columnOffset < columnCount; columnOffset++)
+                {
+                    object? value = MatrixValue(
+                        values,
+                        rowOffset,
+                        columnOffset,
+                        rowCount,
+                        columnCount);
+                    if (!IsProtectedOutputLabel(
+                            Convert.ToString(value, CultureInfo.InvariantCulture),
+                            action.AfterMacroProtectedLabels))
+                    {
+                        continue;
+                    }
+                    protectedRow = true;
+                    break;
+                }
+                if (!protectedRow)
+                    continue;
+
+                dynamic guardCell = sheet.Cells[firstRow + rowOffset, 3];
+                bool hasFormula = Convert.ToBoolean(
+                    guardCell.HasFormula,
+                    CultureInfo.InvariantCulture);
+                object? formula = guardCell.Formula;
+                object? value2 = guardCell.Value2;
+                string token = $"__OPC_KEEP_{Guid.NewGuid():N}__";
+                guardCell.Value2 = token;
+                snapshots.Add(new ExcelMacroProtectedCellSnapshot(
+                    token,
+                    hasFormula,
+                    formula,
+                    value2));
+            }
+        }
+        catch
+        {
+            RestoreProtectedOutputRows(sheet, action, snapshots);
+            throw;
+        }
+        return snapshots;
+    }
+
+    private static void RestoreProtectedOutputRows(
+        dynamic sheet,
+        ExcelMacroExportActionConfig action,
+        IReadOnlyList<ExcelMacroProtectedCellSnapshot> snapshots)
+    {
+        if (snapshots.Count == 0)
+            return;
+
+        dynamic outputRange = sheet.Range[action.AfterMacroRange];
+        int firstRow = Convert.ToInt32(outputRange.Row, CultureInfo.InvariantCulture);
+        int rowCount = Convert.ToInt32(outputRange.Rows.Count, CultureInfo.InvariantCulture);
+        dynamic markerRange = sheet.Range[
+            sheet.Cells[firstRow, 3],
+            sheet.Cells[firstRow + rowCount - 1, 3]];
+        object? markerValues = markerRange.Value2;
+        var markerRows = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int rowOffset = 0; rowOffset < rowCount; rowOffset++)
+        {
+            string marker = Convert.ToString(
+                MatrixValue(markerValues, rowOffset, 0, rowCount, 1),
+                CultureInfo.InvariantCulture) ?? "";
+            if (marker.StartsWith("__OPC_KEEP_", StringComparison.Ordinal))
+                markerRows[marker] = firstRow + rowOffset;
+        }
+
+        int missingCount = 0;
+        foreach (ExcelMacroProtectedCellSnapshot snapshot in snapshots)
+        {
+            if (!markerRows.TryGetValue(snapshot.Token, out int row))
+            {
+                missingCount++;
+                continue;
+            }
+            dynamic cell = sheet.Cells[row, 3];
+            if (snapshot.HasFormula)
+                cell.Formula = snapshot.Formula;
+            else
+                cell.Value2 = snapshot.Value;
+        }
+        if (missingCount > 0)
+        {
+            throw new InvalidOperationException(
+                $"{missingCount} mandatory Excel output row(s) disappeared during zero-row cleanup.");
+        }
+    }
+
+    private static object? MatrixValue(
+        object? values,
+        int zeroBasedRow,
+        int zeroBasedColumn,
+        int rowCount,
+        int columnCount)
+    {
+        if (values is not Array matrix)
+            return rowCount == 1 && columnCount == 1 ? values : null;
+        int row = matrix.GetLowerBound(0) + zeroBasedRow;
+        int column = matrix.GetLowerBound(1) + zeroBasedColumn;
+        return matrix.GetValue(row, column);
     }
 
     private static void RunWorkbookMacro(
@@ -359,6 +568,12 @@ public static class ExcelMacroTakeoffExportService
                  string.IsNullOrWhiteSpace(action.SheetName) ||
                  string.IsNullOrWhiteSpace(action.MacroName))
             error = $"{action.Label}: workbook, sheet, and macro names are required.";
+        else if (string.IsNullOrWhiteSpace(action.AfterMacroName) !=
+                 string.IsNullOrWhiteSpace(action.AfterMacroRange))
+            error = $"{action.Label}: after-macro name and range must be configured together.";
+        else if (!string.IsNullOrWhiteSpace(action.AfterMacroRange) &&
+                 !TryValidateRangeAddress(action.AfterMacroRange, out string rangeError))
+            error = $"{action.Label}: {rangeError}";
         return error.Length == 0;
     }
 
@@ -390,6 +605,19 @@ public static class ExcelMacroTakeoffExportService
         .Replace('\r', ' ')
         .Replace('\n', ' ')
         .Trim();
+
+    private static string NormalizeOutputLabel(string? value)
+    {
+        string normalized = (value ?? "")
+            .Replace('\u00A0', ' ')
+            .Replace('\t', ' ')
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+        while (normalized.Contains("  ", StringComparison.Ordinal))
+            normalized = normalized.Replace("  ", " ", StringComparison.Ordinal);
+        return normalized;
+    }
 
     private static ExcelMacroTakeoffExportResult Failure(string message) =>
         new(false, message);

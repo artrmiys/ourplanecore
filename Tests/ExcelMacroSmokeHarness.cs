@@ -53,8 +53,16 @@ internal static class ExcelMacroSmokeHarness
             excel.AutomationSecurity = 1; // msoAutomationSecurityLow, disposable local copy only.
             workbookObject = excel.Workbooks.Open(tempWorkbook);
             dynamic workbook = workbookObject;
+            sheetObject = workbook.Worksheets["Detailed Frame List"];
+            dynamic sheet = sheetObject;
 
             ExcelMacroExportConfig config = ExcelMacroExportConfig.BuildDefault();
+            ExcelMacroExportActionConfig wallsAction =
+                config.Action(ExcelMacroExportActionIds.Walls);
+            int protectedRowsBefore = CountProtectedRows(sheet, wallsAction);
+            True(
+                protectedRowsBefore > 0,
+                "Disposable workbook has no mandatory Walls output rows to protect.");
             AssertSuccess(
                 ExcelMacroTakeoffExportService.ExportAndRunWithExcel(
                     [new ExcelMacroPayloadRow("1st", 100d, "SF")],
@@ -69,10 +77,21 @@ internal static class ExcelMacroSmokeHarness
                         new ExcelMacroPayloadRow("1", null, "", IsFloorHeader: true),
                         new ExcelMacroPayloadRow("ext 2x6", 40d, "FT"),
                     ],
-                    config.Action(ExcelMacroExportActionIds.Walls),
+                    wallsAction,
                     excelObject),
                 "J12:L13",
-                "A3_Walls_Calc_AllGroup");
+                "A3_Walls_Calc_AllGroup",
+                expectedAfterMacro: "B_DeleteZeroRowsOnlyIn_AtoH",
+                expectedAfterRange: "A25:H1367",
+                expectedProtectedRows: protectedRowsBefore);
+            int protectedRowsAfter = CountProtectedRows(sheet, wallsAction);
+            True(
+                protectedRowsAfter >= protectedRowsBefore,
+                $"Mandatory Walls output rows were lost: before={protectedRowsBefore}, " +
+                $"after={protectedRowsAfter}.");
+            True(
+                !RangeContainsText(sheet, "C25:C1367", "__OPC_KEEP_"),
+                "A temporary mandatory-row marker remained after Walls cleanup.");
 
             AssertSuccess(
                 ExcelMacroTakeoffExportService.ExportAndRunWithExcel(
@@ -125,8 +144,6 @@ internal static class ExcelMacroSmokeHarness
                 "A5_Openings",
                 expectedPreprocessRuns: 2);
 
-            sheetObject = workbook.Worksheets["Detailed Frame List"];
-            dynamic sheet = sheetObject;
             Equal(100d, Convert.ToDouble(sheet.Range["K10"].Value2, CultureInfo.InvariantCulture), "SQFT source");
             Equal(40d, Convert.ToDouble(sheet.Range["K13"].Value2, CultureInfo.InvariantCulture), "Walls source");
             True(RangeFormulaContains(sheet, "Y145:AF155", "K15"), "Gables macro linked the Gables source");
@@ -147,7 +164,7 @@ internal static class ExcelMacroSmokeHarness
             Equal(2d, Convert.ToDouble(sheet.Range["AA162"].Value2, CultureInfo.InvariantCulture), "Floor 2 grouped quantity");
 
             Console.WriteLine(
-                "PASS Excel COM smoke: SQFT/Gables/Truss Heel A2, Walls A3, Parapet A4, Openings C+A5, Eve/Rakes A6.");
+                "PASS Excel COM smoke: SQFT/Gables/Truss Heel A2, Walls A3+B with mandatory-row preservation, Parapet A4, Openings C+A5, Eve/Rakes A6.");
             return 0;
         }
         catch (Exception ex)
@@ -199,7 +216,10 @@ internal static class ExcelMacroSmokeHarness
         ExcelMacroTakeoffExportResult result,
         string expectedRange,
         string expectedMacro,
-        int expectedPreprocessRuns = 0)
+        int expectedPreprocessRuns = 0,
+        string expectedAfterMacro = "",
+        string expectedAfterRange = "",
+        int expectedProtectedRows = 0)
     {
         if (!result.Success)
             throw new InvalidOperationException(result.Message);
@@ -216,11 +236,114 @@ internal static class ExcelMacroSmokeHarness
                 $"{expectedMacro}: expected {expectedPreprocessRuns} preprocess run(s), " +
                 $"got {result.PreprocessRunCount}.");
         }
+        if (!string.Equals(
+                result.AfterMacroName,
+                expectedAfterMacro,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{expectedMacro}: expected after-macro '{expectedAfterMacro}', " +
+                $"got '{result.AfterMacroName}'.");
+        }
+        if (!string.Equals(
+                result.AfterMacroRange,
+                expectedAfterRange,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"{expectedMacro}: expected after-range '{expectedAfterRange}', " +
+                $"got '{result.AfterMacroRange}'.");
+        }
+        if (result.ProtectedRowCount != expectedProtectedRows)
+        {
+            throw new InvalidOperationException(
+                $"{expectedMacro}: expected {expectedProtectedRows} protected row(s), " +
+                $"got {result.ProtectedRowCount}.");
+        }
+    }
+
+    private static int CountProtectedRows(
+        dynamic sheet,
+        ExcelMacroExportActionConfig action)
+    {
+        dynamic range = sheet.Range[action.AfterMacroRange];
+        object? values = range.Value2;
+        int rowCount = Convert.ToInt32(range.Rows.Count, CultureInfo.InvariantCulture);
+        int columnCount = Convert.ToInt32(
+            range.Columns.Count,
+            CultureInfo.InvariantCulture);
+        int count = 0;
+        for (int rowOffset = 0; rowOffset < rowCount; rowOffset++)
+        {
+            bool isProtected = false;
+            for (int columnOffset = 0; columnOffset < columnCount; columnOffset++)
+            {
+                string? value = Convert.ToString(
+                    MatrixValue(values, rowOffset, columnOffset, rowCount, columnCount),
+                    CultureInfo.InvariantCulture);
+                if (!ExcelMacroTakeoffExportService.IsProtectedOutputLabel(
+                        value,
+                        action.AfterMacroProtectedLabels))
+                {
+                    continue;
+                }
+                isProtected = true;
+                break;
+            }
+            if (isProtected)
+                count++;
+        }
+        return count;
+    }
+
+    private static bool RangeContainsText(
+        dynamic sheet,
+        string address,
+        string expectedText)
+    {
+        dynamic range = sheet.Range[address];
+        object? values = range.Value2;
+        int rowCount = Convert.ToInt32(range.Rows.Count, CultureInfo.InvariantCulture);
+        int columnCount = Convert.ToInt32(
+            range.Columns.Count,
+            CultureInfo.InvariantCulture);
+        for (int rowOffset = 0; rowOffset < rowCount; rowOffset++)
+        {
+            for (int columnOffset = 0; columnOffset < columnCount; columnOffset++)
+            {
+                string value = Convert.ToString(
+                    MatrixValue(values, rowOffset, columnOffset, rowCount, columnCount),
+                    CultureInfo.InvariantCulture) ?? "";
+                if (value.Contains(expectedText, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private static object? MatrixValue(
+        object? values,
+        int zeroBasedRow,
+        int zeroBasedColumn,
+        int rowCount,
+        int columnCount)
+    {
+        if (values is not Array matrix)
+            return rowCount == 1 && columnCount == 1 ? values : null;
+        int row = matrix.GetLowerBound(0) + zeroBasedRow;
+        int column = matrix.GetLowerBound(1) + zeroBasedColumn;
+        return matrix.GetValue(row, column);
     }
 
     private static void Equal(double expected, double actual, string label)
     {
         if (Math.Abs(expected - actual) > 0.000001)
+            throw new InvalidOperationException($"{label}: expected {expected}, got {actual}.");
+    }
+
+    private static void Equal(int expected, int actual, string label)
+    {
+        if (expected != actual)
             throw new InvalidOperationException($"{label}: expected {expected}, got {actual}.");
     }
 
