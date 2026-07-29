@@ -312,5 +312,25 @@ Implementation checkpoint verification:
 - final Debug runtime: process responsive, `0 ERROR` after the latest
   `Application startup`, with `Loaded takeoffs` and `Viewport` evidence.
 
-Release package details are recorded in `docs/DEVELOPMENT_LOG.md` after local
-deployment.
+## Local release package
+
+The locally installed package was produced from documentation/source commit
+`98f8ad50e5fe250a23c855b4753a9231f1bc045c`:
+
+- compressed self-contained single-file EXE: `171,886,381` bytes;
+- installed path:
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`;
+- SHA-256:
+  `5F4960E0A56805C915EFBAF861F4AF6D2EC6E77E727CCB6279E39FB9440E878C`;
+- ProductVersion:
+  `2.2.5+98f8ad50e5fe250a23c855b4753a9231f1bc045c`;
+- installed `TemplateCom.xlsm` exactly matches the verified source template,
+  SHA-256
+  `39554D070D0B2B2098623963EC6E8B52B421D45D964B337DFA076289C5B7C531`;
+- previous package files remain available as immutable `.bak` and timestamped
+  `.bak-20260729-...` files;
+- `C:\Users\User\Desktop\OurPlanCore.lnk` targets the installed update EXE and
+  uses the update directory as its working directory;
+- installed runtime validation loaded the Agrace job and emitted
+  `Loaded takeoffs` and `Viewport` with `0 ERROR` after the latest startup;
+- GitHub publication was not requested.

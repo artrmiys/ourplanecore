@@ -32,6 +32,23 @@
   `Viewport` evidence.
 - Canonical operator/implementation reference:
   `docs/30-takeoffs-measurements/EXCEL_MACRO_EXPORT_WORKFLOW_2026_07_29.md`.
+- Published and installed a compressed self-contained single-file EXE from
+  commit `98f8ad50e5fe250a23c855b4753a9231f1bc045c`. Installed size:
+  `171,886,381` bytes; SHA-256:
+  `5F4960E0A56805C915EFBAF861F4AF6D2EC6E77E727CCB6279E39FB9440E878C`.
+- Installed the verified `TemplateCom.xlsm` with matching source/target SHA-256
+  `39554D070D0B2B2098623963EC6E8B52B421D45D964B337DFA076289C5B7C531`.
+  Previous EXE/template/download files were preserved as immutable `.bak` and
+  timestamped backup files.
+- Retargeted `C:\Users\User\Desktop\OurPlanCore.lnk` to
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`. The installed
+  process remained responsive after loading Agrace; the latest startup segment
+  contains `Loaded takeoffs`, `Viewport`, and `0 ERROR`.
+- The first validation attempt correctly rolled the package back because a
+  stale `.~lock` from stopped Debug PID `21080` blocked automatic job open.
+  The dead-PID lease was preserved as
+  `.~lock.stale-20260729-0246-pid21080.bak`; the second transactional
+  deployment passed. GitHub publication was not requested.
 
 ## 2026-07-22 v2.2.5 High-Zoom Area Rendering
 
