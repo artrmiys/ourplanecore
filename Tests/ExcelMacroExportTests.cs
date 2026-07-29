@@ -47,16 +47,36 @@ internal static class ExcelMacroExportTests
             "A6_Eve_Rakes",
             config.Action(ExcelMacroExportActionIds.EveRakes).MacroName,
             "Eve / Rakes macro");
+        Equal(
+            ExcelMacroRowOrderModes.WallsStrict,
+            walls.RowOrderMode,
+            "Walls row order");
+        Equal(
+            ExcelMacroRowOrderModes.EvesThenRakesByValue,
+            config.Action(ExcelMacroExportActionIds.EveRakes).RowOrderMode,
+            "Eve / Rakes row order");
+        Equal(
+            "sqft,walls,gables,truss_heel,parapet,eve_rakes,openings",
+            string.Join(",", config.BatchActionOrder),
+            "ALL sequence");
 
         ExcelMacroExportConfig legacy = config.Clone();
         legacy.SchemaVersion = 1;
         legacy.Action(ExcelMacroExportActionIds.Openings).PerFloorPreprocessMacroName = "";
+        legacy.Action(ExcelMacroExportActionIds.Walls).RowOrderMode =
+            ExcelMacroRowOrderModes.Source;
+        legacy.BatchActionOrder = [];
         ExcelMacroExportConfig upgraded =
             ExcelMacroExportConfig.UpgradeForCurrentSchema(legacy);
         Equal(
             "C_SumNearWindowValues",
             upgraded.Action(ExcelMacroExportActionIds.Openings).PerFloorPreprocessMacroName,
             "schema 1 settings gain the Openings preprocess macro");
+        Equal(
+            ExcelMacroRowOrderModes.WallsStrict,
+            upgraded.Action(ExcelMacroExportActionIds.Walls).RowOrderMode,
+            "old settings gain strict wall order");
+        Equal(7, upgraded.BatchActionOrder.Count, "old settings gain ALL sequence");
     }
 
     public static void WallsBuildNumericFloorGroupsAndImperialValues()
@@ -226,6 +246,103 @@ internal static class ExcelMacroExportTests
         Equal(2, eveRakes.Rows.Count, "Eve / Rakes row count");
         Equal("eve 12 main", eveRakes.Rows[0].Name, "Eve route");
         Equal("rake 12 main", eveRakes.Rows[1].Name, "Rake route");
+    }
+
+    public static void WallsUseStrictPerFloorExportOrder()
+    {
+        OurPlanCoreJob job = Job();
+        string floor = Path.Combine(
+            job.TakeoffsRoot,
+            "House 1",
+            "walls",
+            "1st floor walls");
+        IReadOnlyList<TakeoffItem> items =
+        [
+            LineItem(Path.Combine(floor, "2x4 walls"), "2x4 walls", 20),
+            LineItem(Path.Combine(floor, "dem 2x4"), "dem 2x4", 12),
+            LineItem(Path.Combine(floor, "ext short"), "ext short", 15),
+            PointItem(Path.Combine(floor, "corners"), "corners", 8),
+            LineItem(Path.Combine(floor, "cor 2x6"), "cor 2x6", 9),
+            LineItem(Path.Combine(floor, "ext maximum"), "ext maximum", 40),
+            LineItem(Path.Combine(floor, "2x6 walls"), "2x6 walls", 18),
+            LineItem(Path.Combine(floor, "misc"), "misc", 5),
+        ];
+
+        ExcelMacroPayloadResult result = ExcelMacroPayloadBuilder.Build(
+            job,
+            items,
+            [Path.Combine(job.TakeoffsRoot, "House 1")],
+            0.3048,
+            ExcelMacroExportConfig.BuildDefault(),
+            ExcelMacroExportActionIds.Walls);
+
+        True(result.Success, result.Message);
+        Equal(
+            "1,corners,ext maximum,ext short,cor 2x6,dem 2x4,2x6 walls,2x4 walls,misc",
+            string.Join(",", result.Rows.Select(row => row.Name)),
+            "strict wall order");
+    }
+
+    public static void EvesAndRakesSortByLfDescending()
+    {
+        OurPlanCoreJob job = Job();
+        string role = Path.Combine(job.TakeoffsRoot, "House 1", "eves rakes");
+        IReadOnlyList<TakeoffItem> items =
+        [
+            LineItem(Path.Combine(role, "rakes", "Rake small"), "rake small", 8),
+            LineItem(Path.Combine(role, "eves", "Eve small"), "eve small", 10),
+            LineItem(Path.Combine(role, "Returns"), "returns", 3),
+            LineItem(Path.Combine(role, "rakes", "Rake maximum"), "rake maximum", 24),
+            LineItem(Path.Combine(role, "eves", "Eve maximum"), "eve maximum", 30),
+        ];
+
+        ExcelMacroPayloadResult result = ExcelMacroPayloadBuilder.Build(
+            job,
+            items,
+            [Path.Combine(job.TakeoffsRoot, "House 1")],
+            0.3048,
+            ExcelMacroExportConfig.BuildDefault(),
+            ExcelMacroExportActionIds.EveRakes);
+
+        True(result.Success, result.Message);
+        Equal(
+            "eve maximum,eve small,rake maximum,rake small,returns",
+            string.Join(",", result.Rows.Select(row => row.Name)),
+            "Eve/Rakes LF order");
+    }
+
+    public static void AllScopeUsesOneBuildingAndRejectsMixedRoots()
+    {
+        OurPlanCoreJob job = Job();
+        string house1 = Path.Combine(job.TakeoffsRoot, "House 1");
+        string house2 = Path.Combine(job.TakeoffsRoot, "House 2");
+        TakeoffItem first = LineItem(
+            Path.Combine(house1, "walls", "1", "ext"),
+            "ext",
+            10);
+        TakeoffItem second = LineItem(
+            Path.Combine(house2, "walls", "1", "ext"),
+            "ext",
+            20);
+        ExcelMacroExportConfig config = ExcelMacroExportConfig.BuildDefault();
+
+        ExcelMacroBatchScopeResult one = ExcelMacroBatchPlanner.ResolveScope(
+            job,
+            [first, second],
+            [first.FolderPath],
+            config);
+        True(one.Success, one.Message);
+        Equal(
+            Path.GetFullPath(house1),
+            Path.GetFullPath(one.RootPath),
+            "ALL ascends from an item to its building");
+
+        ExcelMacroBatchScopeResult mixed = ExcelMacroBatchPlanner.ResolveScope(
+            job,
+            [first, second],
+            [job.TakeoffsRoot],
+            config);
+        True(!mixed.Success, "ALL must reject a job-root selection with two buildings");
     }
 
     private static OurPlanCoreJob Job() =>

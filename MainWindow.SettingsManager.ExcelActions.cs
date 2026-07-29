@@ -20,12 +20,20 @@ public partial class MainWindow
     private TextBox? _excelSettingsBlankRows;
     private TextBox? _excelSettingsMacro;
     private TextBox? _excelSettingsPreprocessMacro;
+    private TextBox? _excelSettingsBatchOrder;
     private ComboBox? _excelSettingsUnits;
+    private ComboBox? _excelSettingsRowOrder;
     private CheckBox? _excelSettingsFloorHeaders;
     private readonly Dictionary<int, TextBox> _excelSettingsFloorAliases = [];
     private TextBlock? _excelSettingsStatus;
     private string _excelSettingsActionId = ExcelMacroExportActionIds.Sqft;
     private bool _excelSettingsSyncing;
+    private static readonly KeyValuePair<string, string>[] ExcelRowOrderOptions =
+    [
+        new(ExcelMacroRowOrderModes.Source, "Keep tree order"),
+        new(ExcelMacroRowOrderModes.WallsStrict, "Walls: corners, LF, groups"),
+        new(ExcelMacroRowOrderModes.EvesThenRakesByValue, "Eve LF, then Rake LF"),
+    ];
 
     private FrameworkElement BuildExcelActionsPanel()
     {
@@ -61,6 +69,22 @@ public partial class MainWindow
         actionBar.Children.Add(_excelSettingsAction);
         content.Children.Add(actionBar);
 
+        var batchBar = HBar();
+        batchBar.Children.Add(new TextBlock
+        {
+            Text = "ALL sequence",
+            Width = 130,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        _excelSettingsBatchOrder = new TextBox
+        {
+            Width = 620,
+            ToolTip =
+                "Comma-separated action ids. Default: sqft, walls, gables, truss_heel, parapet, eve_rakes, openings",
+        };
+        batchBar.Children.Add(_excelSettingsBatchOrder);
+        content.Children.Add(batchBar);
+
         var fields = new Grid { MaxWidth = 820, HorizontalAlignment = HorizontalAlignment.Left };
         fields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
         fields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(260) });
@@ -91,6 +115,19 @@ public partial class MainWindow
             AddExcelField(fields, 5, 0, "Per-floor VBA first", 1);
         _excelSettingsPreprocessMacro.ToolTip =
             "Optional. Runs once for each floor's three-column item range before the main VBA macro.";
+        AddExcelLabel(fields, 5, 2, "Row order");
+        _excelSettingsRowOrder = new ComboBox
+        {
+            Margin = new Thickness(0, 0, 12, 6),
+            ItemsSource = ExcelRowOrderOptions,
+            DisplayMemberPath = "Value",
+            SelectedValuePath = "Key",
+            ToolTip =
+                "Source keeps tree order. WallsStrict and EvesThenRakesByValue apply the configured export ordering.",
+        };
+        Grid.SetRow(_excelSettingsRowOrder, 5);
+        Grid.SetColumn(_excelSettingsRowOrder, 3);
+        fields.Children.Add(_excelSettingsRowOrder);
         fields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _excelSettingsFloorHeaders = new CheckBox
         {
@@ -236,7 +273,7 @@ public partial class MainWindow
             BindExcelActionFields();
             SetExcelSettingsStatus(
                 $"Effective source: {ExcelActionsSettingsSource()}. " +
-                "Right-panel buttons use this effective configuration.");
+                "The vertical Excel strip uses this effective configuration.");
         }
         finally
         {
@@ -258,8 +295,13 @@ public partial class MainWindow
         SetText(_excelSettingsBlankRows, action.BlankRowsBetween.ToString());
         SetText(_excelSettingsMacro, action.MacroName);
         SetText(_excelSettingsPreprocessMacro, action.PerFloorPreprocessMacroName);
+        SetText(
+            _excelSettingsBatchOrder,
+            string.Join(", ", _excelMacroExportConfig.BatchActionOrder));
         if (_excelSettingsUnits != null)
             _excelSettingsUnits.SelectedItem = action.UnitSystem;
+        if (_excelSettingsRowOrder != null)
+            _excelSettingsRowOrder.SelectedValue = action.RowOrderMode;
         if (_excelSettingsFloorHeaders != null)
             _excelSettingsFloorHeaders.IsChecked = action.UseFloorHeaders;
 
@@ -300,6 +342,18 @@ public partial class MainWindow
                  blankRows < 0)
             error = "Blank rows between blocks must be zero or greater.";
 
+        List<string> batchOrder = SplitExcelAliases(TextOf(_excelSettingsBatchOrder));
+        HashSet<string> actionIds = _excelMacroExportConfig.Actions
+            .Select(item => item.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        List<string> unknownBatchIds = batchOrder
+            .Where(id => !actionIds.Contains(id))
+            .ToList();
+        if (error.Length == 0 && batchOrder.Count == 0)
+            error = "ALL sequence must contain at least one action id.";
+        else if (error.Length == 0 && unknownBatchIds.Count > 0)
+            error = $"Unknown ALL action id: {string.Join(", ", unknownBatchIds)}.";
+
         if (error.Length > 0)
             return false;
 
@@ -315,6 +369,10 @@ public partial class MainWindow
         action.UnitSystem = _excelSettingsUnits?.SelectedItem as string ?? "Imperial";
         action.UseFloorHeaders = _excelSettingsFloorHeaders?.IsChecked == true;
         action.PerFloorPreprocessMacroName = TextOf(_excelSettingsPreprocessMacro);
+        action.RowOrderMode =
+            _excelSettingsRowOrder?.SelectedValue as string ??
+            ExcelMacroRowOrderModes.Source;
+        _excelMacroExportConfig.BatchActionOrder = batchOrder;
 
         var floorRules = new List<ExcelMacroFloorRule>();
         foreach (int floor in Enumerable.Range(0, 6))

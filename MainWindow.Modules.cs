@@ -57,7 +57,7 @@ public partial class MainWindow
                 "file.excelMacroSqft" or "file.excelMacroWalls" or
                 "file.excelMacroOpenings" or "file.excelMacroGables" or
                 "file.excelMacroTrussHeel" or "file.excelMacroParapet" or
-                "file.excelMacroEveRakes" => ModuleId.ExcelIntegration,
+                "file.excelMacroEveRakes" or "file.excelMacroAll" => ModuleId.ExcelIntegration,
             "file.exportPdf" => ModuleId.PdfOutput,
             _ when id.StartsWith("ai.", StringComparison.OrdinalIgnoreCase) => ModuleId.Ai,
             _ => default,
@@ -81,7 +81,7 @@ public partial class MainWindow
             "file.excelMacroSqft" or "file.excelMacroWalls" or
             "file.excelMacroOpenings" or "file.excelMacroGables" or
             "file.excelMacroTrussHeel" or "file.excelMacroParapet" or
-            "file.excelMacroEveRakes" or "file.exportPdf";
+            "file.excelMacroEveRakes" or "file.excelMacroAll" or "file.exportPdf";
     }
 
     private bool RequireModule(ModuleId module, string operation)

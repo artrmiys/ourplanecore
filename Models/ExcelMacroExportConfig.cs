@@ -6,9 +6,10 @@ namespace OurPlanCore;
 
 public sealed class ExcelMacroExportConfig
 {
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
     public List<ExcelMacroExportActionConfig> Actions { get; set; } = [];
     public List<ExcelMacroFloorRule> FloorRules { get; set; } = [];
+    public List<string> BatchActionOrder { get; set; } = [];
 
     public ExcelMacroExportConfig Clone() =>
         new()
@@ -16,6 +17,7 @@ public sealed class ExcelMacroExportConfig
             SchemaVersion = SchemaVersion,
             Actions = (Actions ?? []).Where(action => action != null).Select(action => action.Clone()).ToList(),
             FloorRules = (FloorRules ?? []).Where(rule => rule != null).Select(rule => rule.Clone()).ToList(),
+            BatchActionOrder = [.. (BatchActionOrder ?? [])],
         };
 
     public ExcelMacroExportActionConfig Action(string id)
@@ -59,6 +61,28 @@ public sealed class ExcelMacroExportConfig
                         .PerFloorPreprocessMacroName;
             }
         }
+        if (sourceSchema < 3)
+        {
+            foreach (ExcelMacroExportActionConfig action in result.Actions)
+            {
+                ExcelMacroExportActionConfig? defaultAction =
+                    defaults.Actions.FirstOrDefault(item =>
+                        string.Equals(item.Id, action.Id, StringComparison.OrdinalIgnoreCase));
+                action.RowOrderMode =
+                    defaultAction?.RowOrderMode ?? ExcelMacroRowOrderModes.Source;
+            }
+            result.BatchActionOrder = [.. defaults.BatchActionOrder];
+        }
+        foreach (ExcelMacroExportActionConfig action in result.Actions)
+        {
+            if (!string.IsNullOrWhiteSpace(action.RowOrderMode))
+                continue;
+            action.RowOrderMode = defaults.Actions.FirstOrDefault(item =>
+                    string.Equals(item.Id, action.Id, StringComparison.OrdinalIgnoreCase))
+                ?.RowOrderMode ?? ExcelMacroRowOrderModes.Source;
+        }
+        if (result.BatchActionOrder.Count == 0)
+            result.BatchActionOrder = [.. defaults.BatchActionOrder];
         return result;
     }
 
@@ -95,6 +119,7 @@ public sealed class ExcelMacroExportConfig
                     BlankRowsBetween = 1,
                     MacroName = "A3_Walls_Calc_AllGroup",
                     UseFloorHeaders = true,
+                    RowOrderMode = ExcelMacroRowOrderModes.WallsStrict,
                 },
                 new ExcelMacroExportActionConfig
                 {
@@ -167,6 +192,7 @@ public sealed class ExcelMacroExportConfig
                     StartRow = 10,
                     BlankRowsBetween = 1,
                     MacroName = "A6_Eve_Rakes",
+                    RowOrderMode = ExcelMacroRowOrderModes.EvesThenRakesByValue,
                 },
             ],
             FloorRules =
@@ -177,6 +203,16 @@ public sealed class ExcelMacroExportConfig
                 new ExcelMacroFloorRule { Floor = 3, Aliases = ["3", "3rd", "third"] },
                 new ExcelMacroFloorRule { Floor = 4, Aliases = ["4", "4th", "fourth"] },
                 new ExcelMacroFloorRule { Floor = 5, Aliases = ["5", "5th", "fifth"] },
+            ],
+            BatchActionOrder =
+            [
+                ExcelMacroExportActionIds.Sqft,
+                ExcelMacroExportActionIds.Walls,
+                ExcelMacroExportActionIds.Gables,
+                ExcelMacroExportActionIds.TrussHeel,
+                ExcelMacroExportActionIds.Parapet,
+                ExcelMacroExportActionIds.EveRakes,
+                ExcelMacroExportActionIds.Openings,
             ],
         };
 }
@@ -190,6 +226,13 @@ public static class ExcelMacroExportActionIds
     public const string TrussHeel = "truss_heel";
     public const string Parapet = "parapet";
     public const string EveRakes = "eve_rakes";
+}
+
+public static class ExcelMacroRowOrderModes
+{
+    public const string Source = "Source";
+    public const string WallsStrict = "WallsStrict";
+    public const string EvesThenRakesByValue = "EvesThenRakesByValue";
 }
 
 public sealed class ExcelMacroExportActionConfig
@@ -208,6 +251,7 @@ public sealed class ExcelMacroExportActionConfig
     public bool UseFloorHeaders { get; set; }
     public string UnitSystem { get; set; } = "Imperial";
     public string PerFloorPreprocessMacroName { get; set; } = "";
+    public string RowOrderMode { get; set; } = ExcelMacroRowOrderModes.Source;
 
     public ExcelMacroExportActionConfig Clone() =>
         new()
@@ -226,6 +270,7 @@ public sealed class ExcelMacroExportActionConfig
             UseFloorHeaders = UseFloorHeaders,
             UnitSystem = UnitSystem,
             PerFloorPreprocessMacroName = PerFloorPreprocessMacroName,
+            RowOrderMode = RowOrderMode,
         };
 }
 

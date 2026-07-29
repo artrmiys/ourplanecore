@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace OurPlanCore;
 
@@ -83,6 +84,7 @@ public static class ExcelMacroPayloadBuilder
             .Select(match => BuildItemRow(match.Item, fallbackScaleMetersPerPt, action))
             .Where(row => row.Value is > 0)
             .ToList();
+        rows = OrderRows(rows, action);
 
         return rows.Count == 0
             ? ExcelMacroPayloadResult.Failure(
@@ -133,7 +135,7 @@ public static class ExcelMacroPayloadBuilder
                 null,
                 "",
                 IsFloorHeader: true));
-            rows.AddRange(floorRows);
+            rows.AddRange(OrderRows(floorRows, action));
         }
 
         if (rows.Count == 0)
@@ -177,6 +179,71 @@ public static class ExcelMacroPayloadBuilder
             "point" => new ExcelMacroPayloadRow(item.Name, raw, "EA"),
             _ => new ExcelMacroPayloadRow(item.Name, raw, ""),
         };
+    }
+
+    internal static List<ExcelMacroPayloadRow> OrderRows(
+        IReadOnlyList<ExcelMacroPayloadRow> rows,
+        ExcelMacroExportActionConfig action)
+    {
+        if (string.Equals(
+                action.RowOrderMode,
+                ExcelMacroRowOrderModes.WallsStrict,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return rows
+                .Select((row, index) => new { Row = row, Index = index, Rank = WallRank(row.Name) })
+                .OrderBy(item => item.Rank)
+                .ThenByDescending(item =>
+                    item.Rank == 1 ? item.Row.Value ?? 0 : 0)
+                .ThenBy(item => item.Index)
+                .Select(item => item.Row)
+                .ToList();
+        }
+
+        if (string.Equals(
+                action.RowOrderMode,
+                ExcelMacroRowOrderModes.EvesThenRakesByValue,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return rows
+                .Select((row, index) => new { Row = row, Index = index, Rank = EveRakeRank(row.Name) })
+                .OrderBy(item => item.Rank)
+                .ThenByDescending(item =>
+                    item.Rank is 0 or 1 ? item.Row.Value ?? 0 : 0)
+                .ThenBy(item => item.Index)
+                .Select(item => item.Row)
+                .ToList();
+        }
+
+        return [.. rows];
+    }
+
+    private static int WallRank(string name)
+    {
+        if (Regex.IsMatch(name ?? "", @"^\s*corners?\b", RegexOptions.IgnoreCase))
+            return 0;
+        if (Regex.IsMatch(name ?? "", @"^\s*ext\b", RegexOptions.IgnoreCase))
+            return 1;
+        if (Regex.IsMatch(name ?? "", @"^\s*corr?\b", RegexOptions.IgnoreCase))
+            return 2;
+        if (Regex.IsMatch(name ?? "", @"^\s*dem\b", RegexOptions.IgnoreCase))
+            return 3;
+        if (Regex.IsMatch(name ?? "", @"^\s*2\s*[xх×]\s*6\b", RegexOptions.IgnoreCase))
+            return 4;
+        if (Regex.IsMatch(name ?? "", @"^\s*2\s*[xх×]\s*4\b", RegexOptions.IgnoreCase))
+            return 5;
+        return 9;
+    }
+
+    private static int EveRakeRank(string name)
+    {
+        if (Regex.IsMatch(name ?? "", @"^\s*(?:eve|eave)s?\b", RegexOptions.IgnoreCase))
+            return 0;
+        if (Regex.IsMatch(name ?? "", @"^\s*rakes?\b", RegexOptions.IgnoreCase))
+            return 1;
+        if (Regex.IsMatch(name ?? "", @"^\s*returns?\b", RegexOptions.IgnoreCase))
+            return 2;
+        return 9;
     }
 
     private static RoleMatch? MatchRole(

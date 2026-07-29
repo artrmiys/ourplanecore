@@ -74,6 +74,7 @@ public partial class MainWindow
         Add("file.excelMacroTrussHeel", "Excel Macro: Truss Heel", "File", "", "Append selected Truss Heel rows and run A2_SQFT_calc.", hasJob, "Open a job and select a Takeoffs scope first.");
         Add("file.excelMacroParapet", "Excel Macro: Parapet", "File", "", "Append selected Parapet rows and run A4_Parapet.", hasJob, "Open a job and select a Takeoffs scope first.");
         Add("file.excelMacroEveRakes", "Excel Macro: Eve / Rakes", "File", "", "Append selected Eves and Rakes rows and run A6_Eve_Rakes.", hasJob, "Open a job and select a Takeoffs scope first.");
+        Add("file.excelMacroAll", "Excel Macro: ALL", "File", "", "Run the configured Excel macro sequence for one selected building/root.", hasJob, "Open a job and select one building or export folder first.");
 
         Add("view.fit", "Fit Page", "View", Shortcut("f"), "Fit the active page to the viewport.", hasPage, "Select a page first.");
         Add("view.zoomIn", "Zoom In", "View", "Ctrl++", "Zoom into the active page.", hasPage, "Select a page first.");
@@ -215,6 +216,7 @@ public partial class MainWindow
             case "file.excelMacroTrussHeel": BtnExcelMacroTrussHeel_Click(this, new RoutedEventArgs()); break;
             case "file.excelMacroParapet": BtnExcelMacroParapet_Click(this, new RoutedEventArgs()); break;
             case "file.excelMacroEveRakes": BtnExcelMacroEveRakes_Click(this, new RoutedEventArgs()); break;
+            case "file.excelMacroAll": BtnExcelMacroAll_Click(this, new RoutedEventArgs()); break;
 
             case "view.fit": BtnFit_Click(this, new RoutedEventArgs()); break;
             case "view.zoomIn": BtnZoomIn_Click(this, new RoutedEventArgs()); break;
