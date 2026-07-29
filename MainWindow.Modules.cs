@@ -53,7 +53,9 @@ public partial class MainWindow
                 "edit.splitMeasurements" or "edit.combineUnion" or "edit.combineSubtract" or
                 "edit.combineIntersect" or "edit.combineRemoveOverlap" or "edit.combineDivide" => ModuleId.AdvancedTakeoffTools,
             "pages.autoFolders" or "takeoffs.autoTree" or "takeoffs.fromPages" => ModuleId.TakeoffAutomation,
-            "file.exportExcel" or "file.exportCurrentExcel" => ModuleId.ExcelIntegration,
+            "file.exportExcel" or "file.exportCurrentExcel" or
+                "file.excelMacroSqft" or "file.excelMacroWalls" or
+                "file.excelMacroOpenings" => ModuleId.ExcelIntegration,
             "file.exportPdf" => ModuleId.PdfOutput,
             _ when id.StartsWith("ai.", StringComparison.OrdinalIgnoreCase) => ModuleId.Ai,
             _ => default,
@@ -73,7 +75,9 @@ public partial class MainWindow
             "edit.splitMeasurements" or "edit.combineUnion" or "edit.combineSubtract" or
             "edit.combineIntersect" or "edit.combineRemoveOverlap" or "edit.combineDivide" or
             "pages.autoFolders" or "takeoffs.autoTree" or "takeoffs.fromPages" or
-            "file.exportExcel" or "file.exportCurrentExcel" or "file.exportPdf";
+            "file.exportExcel" or "file.exportCurrentExcel" or
+            "file.excelMacroSqft" or "file.excelMacroWalls" or
+            "file.excelMacroOpenings" or "file.exportPdf";
     }
 
     private bool RequireModule(ModuleId module, string operation)
@@ -210,6 +214,7 @@ public partial class MainWindow
         SetVisible(BtnExportCurrentExcelCell, IsModuleEnabled(ModuleId.ExcelIntegration));
         SetVisible(BtnTakeoffManagerExportExcel, IsModuleEnabled(ModuleId.ExcelIntegration));
         SetVisible(BtnTakeoffManagerCurrentExcel, IsModuleEnabled(ModuleId.ExcelIntegration));
+        SetVisible(ExcelMacroExportPanel, IsModuleEnabled(ModuleId.ExcelIntegration));
 
         bool detachedSheets = IsModuleEnabled(ModuleId.DetachedSheets);
         SetVisible(BtnPagesCloseDetachedSecondMonitor, detachedSheets);

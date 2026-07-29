@@ -56,6 +56,7 @@ public partial class MainWindow
         "Sort A/S",
         "Sort D/Sec/WT",
         "Auto Rename / Scale",
+        "Excel Actions",
         "Project Storage",
         "Defaults",
     ];
@@ -67,10 +68,12 @@ public partial class MainWindow
         SettingsPresetStore.InstallPageSortProvider(_currentJob);
         SettingsPresetStore.InstallSheetMetadataProvider(_currentJob);
         SettingsPresetStore.InstallRasterDpiPresetProvider(_currentJob);
+        SettingsPresetStore.InstallExcelMacroExportProvider(_currentJob);
         _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
         _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
         _rasterDpiPresetConfig = SettingsPresetStore.ResolveRasterDpiPresets(_currentJob).Clone();
+        _excelMacroExportConfig = SettingsPresetStore.ResolveExcelMacroExport(_currentJob).Clone();
         _takeoffTemplateConfig = TakeoffTemplateStore.ResolveConfig(_currentJob).Clone();
         RefreshSheetManagerRasterPresetButtons();
         RefreshTakeoffTemplateEditors();
@@ -85,6 +88,7 @@ public partial class MainWindow
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
         _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
         _rasterDpiPresetConfig = SettingsPresetStore.ResolveRasterDpiPresets(_currentJob).Clone();
+        _excelMacroExportConfig = SettingsPresetStore.ResolveExcelMacroExport(_currentJob).Clone();
         string cat = (_settingsCategoryList?.SelectedItem as string) ?? SettingsCategories[0];
         ShowSettingsCategory(cat);
     }
@@ -140,6 +144,11 @@ public partial class MainWindow
             // Preserve the in-memory draft when the user inspects another category.
             SyncSheetMetadataFromUi();
         }
+        if (string.Equals(_activeSettingsCategory, "Excel Actions", StringComparison.Ordinal) &&
+            !string.Equals(category, _activeSettingsCategory, StringComparison.Ordinal))
+        {
+            SyncExcelSettingsDraft();
+        }
 
         if (!_settingsPanels.TryGetValue(category, out FrameworkElement? panel))
         {
@@ -153,6 +162,7 @@ public partial class MainWindow
                 "Sort A/S" => BuildArchStructPanel(),
                 "Sort D/Sec/WT" => BuildSuffixSortPanel(),
                 "Auto Rename / Scale" => BuildRulesPanel(),
+                "Excel Actions" => BuildExcelActionsPanel(),
                 "Project Storage" => BuildProjectStoragePanel(),
                 _ => BuildDefaultsPanel(),
             };
@@ -172,6 +182,7 @@ public partial class MainWindow
             case "Sort A/S": BindArchStruct(); break;
             case "Sort D/Sec/WT": BindSuffixSort(); break;
             case "Auto Rename / Scale": BindSheetMetadataSettings(); break;
+            case "Excel Actions": BindExcelActionsSettings(); break;
             case "Project Storage": BindProjectStorageSettings(); break;
             case "Defaults": SyncDefaultsZoomControl(); break;
         }

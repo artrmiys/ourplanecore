@@ -78,6 +78,12 @@ public static class SettingsPresetStore
     private static string JobRasterDpiPresetPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "AI_Context", "settings", "raster_dpi_presets.json");
 
+    private static string GlobalExcelMacroExportPath() =>
+        Path.Combine(SmartContextStore.GlobalRoot, "presets", "excel_macro_export.json");
+
+    private static string JobExcelMacroExportPath(OurPlanCoreJob job) =>
+        Path.Combine(job.RootPath, "AI_Context", "settings", "excel_macro_export.json");
+
     private static T? LoadJson<T>(string path) where T : class
     {
         try
@@ -263,4 +269,56 @@ public static class SettingsPresetStore
 
     public static void InstallRasterDpiPresetProvider(OurPlanCoreJob? job) =>
         RasterDpiPresetService.Install(ResolveRasterDpiPresets(job));
+
+    // Excel macro actions: per-job override -> global -> the TemplateCom contract.
+    public static ExcelMacroExportConfig? LoadGlobalExcelMacroExport() =>
+        LoadJson<ExcelMacroExportConfig>(GlobalExcelMacroExportPath()) is { } config
+            ? ExcelMacroExportConfig.UpgradeForCurrentSchema(config)
+            : null;
+
+    public static void SaveGlobalExcelMacroExport(ExcelMacroExportConfig config) =>
+        SaveJson(
+            GlobalExcelMacroExportPath(),
+            ExcelMacroExportConfig.UpgradeForCurrentSchema(config));
+
+    public static ExcelMacroExportConfig? LoadJobExcelMacroExportOverride(OurPlanCoreJob job) =>
+        LoadJson<ExcelMacroExportConfig>(JobExcelMacroExportPath(job)) is { } config
+            ? ExcelMacroExportConfig.UpgradeForCurrentSchema(config)
+            : null;
+
+    public static void SaveJobExcelMacroExportOverride(
+        OurPlanCoreJob job,
+        ExcelMacroExportConfig config) =>
+        SaveJson(
+            JobExcelMacroExportPath(job),
+            ExcelMacroExportConfig.UpgradeForCurrentSchema(config));
+
+    public static bool ClearJobExcelMacroExportOverride(OurPlanCoreJob job)
+    {
+        string path = JobExcelMacroExportPath(job);
+        if (File.Exists(path))
+            JobWriteAccess.Demand(path, "clear job Excel macro export override");
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+            return !File.Exists(path);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static ExcelMacroExportConfig ResolveExcelMacroExport(OurPlanCoreJob? job)
+    {
+        if (job != null && LoadJobExcelMacroExportOverride(job) is { } jobConfig)
+            return ExcelMacroExportConfig.UpgradeForCurrentSchema(jobConfig);
+        if (LoadGlobalExcelMacroExport() is { } globalConfig)
+            return ExcelMacroExportConfig.UpgradeForCurrentSchema(globalConfig);
+        return ExcelMacroExportConfig.BuildDefault();
+    }
+
+    public static void InstallExcelMacroExportProvider(OurPlanCoreJob? job) =>
+        ExcelMacroExportConfigProvider.Install(ResolveExcelMacroExport(job));
 }

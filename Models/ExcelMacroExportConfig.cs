@@ -1,0 +1,173 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace OurPlanCore;
+
+public sealed class ExcelMacroExportConfig
+{
+    public int SchemaVersion { get; set; } = 1;
+    public List<ExcelMacroExportActionConfig> Actions { get; set; } = [];
+    public List<ExcelMacroFloorRule> FloorRules { get; set; } = [];
+
+    public ExcelMacroExportConfig Clone() =>
+        new()
+        {
+            SchemaVersion = SchemaVersion,
+            Actions = (Actions ?? []).Where(action => action != null).Select(action => action.Clone()).ToList(),
+            FloorRules = (FloorRules ?? []).Where(rule => rule != null).Select(rule => rule.Clone()).ToList(),
+        };
+
+    public ExcelMacroExportActionConfig Action(string id)
+    {
+        Actions ??= [];
+        ExcelMacroExportActionConfig? action = Actions.FirstOrDefault(action =>
+            string.Equals(action.Id, id, StringComparison.OrdinalIgnoreCase))
+            ?? BuildDefault().Actions.First(action =>
+            string.Equals(action.Id, id, StringComparison.OrdinalIgnoreCase));
+        return action;
+    }
+
+    public static ExcelMacroExportConfig UpgradeForCurrentSchema(
+        ExcelMacroExportConfig? source)
+    {
+        ExcelMacroExportConfig defaults = BuildDefault();
+        ExcelMacroExportConfig result = source?.Clone() ?? defaults.Clone();
+        result.SchemaVersion = defaults.SchemaVersion;
+        foreach (ExcelMacroExportActionConfig defaultAction in defaults.Actions)
+        {
+            if (!result.Actions.Any(action =>
+                    string.Equals(action.Id, defaultAction.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                result.Actions.Add(defaultAction.Clone());
+            }
+        }
+        foreach (ExcelMacroFloorRule defaultRule in defaults.FloorRules)
+        {
+            if (!result.FloorRules.Any(rule => rule.Floor == defaultRule.Floor))
+                result.FloorRules.Add(defaultRule.Clone());
+        }
+        return result;
+    }
+
+    public static ExcelMacroExportConfig BuildDefault() =>
+        new()
+        {
+            Actions =
+            [
+                new ExcelMacroExportActionConfig
+                {
+                    Id = ExcelMacroExportActionIds.Sqft,
+                    Label = "SQFT",
+                    FolderAliases = ["sqft", "sqfts"],
+                    WorkbookName = "TemplateCom.xlsm",
+                    SheetName = "Detailed Frame List",
+                    ScanStartColumn = "I",
+                    ScanEndColumn = "N",
+                    WriteStartColumn = "J",
+                    StartRow = 10,
+                    BlankRowsBetween = 1,
+                    MacroName = "A2_SQFT_calc",
+                },
+                new ExcelMacroExportActionConfig
+                {
+                    Id = ExcelMacroExportActionIds.Walls,
+                    Label = "Walls",
+                    FolderAliases = ["walls"],
+                    WorkbookName = "TemplateCom.xlsm",
+                    SheetName = "Detailed Frame List",
+                    ScanStartColumn = "I",
+                    ScanEndColumn = "N",
+                    WriteStartColumn = "J",
+                    StartRow = 10,
+                    BlankRowsBetween = 1,
+                    MacroName = "A3_Walls_Calc_AllGroup",
+                    UseFloorHeaders = true,
+                },
+                new ExcelMacroExportActionConfig
+                {
+                    Id = ExcelMacroExportActionIds.Openings,
+                    Label = "Openings",
+                    FolderAliases = ["openings"],
+                    WorkbookName = "TemplateCom.xlsm",
+                    SheetName = "Detailed Frame List",
+                    ScanStartColumn = "Z",
+                    ScanEndColumn = "AB",
+                    WriteStartColumn = "Z",
+                    StartRow = 158,
+                    BlankRowsBetween = 1,
+                    MacroName = "A5_Openings",
+                    UseFloorHeaders = true,
+                },
+            ],
+            FloorRules =
+            [
+                new ExcelMacroFloorRule { Floor = 0, Aliases = ["0", "basement", "bsmt"] },
+                new ExcelMacroFloorRule { Floor = 1, Aliases = ["1", "1st", "first"] },
+                new ExcelMacroFloorRule { Floor = 2, Aliases = ["2", "2nd", "second"] },
+                new ExcelMacroFloorRule { Floor = 3, Aliases = ["3", "3rd", "third"] },
+                new ExcelMacroFloorRule { Floor = 4, Aliases = ["4", "4th", "fourth"] },
+                new ExcelMacroFloorRule { Floor = 5, Aliases = ["5", "5th", "fifth"] },
+            ],
+        };
+}
+
+public static class ExcelMacroExportActionIds
+{
+    public const string Sqft = "sqft";
+    public const string Walls = "walls";
+    public const string Openings = "openings";
+}
+
+public sealed class ExcelMacroExportActionConfig
+{
+    public string Id { get; set; } = "";
+    public string Label { get; set; } = "";
+    public List<string> FolderAliases { get; set; } = [];
+    public string WorkbookName { get; set; } = "TemplateCom.xlsm";
+    public string SheetName { get; set; } = "Detailed Frame List";
+    public string ScanStartColumn { get; set; } = "I";
+    public string ScanEndColumn { get; set; } = "N";
+    public string WriteStartColumn { get; set; } = "J";
+    public int StartRow { get; set; } = 10;
+    public int BlankRowsBetween { get; set; } = 1;
+    public string MacroName { get; set; } = "";
+    public bool UseFloorHeaders { get; set; }
+    public string UnitSystem { get; set; } = "Imperial";
+
+    public ExcelMacroExportActionConfig Clone() =>
+        new()
+        {
+            Id = Id,
+            Label = Label,
+            FolderAliases = [.. (FolderAliases ?? [])],
+            WorkbookName = WorkbookName,
+            SheetName = SheetName,
+            ScanStartColumn = ScanStartColumn,
+            ScanEndColumn = ScanEndColumn,
+            WriteStartColumn = WriteStartColumn,
+            StartRow = StartRow,
+            BlankRowsBetween = BlankRowsBetween,
+            MacroName = MacroName,
+            UseFloorHeaders = UseFloorHeaders,
+            UnitSystem = UnitSystem,
+        };
+}
+
+public sealed class ExcelMacroFloorRule
+{
+    public int Floor { get; set; }
+    public List<string> Aliases { get; set; } = [];
+
+    public ExcelMacroFloorRule Clone() =>
+        new() { Floor = Floor, Aliases = [.. (Aliases ?? [])] };
+}
+
+public static class ExcelMacroExportConfigProvider
+{
+    public static ExcelMacroExportConfig Current { get; private set; } =
+        ExcelMacroExportConfig.BuildDefault();
+
+    public static void Install(ExcelMacroExportConfig config) =>
+        Current = config.Clone();
+}

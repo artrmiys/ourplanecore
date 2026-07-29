@@ -26,6 +26,9 @@ if (args.Length > 0 && args[0] == "storage-analysis")
 if (args.Length > 0 && args[0] == "storage-compact-smoke")
     return ProjectStorageHarness.RunCompactSmoke(args);
 
+if (args.Length > 0 && args[0] == "excel-macro-smoke")
+    return ExcelMacroSmokeHarness.Run(args);
+
 string testGlobalRoot = Path.Combine(Path.GetTempPath(), "onc_tests_global", Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
 
@@ -591,6 +594,10 @@ var tests = new List<(string Name, Action Run)>
     ("pdf import source finder finds nested pdf files", PdfImportSourceFinderFindsNestedPdfFiles),
     ("raster sheet cache builds working image and strict snap manifest", RasterSheetCacheTests.BuildsWorkingImageAndStrictSnapManifest),
     ("active excel export matrix keeps numbers", ActiveExcelExportMatrixKeepsNumbers),
+    ("excel macro defaults match TemplateCom contract", ExcelMacroExportTests.DefaultsMatchTemplateComContract),
+    ("excel macro walls build numeric floor groups", ExcelMacroExportTests.WallsBuildNumericFloorGroupsAndImperialValues),
+    ("excel macro openings use floors one through five", ExcelMacroExportTests.OpeningsUseConfiguredFloorsOneThroughFive),
+    ("excel macro export rejects separate buildings", ExcelMacroExportTests.SeparateBuildingFoldersAreRejected),
     ("joist pitch persists on takeoff item", JoistPitchPersistsOnTakeoffItem),
     ("joist pitch applies item properties", JoistPitchAppliesItemProperties),
     ("page overlay persists through source rewrites", PageOverlayPersistsThroughSourceRewrites),

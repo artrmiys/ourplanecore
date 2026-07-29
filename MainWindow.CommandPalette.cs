@@ -67,6 +67,9 @@ public partial class MainWindow
         Add("file.exportTxt", "Export TXT", "File", "", "Export selected/all takeoffs in PlanSwift text format.", hasJob, "Open or create a job first.");
         Add("file.exportExcel", "Export Excel", "File", "", "Export selected/all takeoffs to .xlsx columns J/K/L from J10.", hasJob, "Open or create a job first.");
         Add("file.exportCurrentExcel", "Export to Current Excel", "File", "", "Write selected takeoff folder/item rows to the active cell in an open Excel workbook.", hasJob, "Open or create a job first.");
+        Add("file.excelMacroSqft", "Excel Macro: SQFT", "File", "", "Append selected SQFT rows to TemplateCom and run A2_SQFT_calc.", hasJob, "Open a job and select a Takeoffs scope first.");
+        Add("file.excelMacroWalls", "Excel Macro: Walls", "File", "", "Append selected wall rows with numeric floor groups and run A3_Walls_Calc_AllGroup.", hasJob, "Open a job and select a Takeoffs scope first.");
+        Add("file.excelMacroOpenings", "Excel Macro: Openings", "File", "", "Append selected openings from Z158 with numeric floor groups and run A5_Openings.", hasJob, "Open a job and select a Takeoffs scope first.");
 
         Add("view.fit", "Fit Page", "View", Shortcut("f"), "Fit the active page to the viewport.", hasPage, "Select a page first.");
         Add("view.zoomIn", "Zoom In", "View", "Ctrl++", "Zoom into the active page.", hasPage, "Select a page first.");
@@ -201,6 +204,9 @@ public partial class MainWindow
             case "file.exportTxt": BtnExportTxt_Click(this, new RoutedEventArgs()); break;
             case "file.exportExcel": BtnExportExcel_Click(this, new RoutedEventArgs()); break;
             case "file.exportCurrentExcel": BtnExportCurrentExcel_Click(this, new RoutedEventArgs()); break;
+            case "file.excelMacroSqft": BtnExcelMacroSqft_Click(this, new RoutedEventArgs()); break;
+            case "file.excelMacroWalls": BtnExcelMacroWalls_Click(this, new RoutedEventArgs()); break;
+            case "file.excelMacroOpenings": BtnExcelMacroOpenings_Click(this, new RoutedEventArgs()); break;
 
             case "view.fit": BtnFit_Click(this, new RoutedEventArgs()); break;
             case "view.zoomIn": BtnZoomIn_Click(this, new RoutedEventArgs()); break;

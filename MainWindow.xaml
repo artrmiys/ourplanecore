@@ -1712,6 +1712,39 @@
                     <StackPanel DockPanel.Dock="Bottom" Margin="4,4">
                         <TextBlock x:Name="TxtTotal" Text="Total: —"
                                    FontWeight="Normal" FontSize="12" Margin="0,0,0,6"/>
+                        <Border x:Name="ExcelMacroExportPanel"
+                                Padding="4,3"
+                                Margin="0,0,0,4"
+                                Background="{DynamicResource ControlBackgroundBrush}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="2">
+                            <DockPanel LastChildFill="True">
+                                <Button DockPanel.Dock="Right"
+                                        Content="Openings"
+                                        Click="BtnExcelMacroOpenings_Click"
+                                        Padding="6,2"
+                                        Margin="4,0,0,0"
+                                        ToolTip="Append selected Openings to Z:AB from row 158, select Z:AA, then run A5_Openings"/>
+                                <Button DockPanel.Dock="Right"
+                                        Content="Walls"
+                                        Click="BtnExcelMacroWalls_Click"
+                                        Padding="6,2"
+                                        Margin="4,0,0,0"
+                                        ToolTip="Append selected Walls to J:L, select J:K, then run A3_Walls_Calc_AllGroup"/>
+                                <Button DockPanel.Dock="Right"
+                                        Content="SQFT"
+                                        Click="BtnExcelMacroSqft_Click"
+                                        Padding="6,2"
+                                        Margin="4,0,0,0"
+                                        ToolTip="Append selected SQFT to J:L, select J:K, then run A2_SQFT_calc"/>
+                                <TextBlock Text="EXCEL"
+                                           VerticalAlignment="Center"
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                            </DockPanel>
+                        </Border>
                         <Grid Margin="0,0,0,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
