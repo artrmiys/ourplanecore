@@ -564,6 +564,8 @@ var tests = new List<(string Name, Action Run)>
     ("legacy joist item old explicit false label flag migrates to labels", LegacyJoistItemOldExplicitFalseLabelFlagMigratesToLabels),
     ("joist item explicit false label flag stays hidden", JoistItemExplicitFalseLabelFlagStaysHidden),
     ("folder template openings have numbered children", FolderTemplateOpeningsHaveNumberedChildren),
+    ("folder template defaults include framing trade folders", FolderTemplateDefaultTests.DefaultsIncludeFramingTradeFolders),
+    ("folder template defaults include shear and holdowns per floor", FolderTemplateDefaultTests.DefaultsIncludeShearAndHoldownsPerFloor),
     ("settings manager folder template edits auto persist", TakeoffsTreeRegressionTests.SettingsManagerFolderTemplateEditsAutoPersist),
     ("report template loads synthetic detailed frame list", ReportTemplateServiceTests.LoadsSyntheticDetailedFrameList),
     ("report template loads local template if present", ReportTemplateServiceTests.LoadsLocalTemplateIfPresent),

@@ -64,6 +64,17 @@ public static partial class PlanSwiftFolderTemplateService
         "framing",
     ];
 
+    private static readonly (string FramingName, string ShearName)[] AutoTreeFloors =
+    [
+        ("1st floor framing", "1st floor"),
+        ("2nd floor framing", "2nd floor"),
+        ("3rd floor framing", "3rd floor"),
+        ("4th floor framing", "4th floor"),
+        ("5th floor framing", "5th floor"),
+        ("loft framing", "loft"),
+        ("roof framing", "roof"),
+    ];
+
     private static readonly FolderNode[] TakeoffTreeStandard =
     [
         new("units"),
@@ -100,16 +111,8 @@ public static partial class PlanSwiftFolderTemplateService
             new("rakes"),
         ]),
         new("roof misc"),
-        new("framing",
-        [
-            new("1st floor framing"),
-            new("2nd floor framing"),
-            new("3rd floor framing"),
-            new("4th floor framing"),
-            new("5th floor framing"),
-            new("loft framing"),
-            new("roof framing"),
-        ]),
+        BuildFramingNode(),
+        BuildShearWallsNode(),
         new("trims"),
         new("siding"),
     ];
@@ -117,17 +120,30 @@ public static partial class PlanSwiftFolderTemplateService
     private static readonly FolderNode[] TakeoffTreeEwp =
     [
         new("sqfts"),
-        new("framing",
-        [
-            new("1st floor framing"),
-            new("2nd floor framing"),
-            new("3rd floor framing"),
-            new("4th floor framing"),
-            new("5th floor framing"),
-            new("loft framing"),
-            new("roof framing"),
-        ]),
+        BuildFramingNode(),
+        BuildShearWallsNode(),
     ];
+
+    private static FolderNode BuildFramingNode() =>
+        new("framing", AutoTreeFloors
+            .Select(floor => new FolderNode(floor.FramingName,
+            [
+                new("Posts"),
+                new("Beams"),
+                new("Joists"),
+                new("Details"),
+                new("Stairs"),
+            ]))
+            .ToList());
+
+    private static FolderNode BuildShearWallsNode() =>
+        new("Shear Walls", AutoTreeFloors
+            .Select(floor => new FolderNode(floor.ShearName,
+            [
+                new("Shear"),
+                new("Holdowns"),
+            ]))
+            .ToList());
 
     public static string ResolveMode(OurPlanCoreJob job, string requestedMode = "AUTO")
     {
