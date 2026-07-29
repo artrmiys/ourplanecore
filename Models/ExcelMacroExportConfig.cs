@@ -6,7 +6,7 @@ namespace OurPlanCore;
 
 public sealed class ExcelMacroExportConfig
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
     public List<ExcelMacroExportActionConfig> Actions { get; set; } = [];
     public List<ExcelMacroFloorRule> FloorRules { get; set; } = [];
 
@@ -32,6 +32,7 @@ public sealed class ExcelMacroExportConfig
         ExcelMacroExportConfig? source)
     {
         ExcelMacroExportConfig defaults = BuildDefault();
+        int sourceSchema = source?.SchemaVersion ?? 0;
         ExcelMacroExportConfig result = source?.Clone() ?? defaults.Clone();
         result.SchemaVersion = defaults.SchemaVersion;
         foreach (ExcelMacroExportActionConfig defaultAction in defaults.Actions)
@@ -46,6 +47,17 @@ public sealed class ExcelMacroExportConfig
         {
             if (!result.FloorRules.Any(rule => rule.Floor == defaultRule.Floor))
                 result.FloorRules.Add(defaultRule.Clone());
+        }
+        if (sourceSchema < 2)
+        {
+            ExcelMacroExportActionConfig openings =
+                result.Action(ExcelMacroExportActionIds.Openings);
+            if (string.IsNullOrWhiteSpace(openings.PerFloorPreprocessMacroName))
+            {
+                openings.PerFloorPreprocessMacroName =
+                    defaults.Action(ExcelMacroExportActionIds.Openings)
+                        .PerFloorPreprocessMacroName;
+            }
         }
         return result;
     }
@@ -98,6 +110,7 @@ public sealed class ExcelMacroExportConfig
                     BlankRowsBetween = 1,
                     MacroName = "A5_Openings",
                     UseFloorHeaders = true,
+                    PerFloorPreprocessMacroName = "C_SumNearWindowValues",
                 },
             ],
             FloorRules =
@@ -134,6 +147,7 @@ public sealed class ExcelMacroExportActionConfig
     public string MacroName { get; set; } = "";
     public bool UseFloorHeaders { get; set; }
     public string UnitSystem { get; set; } = "Imperial";
+    public string PerFloorPreprocessMacroName { get; set; } = "";
 
     public ExcelMacroExportActionConfig Clone() =>
         new()
@@ -151,6 +165,7 @@ public sealed class ExcelMacroExportActionConfig
             MacroName = MacroName,
             UseFloorHeaders = UseFloorHeaders,
             UnitSystem = UnitSystem,
+            PerFloorPreprocessMacroName = PerFloorPreprocessMacroName,
         };
 }
 

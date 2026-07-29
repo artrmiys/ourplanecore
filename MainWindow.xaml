@@ -1725,7 +1725,7 @@
                                         Click="BtnExcelMacroOpenings_Click"
                                         Padding="6,2"
                                         Margin="4,0,0,0"
-                                        ToolTip="Append selected Openings to Z:AB from row 158, select Z:AA, then run A5_Openings"/>
+                                        ToolTip="Append Openings to Z:AB, run C_SumNearWindowValues per floor, then select Z:AA and run A5_Openings"/>
                                 <Button DockPanel.Dock="Right"
                                         Content="Walls"
                                         Click="BtnExcelMacroWalls_Click"

@@ -69,7 +69,7 @@ public partial class MainWindow
         Add("file.exportCurrentExcel", "Export to Current Excel", "File", "", "Write selected takeoff folder/item rows to the active cell in an open Excel workbook.", hasJob, "Open or create a job first.");
         Add("file.excelMacroSqft", "Excel Macro: SQFT", "File", "", "Append selected SQFT rows to TemplateCom and run A2_SQFT_calc.", hasJob, "Open a job and select a Takeoffs scope first.");
         Add("file.excelMacroWalls", "Excel Macro: Walls", "File", "", "Append selected wall rows with numeric floor groups and run A3_Walls_Calc_AllGroup.", hasJob, "Open a job and select a Takeoffs scope first.");
-        Add("file.excelMacroOpenings", "Excel Macro: Openings", "File", "", "Append selected openings from Z158 with numeric floor groups and run A5_Openings.", hasJob, "Open a job and select a Takeoffs scope first.");
+        Add("file.excelMacroOpenings", "Excel Macro: Openings", "File", "", "Append openings from Z158, group near window values per floor, then run A5_Openings.", hasJob, "Open a job and select a Takeoffs scope first.");
 
         Add("view.fit", "Fit Page", "View", Shortcut("f"), "Fit the active page to the viewport.", hasPage, "Select a page first.");
         Add("view.zoomIn", "Zoom In", "View", "Ctrl++", "Zoom into the active page.", hasPage, "Select a page first.");

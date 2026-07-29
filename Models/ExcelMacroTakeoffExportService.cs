@@ -13,7 +13,16 @@ public sealed record ExcelMacroTakeoffExportResult(
     int RowCount = 0,
     string WrittenRange = "",
     string SelectedRange = "",
-    string MacroName = "");
+    string MacroName = "",
+    string PreprocessMacroName = "",
+    int PreprocessRunCount = 0);
+
+internal sealed record ExcelMacroFloorRange(
+    int Floor,
+    int StartRow,
+    int EndRow,
+    int StartColumn,
+    int EndColumn);
 
 public static class ExcelMacroTakeoffExportService
 {
@@ -37,6 +46,20 @@ public static class ExcelMacroTakeoffExportService
         if (!TryGetRunningExcel(out object? excelObject, out string excelError))
             return Failure(excelError);
 
+        return ExportAndRunWithExcel(rows, action, excelObject!);
+    }
+
+    internal static ExcelMacroTakeoffExportResult ExportAndRunWithExcel(
+        IReadOnlyList<ExcelMacroPayloadRow> rows,
+        ExcelMacroExportActionConfig action,
+        object excelObject)
+    {
+        if (rows.Count == 0)
+            return Failure("No rows were prepared for Excel.");
+        if (!TryValidate(action, out string validationError))
+            return Failure(validationError);
+
+        string automationStage = "opening the configured workbook";
         try
         {
             dynamic excel = excelObject!;
@@ -64,6 +87,7 @@ public static class ExcelMacroTakeoffExportService
             workbook.Activate();
             sheet.Activate();
 
+            automationStage = "finding the next vertical source block";
             int startRow = FindNextStartRow(sheet, action);
             int writeColumn = ColumnNumber(action.WriteStartColumn);
             int endRow = startRow + rows.Count - 1;
@@ -75,9 +99,35 @@ public static class ExcelMacroTakeoffExportService
             dynamic firstCell = sheet.Cells[startRow, writeColumn];
             dynamic lastCell = sheet.Cells[endRow, endWriteColumn];
             dynamic writeRange = sheet.Range[firstCell, lastCell];
+            automationStage = "writing source values";
             writeRange.Value2 = BuildValueMatrix(rows);
 
             ApplyFloorHeaderFormatting(sheet, rows, startRow, writeColumn, endWriteColumn);
+
+            int preprocessRunCount = 0;
+            if (!string.IsNullOrWhiteSpace(action.PerFloorPreprocessMacroName))
+            {
+                IReadOnlyList<ExcelMacroFloorRange> floorRanges =
+                    BuildPerFloorRanges(rows, startRow, writeColumn);
+                if (floorRanges.Count == 0)
+                {
+                    return Failure(
+                        $"{action.Label}: per-floor macro '{action.PerFloorPreprocessMacroName}' " +
+                        "is configured, but the payload has no floor groups.");
+                }
+
+                foreach (ExcelMacroFloorRange floorRange in floorRanges)
+                {
+                    dynamic floorFirst = sheet.Cells[floorRange.StartRow, floorRange.StartColumn];
+                    dynamic floorLast = sheet.Cells[floorRange.EndRow, floorRange.EndColumn];
+                    dynamic floorSelection = sheet.Range[floorFirst, floorLast];
+                    floorSelection.Select();
+                    automationStage =
+                        $"running {action.PerFloorPreprocessMacroName} for floor {floorRange.Floor}";
+                    RunWorkbookMacro(excel, workbook, action.PerFloorPreprocessMacroName);
+                    preprocessRunCount++;
+                }
+            }
 
             dynamic selectionFirst = sheet.Cells[startRow, writeColumn];
             dynamic selectionLast = sheet.Cells[
@@ -86,9 +136,8 @@ public static class ExcelMacroTakeoffExportService
             dynamic selection = sheet.Range[selectionFirst, selectionLast];
             selection.Select();
 
-            string workbookMacroName =
-                $"'{Convert.ToString(workbook.Name, CultureInfo.InvariantCulture)?.Replace("'", "''", StringComparison.Ordinal)}'!{action.MacroName}";
-            excel.Run(workbookMacroName);
+            automationStage = $"running {action.MacroName}";
+            RunWorkbookMacro(excel, workbook, action.MacroName);
 
             string writtenRange =
                 $"{CellAddress(startRow, writeColumn)}:{CellAddress(endRow, endWriteColumn)}";
@@ -97,6 +146,9 @@ public static class ExcelMacroTakeoffExportService
                 $"{CellAddress(endRow, writeColumn + MacroSelectionColumnCount - 1)}";
             string message =
                 $"{action.Label}: wrote {rows.Count} row(s) to {writtenRange}, " +
+                (preprocessRunCount > 0
+                    ? $"ran {action.PerFloorPreprocessMacroName} for {preprocessRunCount} floor(s), "
+                    : "") +
                 $"selected {selectedRange}, ran {action.MacroName}.";
             AppLog.Info($"Excel macro export completed. Workbook={action.WorkbookName}; Sheet={action.SheetName}; {message}");
             return new ExcelMacroTakeoffExportResult(
@@ -105,13 +157,15 @@ public static class ExcelMacroTakeoffExportService
                 rows.Count,
                 writtenRange,
                 selectedRange,
-                action.MacroName);
+                action.MacroName,
+                action.PerFloorPreprocessMacroName,
+                preprocessRunCount);
         }
         catch (COMException ex)
         {
             AppLog.Error(ex, $"Excel macro export failed for {action.Id}");
             return Failure(
-                $"Excel stopped the {action.Label} export or macro: {ex.Message} " +
+                $"Excel stopped while {automationStage}: {ex.Message} " +
                 "Any source rows already written were left in place.");
         }
         catch (RuntimeBinderException ex)
@@ -156,6 +210,43 @@ public static class ExcelMacroTakeoffExportService
             value = checked(value * 26 + (c - 'A' + 1));
         }
         return value;
+    }
+
+    internal static IReadOnlyList<ExcelMacroFloorRange> BuildPerFloorRanges(
+        IReadOnlyList<ExcelMacroPayloadRow> rows,
+        int startRow,
+        int writeColumn)
+    {
+        var ranges = new List<ExcelMacroFloorRange>();
+        for (int index = 0; index < rows.Count; index++)
+        {
+            if (!rows[index].IsFloorHeader ||
+                !int.TryParse(
+                    rows[index].Name,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out int floor))
+            {
+                continue;
+            }
+
+            int firstItemIndex = index + 1;
+            int nextHeaderIndex = firstItemIndex;
+            while (nextHeaderIndex < rows.Count && !rows[nextHeaderIndex].IsFloorHeader)
+                nextHeaderIndex++;
+            int lastItemIndex = nextHeaderIndex - 1;
+            if (firstItemIndex <= lastItemIndex)
+            {
+                ranges.Add(new ExcelMacroFloorRange(
+                    floor,
+                    startRow + firstItemIndex,
+                    startRow + lastItemIndex,
+                    writeColumn,
+                    writeColumn + ExportColumnCount - 1));
+            }
+            index = lastItemIndex;
+        }
+        return ranges;
     }
 
     internal static string ColumnName(int column)
@@ -218,6 +309,18 @@ public static class ExcelMacroTakeoffExportService
 
         openNames = string.Join(", ", names);
         return null;
+    }
+
+    private static void RunWorkbookMacro(
+        dynamic excel,
+        dynamic workbook,
+        string macroName)
+    {
+        string workbookName =
+            Convert.ToString(workbook.Name, CultureInfo.InvariantCulture) ?? "";
+        string qualifiedMacro =
+            $"'{workbookName.Replace("'", "''", StringComparison.Ordinal)}'!{macroName}";
+        excel.Run(qualifiedMacro);
     }
 
     private static void ApplyFloorHeaderFormatting(

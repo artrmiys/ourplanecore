@@ -19,6 +19,7 @@ public partial class MainWindow
     private TextBox? _excelSettingsStartRow;
     private TextBox? _excelSettingsBlankRows;
     private TextBox? _excelSettingsMacro;
+    private TextBox? _excelSettingsPreprocessMacro;
     private ComboBox? _excelSettingsUnits;
     private CheckBox? _excelSettingsFloorHeaders;
     private readonly Dictionary<int, TextBox> _excelSettingsFloorAliases = [];
@@ -86,12 +87,17 @@ public partial class MainWindow
         Grid.SetColumn(_excelSettingsUnits, 3);
         fields.Children.Add(_excelSettingsUnits);
 
+        _excelSettingsPreprocessMacro =
+            AddExcelField(fields, 5, 0, "Per-floor VBA first", 1);
+        _excelSettingsPreprocessMacro.ToolTip =
+            "Optional. Runs once for each floor's three-column item range before the main VBA macro.";
+        fields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _excelSettingsFloorHeaders = new CheckBox
         {
             Content = "Insert numeric floor group rows (0-5) before the takeoff rows",
             Margin = new Thickness(150, 2, 0, 8),
         };
-        Grid.SetRow(_excelSettingsFloorHeaders, 5);
+        Grid.SetRow(_excelSettingsFloorHeaders, 6);
         Grid.SetColumnSpan(_excelSettingsFloorHeaders, 4);
         fields.Children.Add(_excelSettingsFloorHeaders);
         content.Children.Add(fields);
@@ -251,6 +257,7 @@ public partial class MainWindow
         SetText(_excelSettingsStartRow, action.StartRow.ToString());
         SetText(_excelSettingsBlankRows, action.BlankRowsBetween.ToString());
         SetText(_excelSettingsMacro, action.MacroName);
+        SetText(_excelSettingsPreprocessMacro, action.PerFloorPreprocessMacroName);
         if (_excelSettingsUnits != null)
             _excelSettingsUnits.SelectedItem = action.UnitSystem;
         if (_excelSettingsFloorHeaders != null)
@@ -307,6 +314,7 @@ public partial class MainWindow
         action.BlankRowsBetween = int.Parse(TextOf(_excelSettingsBlankRows));
         action.UnitSystem = _excelSettingsUnits?.SelectedItem as string ?? "Imperial";
         action.UseFloorHeaders = _excelSettingsFloorHeaders?.IsChecked == true;
+        action.PerFloorPreprocessMacroName = TextOf(_excelSettingsPreprocessMacro);
 
         var floorRules = new List<ExcelMacroFloorRule>();
         foreach (int floor in Enumerable.Range(0, 6))

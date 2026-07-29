@@ -25,7 +25,21 @@ internal static class ExcelMacroExportTests
         Equal("Z", openings.WriteStartColumn, "Openings write start");
         Equal(158, openings.StartRow, "Openings first row");
         True(openings.UseFloorHeaders, "Openings must write floor headers");
+        Equal(
+            "C_SumNearWindowValues",
+            openings.PerFloorPreprocessMacroName,
+            "Openings per-floor preprocess macro");
         Equal("A5_Openings", openings.MacroName, "Openings macro");
+
+        ExcelMacroExportConfig legacy = config.Clone();
+        legacy.SchemaVersion = 1;
+        legacy.Action(ExcelMacroExportActionIds.Openings).PerFloorPreprocessMacroName = "";
+        ExcelMacroExportConfig upgraded =
+            ExcelMacroExportConfig.UpgradeForCurrentSchema(legacy);
+        Equal(
+            "C_SumNearWindowValues",
+            upgraded.Action(ExcelMacroExportActionIds.Openings).PerFloorPreprocessMacroName,
+            "schema 1 settings gain the Openings preprocess macro");
     }
 
     public static void WallsBuildNumericFloorGroupsAndImperialValues()
@@ -114,6 +128,31 @@ internal static class ExcelMacroExportTests
         True(
             result.Message.Contains("separate", StringComparison.OrdinalIgnoreCase),
             "failure should explain separate export folders");
+    }
+
+    public static void PerFloorPreprocessRangesExcludeFloorHeaders()
+    {
+        IReadOnlyList<ExcelMacroPayloadRow> rows =
+        [
+            new("1", null, "", IsFloorHeader: true),
+            new("7.1x2.2", 1, "EA"),
+            new("7.4x2.2", 2, "EA"),
+            new("2", null, "", IsFloorHeader: true),
+            new("4.1x3.1 d", 1, "EA"),
+        ];
+
+        IReadOnlyList<ExcelMacroFloorRange> ranges =
+            ExcelMacroTakeoffExportService.BuildPerFloorRanges(rows, 158, 26);
+
+        Equal(2, ranges.Count, "floor range count");
+        Equal(1, ranges[0].Floor, "first range floor");
+        Equal(159, ranges[0].StartRow, "first range starts after header");
+        Equal(160, ranges[0].EndRow, "first range ends before next header");
+        Equal(26, ranges[0].StartColumn, "first range starts at Z");
+        Equal(28, ranges[0].EndColumn, "preprocess includes Z:AB");
+        Equal(2, ranges[1].Floor, "second range floor");
+        Equal(162, ranges[1].StartRow, "second range starts after header");
+        Equal(162, ranges[1].EndRow, "second range includes its one item");
     }
 
     private static OurPlanCoreJob Job() =>

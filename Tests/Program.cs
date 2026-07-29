@@ -598,6 +598,7 @@ var tests = new List<(string Name, Action Run)>
     ("excel macro walls build numeric floor groups", ExcelMacroExportTests.WallsBuildNumericFloorGroupsAndImperialValues),
     ("excel macro openings use floors one through five", ExcelMacroExportTests.OpeningsUseConfiguredFloorsOneThroughFive),
     ("excel macro export rejects separate buildings", ExcelMacroExportTests.SeparateBuildingFoldersAreRejected),
+    ("excel macro preprocess ranges exclude floor headers", ExcelMacroExportTests.PerFloorPreprocessRangesExcludeFloorHeaders),
     ("joist pitch persists on takeoff item", JoistPitchPersistsOnTakeoffItem),
     ("joist pitch applies item properties", JoistPitchAppliesItemProperties),
     ("page overlay persists through source rewrites", PageOverlayPersistsThroughSourceRewrites),
