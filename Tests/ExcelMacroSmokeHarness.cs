@@ -76,6 +76,41 @@ internal static class ExcelMacroSmokeHarness
 
             AssertSuccess(
                 ExcelMacroTakeoffExportService.ExportAndRunWithExcel(
+                    [new ExcelMacroPayloadRow("gable", 120d, "SF")],
+                    config.Action(ExcelMacroExportActionIds.Gables),
+                    excelObject),
+                "J15:L15",
+                "A2_SQFT_calc");
+
+            AssertSuccess(
+                ExcelMacroTakeoffExportService.ExportAndRunWithExcel(
+                    [new ExcelMacroPayloadRow("truss heel 2", 40d, "FT")],
+                    config.Action(ExcelMacroExportActionIds.TrussHeel),
+                    excelObject),
+                "J17:L17",
+                "A2_SQFT_calc");
+
+            AssertSuccess(
+                ExcelMacroTakeoffExportService.ExportAndRunWithExcel(
+                    [new ExcelMacroPayloadRow("parapet 4 3 0.66", 30d, "FT")],
+                    config.Action(ExcelMacroExportActionIds.Parapet),
+                    excelObject),
+                "J19:L19",
+                "A4_Parapet");
+
+            AssertSuccess(
+                ExcelMacroTakeoffExportService.ExportAndRunWithExcel(
+                    [
+                        new ExcelMacroPayloadRow("eve 12 main", 24d, "FT"),
+                        new ExcelMacroPayloadRow("rake 12 main", 30d, "FT"),
+                    ],
+                    config.Action(ExcelMacroExportActionIds.EveRakes),
+                    excelObject),
+                "J21:L22",
+                "A6_Eve_Rakes");
+
+            AssertSuccess(
+                ExcelMacroTakeoffExportService.ExportAndRunWithExcel(
                     [
                         new ExcelMacroPayloadRow("1", null, "", IsFloorHeader: true),
                         new ExcelMacroPayloadRow("7.1x2.2", 1d, "EA"),
@@ -94,13 +129,25 @@ internal static class ExcelMacroSmokeHarness
             dynamic sheet = sheetObject;
             Equal(100d, Convert.ToDouble(sheet.Range["K10"].Value2, CultureInfo.InvariantCulture), "SQFT source");
             Equal(40d, Convert.ToDouble(sheet.Range["K13"].Value2, CultureInfo.InvariantCulture), "Walls source");
+            True(RangeFormulaContains(sheet, "Y145:AF155", "K15"), "Gables macro linked the Gables source");
+            True(RangeFormulaContains(sheet, "Y145:AF155", "K17"), "SQFT macro linked the Truss Heel source");
+            Equal(4d, Convert.ToDouble(sheet.Range["O95"].Value2, CultureInfo.InvariantCulture), "Parapet outside height");
+            True(CellFormulaContains(sheet.Range["P95"], "K19"), "Parapet length links its source");
+            Equal(3d, Convert.ToDouble(sheet.Range["Q95"].Value2, CultureInfo.InvariantCulture), "Parapet inside height");
+            Equal(0.66d, Convert.ToDouble(sheet.Range["S95"].Value2, CultureInfo.InvariantCulture), "Parapet top width");
+            True(CellFormulaContains(sheet.Range["P135"], "K21"), "Eve length links its source");
+            Equal(12d, Convert.ToDouble(sheet.Range["Q135"].Value2, CultureInfo.InvariantCulture), "Eve size");
+            Equal("main", Convert.ToString(sheet.Range["T135"].Value2, CultureInfo.InvariantCulture) ?? "", "Eve name");
+            True(CellFormulaContains(sheet.Range["V135"], "K22"), "Rake length links its source");
+            Equal(12d, Convert.ToDouble(sheet.Range["W135"].Value2, CultureInfo.InvariantCulture), "Rake size");
+            Equal("main", Convert.ToString(sheet.Range["Y135"].Value2, CultureInfo.InvariantCulture) ?? "", "Rake name");
             Equal("7.25x2.25", Convert.ToString(sheet.Range["Z159"].Value2, CultureInfo.InvariantCulture) ?? "", "Floor 1 grouped opening");
             Equal(3d, Convert.ToDouble(sheet.Range["AA159"].Value2, CultureInfo.InvariantCulture), "Floor 1 grouped quantity");
             Equal("4.25x3.25 d", Convert.ToString(sheet.Range["Z162"].Value2, CultureInfo.InvariantCulture) ?? "", "Floor 2 grouped opening");
             Equal(2d, Convert.ToDouble(sheet.Range["AA162"].Value2, CultureInfo.InvariantCulture), "Floor 2 grouped quantity");
 
             Console.WriteLine(
-                "PASS Excel COM smoke: SQFT A2, Walls A3, Openings per-floor C_SumNearWindowValues then A5.");
+                "PASS Excel COM smoke: SQFT/Gables/Truss Heel A2, Walls A3, Parapet A4, Openings C+A5, Eve/Rakes A6.");
             return 0;
         }
         catch (Exception ex)
@@ -181,6 +228,37 @@ internal static class ExcelMacroSmokeHarness
     {
         if (!string.Equals(expected, actual, StringComparison.Ordinal))
             throw new InvalidOperationException($"{label}: expected '{expected}', got '{actual}'.");
+    }
+
+    private static bool RangeFormulaContains(
+        dynamic sheet,
+        string address,
+        string sourceAddress)
+    {
+        object formulas = sheet.Range[address].Formula;
+        if (formulas is not object[,] matrix)
+            return Convert.ToString(formulas, CultureInfo.InvariantCulture)?
+                .Contains(sourceAddress, StringComparison.OrdinalIgnoreCase) == true;
+
+        foreach (object? value in matrix)
+        {
+            if (Convert.ToString(value, CultureInfo.InvariantCulture)?
+                .Contains(sourceAddress, StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool CellFormulaContains(dynamic cell, string sourceAddress) =>
+        (Convert.ToString(cell.Formula, CultureInfo.InvariantCulture) ?? "")
+        .Contains(sourceAddress, StringComparison.OrdinalIgnoreCase);
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition)
+            throw new InvalidOperationException(message);
     }
 
     private static void ReleaseCom(object? value)

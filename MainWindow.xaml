@@ -1719,31 +1719,58 @@
                                 BorderBrush="{DynamicResource ControlBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="2">
-                            <DockPanel LastChildFill="True">
-                                <Button DockPanel.Dock="Right"
-                                        Content="Openings"
-                                        Click="BtnExcelMacroOpenings_Click"
-                                        Padding="6,2"
-                                        Margin="4,0,0,0"
-                                        ToolTip="Append Openings to Z:AB, run C_SumNearWindowValues per floor, then select Z:AA and run A5_Openings"/>
-                                <Button DockPanel.Dock="Right"
-                                        Content="Walls"
-                                        Click="BtnExcelMacroWalls_Click"
-                                        Padding="6,2"
-                                        Margin="4,0,0,0"
-                                        ToolTip="Append selected Walls to J:L, select J:K, then run A3_Walls_Calc_AllGroup"/>
-                                <Button DockPanel.Dock="Right"
-                                        Content="SQFT"
-                                        Click="BtnExcelMacroSqft_Click"
-                                        Padding="6,2"
-                                        Margin="4,0,0,0"
-                                        ToolTip="Append selected SQFT to J:L, select J:K, then run A2_SQFT_calc"/>
-                                <TextBlock Text="EXCEL"
-                                           VerticalAlignment="Center"
-                                           FontSize="10"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource SecondaryForegroundBrush}"/>
-                            </DockPanel>
+                            <StackPanel>
+                                <DockPanel LastChildFill="True">
+                                    <Button DockPanel.Dock="Right"
+                                            Content="Openings"
+                                            Click="BtnExcelMacroOpenings_Click"
+                                            Padding="6,2"
+                                            Margin="4,0,0,0"
+                                            ToolTip="Append Openings to Z:AB, run C_SumNearWindowValues per floor, then select Z:AA and run A5_Openings"/>
+                                    <Button DockPanel.Dock="Right"
+                                            Content="Walls"
+                                            Click="BtnExcelMacroWalls_Click"
+                                            Padding="6,2"
+                                            Margin="4,0,0,0"
+                                            ToolTip="Append selected Walls to J:L, select J:K, then run A3_Walls_Calc_AllGroup"/>
+                                    <Button DockPanel.Dock="Right"
+                                            Content="SQFT"
+                                            Click="BtnExcelMacroSqft_Click"
+                                            Padding="6,2"
+                                            Margin="4,0,0,0"
+                                            ToolTip="Append selected SQFT to J:L, select J:K, then run A2_SQFT_calc"/>
+                                    <TextBlock Text="EXCEL"
+                                               VerticalAlignment="Center"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                </DockPanel>
+                                <UniformGrid Columns="4" Margin="42,3,0,0">
+                                    <Button Content="Gables"
+                                            Click="BtnExcelMacroGables_Click"
+                                            Padding="3,2"
+                                            Margin="0,0,3,0"
+                                            FontSize="10"
+                                            ToolTip="Append selected Gables to J:L, select J:K, then run A2_SQFT_calc"/>
+                                    <Button Content="Truss Heel"
+                                            Click="BtnExcelMacroTrussHeel_Click"
+                                            Padding="3,2"
+                                            Margin="0,0,3,0"
+                                            FontSize="10"
+                                            ToolTip="Append selected Truss Heel rows to J:L, select J:K, then run A2_SQFT_calc"/>
+                                    <Button Content="Parapet"
+                                            Click="BtnExcelMacroParapet_Click"
+                                            Padding="3,2"
+                                            Margin="0,0,3,0"
+                                            FontSize="10"
+                                            ToolTip="Append selected Parapets to J:L, select J:K, then run A4_Parapet"/>
+                                    <Button Content="Eve/Rakes"
+                                            Click="BtnExcelMacroEveRakes_Click"
+                                            Padding="3,2"
+                                            FontSize="10"
+                                            ToolTip="Append selected Eves and Rakes to J:L, select J:K, then run A6_Eve_Rakes"/>
+                                </UniformGrid>
+                            </StackPanel>
                         </Border>
                         <Grid Margin="0,0,0,4">
                             <Grid.ColumnDefinitions>

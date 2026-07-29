@@ -112,6 +112,62 @@ public sealed class ExcelMacroExportConfig
                     UseFloorHeaders = true,
                     PerFloorPreprocessMacroName = "C_SumNearWindowValues",
                 },
+                new ExcelMacroExportActionConfig
+                {
+                    Id = ExcelMacroExportActionIds.Gables,
+                    Label = "Gables",
+                    FolderAliases = ["gables", "gable"],
+                    WorkbookName = "TemplateCom.xlsm",
+                    SheetName = "Detailed Frame List",
+                    ScanStartColumn = "I",
+                    ScanEndColumn = "N",
+                    WriteStartColumn = "J",
+                    StartRow = 10,
+                    BlankRowsBetween = 1,
+                    MacroName = "A2_SQFT_calc",
+                },
+                new ExcelMacroExportActionConfig
+                {
+                    Id = ExcelMacroExportActionIds.TrussHeel,
+                    Label = "Truss Heel",
+                    FolderAliases = ["trussheel", "truss heel", "truss heels"],
+                    WorkbookName = "TemplateCom.xlsm",
+                    SheetName = "Detailed Frame List",
+                    ScanStartColumn = "I",
+                    ScanEndColumn = "N",
+                    WriteStartColumn = "J",
+                    StartRow = 10,
+                    BlankRowsBetween = 1,
+                    MacroName = "A2_SQFT_calc",
+                },
+                new ExcelMacroExportActionConfig
+                {
+                    Id = ExcelMacroExportActionIds.Parapet,
+                    Label = "Parapet",
+                    FolderAliases = ["parapets", "parapet"],
+                    WorkbookName = "TemplateCom.xlsm",
+                    SheetName = "Detailed Frame List",
+                    ScanStartColumn = "I",
+                    ScanEndColumn = "N",
+                    WriteStartColumn = "J",
+                    StartRow = 10,
+                    BlankRowsBetween = 1,
+                    MacroName = "A4_Parapet",
+                },
+                new ExcelMacroExportActionConfig
+                {
+                    Id = ExcelMacroExportActionIds.EveRakes,
+                    Label = "Eve / Rakes",
+                    FolderAliases = ["eves rakes", "eve rakes", "eaves rakes"],
+                    WorkbookName = "TemplateCom.xlsm",
+                    SheetName = "Detailed Frame List",
+                    ScanStartColumn = "I",
+                    ScanEndColumn = "N",
+                    WriteStartColumn = "J",
+                    StartRow = 10,
+                    BlankRowsBetween = 1,
+                    MacroName = "A6_Eve_Rakes",
+                },
             ],
             FloorRules =
             [
@@ -130,6 +186,10 @@ public static class ExcelMacroExportActionIds
     public const string Sqft = "sqft";
     public const string Walls = "walls";
     public const string Openings = "openings";
+    public const string Gables = "gables";
+    public const string TrussHeel = "truss_heel";
+    public const string Parapet = "parapet";
+    public const string EveRakes = "eve_rakes";
 }
 
 public sealed class ExcelMacroExportActionConfig

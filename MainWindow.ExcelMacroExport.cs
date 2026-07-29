@@ -20,6 +20,18 @@ public partial class MainWindow
     private async void BtnExcelMacroOpenings_Click(object sender, RoutedEventArgs e) =>
         await RunExcelMacroTakeoffActionAsync(ExcelMacroExportActionIds.Openings);
 
+    private async void BtnExcelMacroGables_Click(object sender, RoutedEventArgs e) =>
+        await RunExcelMacroTakeoffActionAsync(ExcelMacroExportActionIds.Gables);
+
+    private async void BtnExcelMacroTrussHeel_Click(object sender, RoutedEventArgs e) =>
+        await RunExcelMacroTakeoffActionAsync(ExcelMacroExportActionIds.TrussHeel);
+
+    private async void BtnExcelMacroParapet_Click(object sender, RoutedEventArgs e) =>
+        await RunExcelMacroTakeoffActionAsync(ExcelMacroExportActionIds.Parapet);
+
+    private async void BtnExcelMacroEveRakes_Click(object sender, RoutedEventArgs e) =>
+        await RunExcelMacroTakeoffActionAsync(ExcelMacroExportActionIds.EveRakes);
+
     private async Task RunExcelMacroTakeoffActionAsync(string actionId)
     {
         ExcelMacroExportActionConfig action = _excelMacroExportConfig.Action(actionId);

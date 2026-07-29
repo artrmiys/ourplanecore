@@ -55,7 +55,9 @@ public partial class MainWindow
             "pages.autoFolders" or "takeoffs.autoTree" or "takeoffs.fromPages" => ModuleId.TakeoffAutomation,
             "file.exportExcel" or "file.exportCurrentExcel" or
                 "file.excelMacroSqft" or "file.excelMacroWalls" or
-                "file.excelMacroOpenings" => ModuleId.ExcelIntegration,
+                "file.excelMacroOpenings" or "file.excelMacroGables" or
+                "file.excelMacroTrussHeel" or "file.excelMacroParapet" or
+                "file.excelMacroEveRakes" => ModuleId.ExcelIntegration,
             "file.exportPdf" => ModuleId.PdfOutput,
             _ when id.StartsWith("ai.", StringComparison.OrdinalIgnoreCase) => ModuleId.Ai,
             _ => default,
@@ -77,7 +79,9 @@ public partial class MainWindow
             "pages.autoFolders" or "takeoffs.autoTree" or "takeoffs.fromPages" or
             "file.exportExcel" or "file.exportCurrentExcel" or
             "file.excelMacroSqft" or "file.excelMacroWalls" or
-            "file.excelMacroOpenings" or "file.exportPdf";
+            "file.excelMacroOpenings" or "file.excelMacroGables" or
+            "file.excelMacroTrussHeel" or "file.excelMacroParapet" or
+            "file.excelMacroEveRakes" or "file.exportPdf";
     }
 
     private bool RequireModule(ModuleId module, string operation)

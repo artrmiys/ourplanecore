@@ -31,6 +31,23 @@ internal static class ExcelMacroExportTests
             "Openings per-floor preprocess macro");
         Equal("A5_Openings", openings.MacroName, "Openings macro");
 
+        Equal(
+            "A2_SQFT_calc",
+            config.Action(ExcelMacroExportActionIds.Gables).MacroName,
+            "Gables macro");
+        Equal(
+            "A2_SQFT_calc",
+            config.Action(ExcelMacroExportActionIds.TrussHeel).MacroName,
+            "Truss Heel macro");
+        Equal(
+            "A4_Parapet",
+            config.Action(ExcelMacroExportActionIds.Parapet).MacroName,
+            "Parapet macro");
+        Equal(
+            "A6_Eve_Rakes",
+            config.Action(ExcelMacroExportActionIds.EveRakes).MacroName,
+            "Eve / Rakes macro");
+
         ExcelMacroExportConfig legacy = config.Clone();
         legacy.SchemaVersion = 1;
         legacy.Action(ExcelMacroExportActionIds.Openings).PerFloorPreprocessMacroName = "";
@@ -155,6 +172,62 @@ internal static class ExcelMacroExportTests
         Equal(162, ranges[1].EndRow, "second range includes its one item");
     }
 
+    public static void AdditionalActionsRouteTheirOwnFolders()
+    {
+        OurPlanCoreJob job = Job();
+        string house = Path.Combine(job.TakeoffsRoot, "House 3");
+        TakeoffItem gable = AreaItem(
+            Path.Combine(house, "gables", "gable"),
+            "gable",
+            sidePoints: 10);
+        TakeoffItem heel = LineItem(
+            Path.Combine(house, "trussheel", "Truss Heel 2"),
+            "truss heel 2",
+            lengthPoints: 10);
+        TakeoffItem parapet = LineItem(
+            Path.Combine(house, "parapets", "Parapet 4 3"),
+            "parapet 4 3",
+            lengthPoints: 20);
+        TakeoffItem eve = LineItem(
+            Path.Combine(house, "eves rakes", "eves", "Eve 12 main"),
+            "eve 12 main",
+            lengthPoints: 24);
+        TakeoffItem rake = LineItem(
+            Path.Combine(house, "eves rakes", "rakes", "Rake 12 main"),
+            "rake 12 main",
+            lengthPoints: 30);
+        IReadOnlyList<TakeoffItem> items = [gable, heel, parapet, eve, rake];
+        ExcelMacroExportConfig config = ExcelMacroExportConfig.BuildDefault();
+
+        ExcelMacroPayloadResult gables = ExcelMacroPayloadBuilder.Build(
+            job, items, [house], 0.3048, config, ExcelMacroExportActionIds.Gables);
+        ExcelMacroPayloadResult heels = ExcelMacroPayloadBuilder.Build(
+            job, items, [house], 0.3048, config, ExcelMacroExportActionIds.TrussHeel);
+        ExcelMacroPayloadResult parapets = ExcelMacroPayloadBuilder.Build(
+            job, items, [house], 0.3048, config, ExcelMacroExportActionIds.Parapet);
+        ExcelMacroPayloadResult eveRakes = ExcelMacroPayloadBuilder.Build(
+            job, items, [house], 0.3048, config, ExcelMacroExportActionIds.EveRakes);
+
+        True(gables.Success, gables.Message);
+        Equal(1, gables.Rows.Count, "Gables row count");
+        Equal("gable", gables.Rows[0].Name, "Gables route");
+        Equal("SF", gables.Rows[0].Unit, "Gables unit");
+        Close(100, gables.Rows[0].Value ?? 0, "Gables square feet");
+
+        True(heels.Success, heels.Message);
+        Equal(1, heels.Rows.Count, "Truss Heel row count");
+        Equal("truss heel 2", heels.Rows[0].Name, "Truss Heel route");
+
+        True(parapets.Success, parapets.Message);
+        Equal(1, parapets.Rows.Count, "Parapet row count");
+        Equal("parapet 4 3", parapets.Rows[0].Name, "Parapet route");
+
+        True(eveRakes.Success, eveRakes.Message);
+        Equal(2, eveRakes.Rows.Count, "Eve / Rakes row count");
+        Equal("eve 12 main", eveRakes.Rows[0].Name, "Eve route");
+        Equal("rake 12 main", eveRakes.Rows[1].Name, "Rake route");
+    }
+
     private static OurPlanCoreJob Job() =>
         new()
         {
@@ -198,6 +271,31 @@ internal static class ExcelMacroExportTests
             Points = Enumerable.Range(0, count)
                 .Select(index => new SKPoint(index, index))
                 .ToList(),
+        });
+        return item;
+    }
+
+    private static TakeoffItem AreaItem(
+        string path,
+        string name,
+        float sidePoints)
+    {
+        var item = new TakeoffItem
+        {
+            FolderPath = path,
+            Name = name,
+            MeasurementType = "area",
+        };
+        item.Measurements.Add(new Measurement
+        {
+            MType = "area",
+            Points =
+            [
+                new SKPoint(0, 0),
+                new SKPoint(sidePoints, 0),
+                new SKPoint(sidePoints, sidePoints),
+                new SKPoint(0, sidePoints),
+            ],
         });
         return item;
     }
