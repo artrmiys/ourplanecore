@@ -337,11 +337,15 @@ internal static class ExcelMacroExportTests
             Path.Combine(house2, "walls", "1", "ext"),
             "ext",
             20);
+        TakeoffItem customDirectChild = LineItem(
+            Path.Combine(house1, "16_S601 - Area"),
+            "custom area",
+            30);
         ExcelMacroExportConfig config = ExcelMacroExportConfig.BuildDefault();
 
         ExcelMacroBatchScopeResult one = ExcelMacroBatchPlanner.ResolveScope(
             job,
-            [first, second],
+            [first, second, customDirectChild],
             [first.FolderPath],
             config);
         True(one.Success, one.Message);
@@ -350,9 +354,21 @@ internal static class ExcelMacroExportTests
             Path.GetFullPath(one.RootPath),
             "ALL ascends from an item to its building");
 
+        ExcelMacroBatchScopeResult explicitBuilding =
+            ExcelMacroBatchPlanner.ResolveScope(
+                job,
+                [first, second, customDirectChild],
+                [house1],
+                config);
+        True(explicitBuilding.Success, explicitBuilding.Message);
+        Equal(
+            Path.GetFullPath(house1),
+            Path.GetFullPath(explicitBuilding.RootPath),
+            "one explicitly selected building remains the scope even with custom direct children");
+
         ExcelMacroBatchScopeResult mixed = ExcelMacroBatchPlanner.ResolveScope(
             job,
-            [first, second],
+            [first, second, customDirectChild],
             [job.TakeoffsRoot],
             config);
         True(!mixed.Success, "ALL must reject a job-root selection with two buildings");

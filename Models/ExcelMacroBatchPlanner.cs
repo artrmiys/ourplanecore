@@ -64,6 +64,17 @@ public static class ExcelMacroBatchPlanner
             .Where(alias => alias.Length > 0)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        if (validRoots.Count == 1 &&
+            !string.Equals(validRoots[0], takeoffsRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            string explicitRoot = BatchRootForPath(
+                takeoffsRoot,
+                validRoots[0],
+                aliases);
+            if (explicitRoot.Length > 0)
+                return Success(explicitRoot);
+        }
+
         List<string> candidates = takeoffItems
             .Where(item => item.Measurements.Count > 0)
             .Where(item => validRoots.Any(root => IsSameOrChild(item.FolderPath, root)))
@@ -88,11 +99,14 @@ public static class ExcelMacroBatchPlanner
                 "Select only one building or one of its export folders.");
         }
 
-        return new ExcelMacroBatchScopeResult(
-            true,
-            $"Excel ALL scope: {OurPlanCoreJobStore.DisplayName(candidates[0])}.",
-            candidates[0]);
+        return Success(candidates[0]);
     }
+
+    private static ExcelMacroBatchScopeResult Success(string rootPath) =>
+        new(
+            true,
+            $"Excel ALL scope: {OurPlanCoreJobStore.DisplayName(rootPath)}.",
+            rootPath);
 
     private static string BatchRootForPath(
         string takeoffsRoot,
