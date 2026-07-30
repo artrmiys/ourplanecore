@@ -34,7 +34,8 @@ public partial class MainWindow
         {
             Text =
                 "ALL reads framing/<floor>/{posts, beams, headers/ext|int, joists, details, stairs}. " +
-                "Sum runs before Beams, Posts, Headers, Details, and Stairs; Joists stay grouped by takeoff name.",
+                "Sum runs before Beams, Posts, Headers, and Stairs; Joists stay grouped by takeoff name. " +
+                "Details remain as source rows in J:L without changing A:H.",
             TextWrapping = TextWrapping.Wrap,
             Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
             Margin = new Thickness(0, 0, 0, 8),

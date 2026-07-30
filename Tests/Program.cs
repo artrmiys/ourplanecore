@@ -614,6 +614,7 @@ var tests = new List<(string Name, Action Run)>
     ("excel macro ALL resolves one building root", ExcelMacroExportTests.AllScopeUsesOneBuildingAndRejectsMixedRoots),
     ("excel macro ALL uses the current tree anchor", ExcelMacroExportTests.AllUsesCurrentTreeAnchor),
     ("excel macro fast cleanup batches equivalent row deletes", ExcelMacroExportTests.FastCleanupPlansBatchEquivalentDeletes),
+    ("excel framing toolbar and relative formulas are wired", ExcelMacroExportTests.FramingToolbarAndRelativeFormulaCleanupAreWired),
     ("excel macro workbook resolver accepts renamed active workbook", ExcelMacroExportTests.WorkbookResolverAcceptsRenamedActiveWorkbook),
     ("excel macro workbook resolver rejects unsafe fallback", ExcelMacroExportTests.WorkbookResolverRejectsUnsafeFallback),
     ("excel macro cleanup keeps exact mandatory output labels", ExcelMacroExportTests.CleanupWhitelistUsesExactNormalizedLabels),

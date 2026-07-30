@@ -481,6 +481,41 @@ internal static class ExcelMacroExportTests
             "custom after-macros must still run from the workbook");
     }
 
+    public static void FramingToolbarAndRelativeFormulaCleanupAreWired()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string actions = ReadRepoFile("MainWindow.ExcelFramingActions.cs");
+        string macroService = ReadRepoFile("Models/ExcelMacroTakeoffExportService.cs");
+        string framingService = ReadRepoFile("Models/ExcelFramingExportService.cs");
+        string[] handlers =
+        [
+            "BtnExcelFramingAll_Click",
+            "BtnExcelFramingPosts_Click",
+            "BtnExcelFramingBeams_Click",
+            "BtnExcelFramingHeaders_Click",
+            "BtnExcelFramingJoists_Click",
+            "BtnExcelFramingDetails_Click",
+            "BtnExcelFramingStairs_Click",
+        ];
+        True(
+            handlers.All(handler =>
+                xaml.Contains($"Click=\"{handler}\"", StringComparison.Ordinal) &&
+                actions.Contains(handler, StringComparison.Ordinal)),
+            "every Framing toolbar button must be present and wired");
+        True(
+            actions.Contains("ExcelFramingExportService.ExportCategory(", StringComparison.Ordinal),
+            "individual Framing buttons must use the category export route");
+        True(
+            macroService.Contains("guardCell.FormulaR1C1", StringComparison.Ordinal) &&
+            macroService.Contains("cell.FormulaR1C1 = snapshot.FormulaR1C1", StringComparison.Ordinal) &&
+            macroService.Contains("sheet.Calculate();", StringComparison.Ordinal),
+            "Walls cleanup must restore relative formulas and recalculate the sheet");
+        True(
+            framingService.Contains("FindNextSourceStartRow(", StringComparison.Ordinal) &&
+            framingService.Contains("skipped A:H processing", StringComparison.Ordinal),
+            "Details must append to J:L without A:H processing");
+    }
+
     public static void WorkbookResolverAcceptsRenamedActiveWorkbook()
     {
         IReadOnlyList<ExcelWorkbookCandidate> candidates =

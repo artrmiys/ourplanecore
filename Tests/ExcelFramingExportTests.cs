@@ -26,13 +26,31 @@ internal static class ExcelFramingExportTests
 
         ExcelFramingCategoryConfig joists =
             config.Categories.Single(category => category.Id == "joists");
+        ExcelFramingCategoryConfig details =
+            config.Categories.Single(category => category.Id == "details");
         True(!joists.UseSum, "joists must not run Sum");
+        True(!details.UseSum, "details must remain unprocessed source rows");
         Equal("C_JoistsSort", joists.MacroName, "joist macro");
         True(
             config.Categories
-                .Where(category => category.Id != "joists")
+                .Where(category => category.Id is not "joists" and not "details")
                 .All(category => category.UseSum),
-            "all non-joist defaults run Sum");
+            "processed non-joist defaults run Sum");
+
+        ExcelFramingExportConfig legacy = config.Clone();
+        ExcelFramingCategoryConfig legacyDetails =
+            legacy.Categories.Single(category => category.Id == "details");
+        legacyDetails.UseSum = true;
+        legacyDetails.MacroName = "LegacyDetailsMacro";
+        ExcelFramingExportConfig upgraded = ExcelFramingExportConfig.Upgrade(
+            legacy,
+            ExcelFramingExportConfig.BuildDefault(),
+            replaceWithDefaults: false);
+        ExcelFramingCategoryConfig upgradedDetails =
+            upgraded.Categories.Single(category => category.Id == "details");
+        True(
+            !upgradedDetails.UseSum && upgradedDetails.MacroName.Length == 0,
+            "legacy Details settings migrate to source-only J:L behavior");
     }
 
     public static void PlannerMapsFloorsHeadersRoofAndDetails()
@@ -101,6 +119,19 @@ internal static class ExcelFramingExportTests
             "1_A401,2_A501",
             string.Join(",", details.Rows.Select(row => row.Name)),
             "details sort by sheet then detail");
+        ExcelFramingExportPlan detailsOnly =
+            ExcelFramingExportPlanner.ForCategory(
+                plan,
+                ExcelFramingCategoryIds.Details);
+        True(detailsOnly.Success, detailsOnly.Message);
+        True(
+            detailsOnly.FramingTargets
+                .SelectMany(target => target.Categories)
+                .All(category => category.Id == ExcelFramingCategoryIds.Details),
+            "details button plan contains only details");
+        True(
+            detailsOnly.HeaderTargets.Count == 0,
+            "details button does not target wall header blocks");
 
         ExcelFramingCategoryPlan headers = plan.HeaderTargets
             .Single(target => target.Heading == "1st Floor Walls")

@@ -32,7 +32,7 @@ internal sealed record ExcelMacroFloorRange(
 internal sealed record ExcelMacroProtectedCellSnapshot(
     string Token,
     bool HasFormula,
-    object? Formula,
+    object? FormulaR1C1,
     object? Value);
 
 public static class ExcelMacroTakeoffExportService
@@ -401,9 +401,24 @@ public static class ExcelMacroTakeoffExportService
     {
         int startColumn = ColumnNumber(action.ScanStartColumn);
         int endColumn = ColumnNumber(action.ScanEndColumn);
+        return FindNextSourceStartRow(
+            sheet,
+            action.StartRow,
+            startColumn,
+            endColumn - startColumn + 1,
+            action.BlankRowsBetween);
+    }
+
+    internal static int FindNextSourceStartRow(
+        dynamic sheet,
+        int startRow,
+        int startColumn,
+        int columnCount,
+        int blankRowsBetween = 1)
+    {
         int maxRows = Convert.ToInt32(sheet.Rows.Count, CultureInfo.InvariantCulture);
-        dynamic first = sheet.Cells[action.StartRow, startColumn];
-        dynamic last = sheet.Cells[maxRows, endColumn];
+        dynamic first = sheet.Cells[startRow, startColumn];
+        dynamic last = sheet.Cells[maxRows, startColumn + columnCount - 1];
         dynamic scanRange = sheet.Range[first, last];
         object? found = scanRange.Find(
             "*",
@@ -416,13 +431,13 @@ public static class ExcelMacroTakeoffExportService
             Missing.Value,
             Missing.Value);
         if (found == null)
-            return action.StartRow;
+            return startRow;
 
         dynamic lastUsed = found;
         int lastUsedRow = Convert.ToInt32(lastUsed.Row, CultureInfo.InvariantCulture);
         return Math.Max(
-            action.StartRow,
-            lastUsedRow + Math.Max(0, action.BlankRowsBetween) + 1);
+            startRow,
+            lastUsedRow + Math.Max(0, blankRowsBetween) + 1);
     }
 
     internal static dynamic? FindWorkbook(
@@ -522,14 +537,14 @@ public static class ExcelMacroTakeoffExportService
                 bool hasFormula = Convert.ToBoolean(
                     guardCell.HasFormula,
                     CultureInfo.InvariantCulture);
-                object? formula = guardCell.Formula;
+                object? formulaR1C1 = guardCell.FormulaR1C1;
                 object? value2 = guardCell.Value2;
                 string token = $"__OPC_KEEP_{Guid.NewGuid():N}__";
                 guardCell.Value2 = token;
                 snapshots.Add(new ExcelMacroProtectedCellSnapshot(
                     token,
                     hasFormula,
-                    formula,
+                    formulaR1C1,
                     value2));
             }
         }
@@ -576,7 +591,7 @@ public static class ExcelMacroTakeoffExportService
             }
             dynamic cell = sheet.Cells[row, 3];
             if (snapshot.HasFormula)
-                cell.Formula = snapshot.Formula;
+                cell.FormulaR1C1 = snapshot.FormulaR1C1;
             else
                 cell.Value2 = snapshot.Value;
         }
@@ -585,6 +600,7 @@ public static class ExcelMacroTakeoffExportService
             throw new InvalidOperationException(
                 $"{missingCount} mandatory Excel output row(s) disappeared during zero-row cleanup.");
         }
+        sheet.Calculate();
     }
 
     private static object? MatrixValue(

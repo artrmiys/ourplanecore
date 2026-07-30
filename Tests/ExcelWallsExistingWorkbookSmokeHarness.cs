@@ -5,6 +5,12 @@ using OurPlanCore;
 
 internal static class ExcelWallsExistingWorkbookSmokeHarness
 {
+    private sealed record ProtectedFormulaProbe(
+        string Label,
+        int Row,
+        string Formula,
+        string FormulaR1C1);
+
     public static int Run(string[] args)
     {
         if (args.Length < 2 || !File.Exists(args[1]))
@@ -68,6 +74,11 @@ internal static class ExcelWallsExistingWorkbookSmokeHarness
             Ensure(
                 protectedRowsBefore > 0,
                 "Existing workbook has no mandatory Walls rows to protect.");
+            IReadOnlyList<ProtectedFormulaProbe> formulasBefore =
+                CaptureProtectedFormulas(sheet, walls);
+            Ensure(
+                formulasBefore.Count > 0,
+                "Existing workbook has no protected formulas to verify.");
 
             var timer = Stopwatch.StartNew();
             ExcelMacroTakeoffExportResult result =
@@ -110,12 +121,28 @@ internal static class ExcelWallsExistingWorkbookSmokeHarness
                 protectedRowsAfter >= protectedRowsBefore,
                 $"Mandatory Walls rows were lost: before={protectedRowsBefore}, " +
                 $"after={protectedRowsAfter}.");
+            IReadOnlyList<ProtectedFormulaProbe> formulasAfter =
+                CaptureProtectedFormulas(sheet, walls);
+            Ensure(
+                formulasAfter.All(probe =>
+                    !probe.Formula.Contains("#REF!", StringComparison.OrdinalIgnoreCase)),
+                "A protected Walls formula contains #REF! after cleanup.");
+            bool relativeFormulaMoved = formulasBefore.Any(before =>
+                formulasAfter.Any(after =>
+                    string.Equals(after.Label, before.Label, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(after.FormulaR1C1, before.FormulaR1C1, StringComparison.Ordinal) &&
+                    after.Row != before.Row &&
+                    !string.Equals(after.Formula, before.Formula, StringComparison.Ordinal)));
+            Ensure(
+                relativeFormulaMoved,
+                "No moved protected formula preserved its relative R1C1 contract.");
 
             Console.WriteLine(
                 "PASS existing-workbook Walls Excel COM smoke: " +
                 $"elapsed={timer.ElapsedMilliseconds}ms; " +
                 $"written={result.WrittenRange}; " +
                 $"protected={result.ProtectedRowCount}; " +
+                $"relativeFormulas={formulasAfter.Count}; " +
                 "active renamed workbook won while TemplateCom was also open.");
             return 0;
         }
@@ -196,6 +223,50 @@ internal static class ExcelWallsExistingWorkbookSmokeHarness
             }
         }
         return count;
+    }
+
+    private static IReadOnlyList<ProtectedFormulaProbe> CaptureProtectedFormulas(
+        dynamic sheet,
+        ExcelMacroExportActionConfig action)
+    {
+        dynamic range = sheet.Range[action.AfterMacroRange];
+        object? values = range.Value2;
+        int firstRow = Convert.ToInt32(range.Row, CultureInfo.InvariantCulture);
+        int rowCount = Convert.ToInt32(range.Rows.Count, CultureInfo.InvariantCulture);
+        int columnCount = Convert.ToInt32(
+            range.Columns.Count,
+            CultureInfo.InvariantCulture);
+        var probes = new List<ProtectedFormulaProbe>();
+        for (int rowOffset = 0; rowOffset < rowCount; rowOffset++)
+        {
+            string label = "";
+            for (int columnOffset = 0; columnOffset < columnCount; columnOffset++)
+            {
+                string value = Convert.ToString(
+                    MatrixValue(values, rowOffset, columnOffset, rowCount, columnCount),
+                    CultureInfo.InvariantCulture) ?? "";
+                if (!ExcelMacroTakeoffExportService.IsProtectedOutputLabel(
+                        value,
+                        action.AfterMacroProtectedLabels))
+                {
+                    continue;
+                }
+                label = value.Trim();
+                break;
+            }
+            if (label.Length == 0)
+                continue;
+
+            dynamic cell = sheet.Cells[firstRow + rowOffset, 3];
+            if (!Convert.ToBoolean(cell.HasFormula, CultureInfo.InvariantCulture))
+                continue;
+            probes.Add(new ProtectedFormulaProbe(
+                label,
+                firstRow + rowOffset,
+                Convert.ToString(cell.Formula, CultureInfo.InvariantCulture) ?? "",
+                Convert.ToString(cell.FormulaR1C1, CultureInfo.InvariantCulture) ?? ""));
+        }
+        return probes;
     }
 
     private static bool RangeContainsText(

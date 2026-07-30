@@ -13,6 +13,16 @@ public static class ExcelFramingCategoryModes
     public const string Direct = "Direct";
 }
 
+public static class ExcelFramingCategoryIds
+{
+    public const string Posts = "posts";
+    public const string Beams = "beams";
+    public const string Headers = "headers";
+    public const string Joists = "joists";
+    public const string Details = "details";
+    public const string Stairs = "stairs";
+}
+
 public sealed class ExcelFramingExportConfig
 {
     public bool IncludeInAll { get; set; } = true;
@@ -91,6 +101,15 @@ public sealed class ExcelFramingExportConfig
             result.HeaderNoteText = defaults.HeaderNoteText;
         if (string.IsNullOrWhiteSpace(result.TargetHeaderColor))
             result.TargetHeaderColor = defaults.TargetHeaderColor;
+        foreach (ExcelFramingCategoryConfig category in result.Categories.Where(
+                     category => string.Equals(
+                         category.Mode,
+                         ExcelFramingCategoryModes.Details,
+                         StringComparison.OrdinalIgnoreCase)))
+        {
+            category.UseSum = false;
+            category.MacroName = "";
+        }
         return result;
     }
 
@@ -141,7 +160,7 @@ public sealed class ExcelFramingExportConfig
             Categories =
             [
                 Category(
-                    "posts",
+                    ExcelFramingCategoryIds.Posts,
                     "Posts",
                     ["posts", "post"],
                     "C_PostsSort",
@@ -149,7 +168,7 @@ public sealed class ExcelFramingExportConfig
                     ExcelFramingCategoryModes.Macro,
                     10),
                 Category(
-                    "beams",
+                    ExcelFramingCategoryIds.Beams,
                     "Beams",
                     ["beams", "beam"],
                     "C_BeamsSort",
@@ -157,7 +176,7 @@ public sealed class ExcelFramingExportConfig
                     ExcelFramingCategoryModes.Macro,
                     20),
                 Category(
-                    "headers",
+                    ExcelFramingCategoryIds.Headers,
                     "Headers",
                     ["headers", "header"],
                     "C_HeadersSort",
@@ -165,7 +184,7 @@ public sealed class ExcelFramingExportConfig
                     ExcelFramingCategoryModes.Headers,
                     30),
                 Category(
-                    "joists",
+                    ExcelFramingCategoryIds.Joists,
                     "Joists",
                     ["joists", "joist"],
                     "C_JoistsSort",
@@ -173,15 +192,15 @@ public sealed class ExcelFramingExportConfig
                     ExcelFramingCategoryModes.Joists,
                     40),
                 Category(
-                    "details",
+                    ExcelFramingCategoryIds.Details,
                     "Details",
                     ["details", "detail"],
                     "",
-                    useSum: true,
+                    useSum: false,
                     ExcelFramingCategoryModes.Details,
                     50),
                 Category(
-                    "stairs",
+                    ExcelFramingCategoryIds.Stairs,
                     "Stairs",
                     ["stairs", "stair"],
                     "",

@@ -23,6 +23,7 @@ public static class ExcelFramingExportService
 {
     private const int OutputColumnCount = 8;
     private const int SourceColumnCount = 3;
+    private const int SourceStartRow = 10;
     private const int XlShiftDown = -4121;
     private const int XlShiftUp = -4162;
 
@@ -44,11 +45,35 @@ public static class ExcelFramingExportService
         return ExportWithExcel(plan, config, legendText, excelObject!);
     }
 
+    public static ExcelFramingExportResult ExportCategory(
+        ExcelFramingExportPlan plan,
+        ExcelFramingExportConfig config,
+        string legendText)
+    {
+        if (!plan.Success)
+            return Failure(plan.Message);
+        if (!TryValidate(config, out string error))
+            return Failure(error);
+        if (!ExcelMacroTakeoffExportService.TryGetRunningExcel(
+                out object? excelObject,
+                out string excelError))
+        {
+            return Failure(excelError);
+        }
+        return ExportWithExcel(
+            plan,
+            config,
+            legendText,
+            excelObject!,
+            appendFramingCategories: true);
+    }
+
     internal static ExcelFramingExportResult ExportWithExcel(
         ExcelFramingExportPlan plan,
         ExcelFramingExportConfig config,
         string legendText,
-        object excelObject)
+        object excelObject,
+        bool appendFramingCategories = false)
     {
         if (!plan.Success)
             return Failure(plan.Message);
@@ -84,14 +109,24 @@ public static class ExcelFramingExportService
             workbook.Activate();
             sheet.Activate();
             IReadOnlyList<LegendRow> legend = ParseLegend(legendText);
-            stage = "replacing framing floor blocks";
-            ExcelFramingBlockResult framingBlocks = ReplaceFramingBlocks(
-                excel,
-                workbook,
-                sheet,
-                plan.FramingTargets,
-                config,
-                legend);
+            stage = appendFramingCategories
+                ? "appending selected framing categories"
+                : "replacing framing floor blocks";
+            ExcelFramingBlockResult framingBlocks = appendFramingCategories
+                ? AppendFramingBlocks(
+                    excel,
+                    workbook,
+                    sheet,
+                    plan.FramingTargets,
+                    config,
+                    legend)
+                : ReplaceFramingBlocks(
+                    excel,
+                    workbook,
+                    sheet,
+                    plan.FramingTargets,
+                    config,
+                    legend);
             if (!framingBlocks.Success)
                 return Failure(framingBlocks.Message);
 
@@ -107,9 +142,11 @@ public static class ExcelFramingExportService
                 return Failure(headerBlocks.Message);
 
             int categoryCount = framingBlocks.CategoryCount + headerBlocks.CategoryCount;
-            string message =
-                $"Framing: replaced {plan.FramingTargets.Count} framing block(s) and " +
-                $"{plan.HeaderTargets.Count} header block(s); ran {categoryCount} category export(s).";
+            string message = appendFramingCategories
+                ? $"Framing: appended {categoryCount} selected category export(s) across " +
+                  $"{plan.FramingTargets.Count} framing and {plan.HeaderTargets.Count} header block(s)."
+                : $"Framing: replaced {plan.FramingTargets.Count} framing block(s) and " +
+                  $"{plan.HeaderTargets.Count} header block(s); ran {categoryCount} category export(s).";
             AppLog.Info(
                 $"{message} Workbook={actualWorkbookName}; " +
                 $"ConfiguredWorkbook={config.WorkbookName}; " +
@@ -149,8 +186,23 @@ public static class ExcelFramingExportService
         IReadOnlyList<LegendRow> legend)
     {
         int categoryCount = 0;
+        var sourceOnlyCategories = new List<ExcelFramingCategoryPlan>();
         foreach (ExcelFramingTargetPlan target in OrderTargetsBottomUp(sheet, targets))
         {
+            sourceOnlyCategories.AddRange(
+                target.Categories
+                    .Where(IsSourceOnly)
+                    .OrderBy(category => category.Order));
+
+            ExcelFramingTargetPlan outputTarget = target with
+            {
+                Categories = target.Categories
+                    .Where(category => !IsSourceOnly(category))
+                    .ToList(),
+            };
+            if (outputTarget.Categories.Count == 0)
+                continue;
+
             int headingRow = FindExactTextRow(sheet, target.Heading);
             if (headingRow <= 0)
                 return BlockFailure($"Excel framing heading '{target.Heading}' was not found.");
@@ -165,6 +217,13 @@ public static class ExcelFramingExportService
                 sheet,
                 headingRow,
                 config.TargetHeaderColor);
+            if (nextHeaderRow <= headingRow + 1)
+            {
+                nextHeaderRow = FindNextConfiguredBoundaryRow(
+                    sheet,
+                    headingRow,
+                    config);
+            }
             string nextHeadingText = nextHeaderRow > headingRow
                 ? CellText(sheet, nextHeaderRow, 1)
                 : "";
@@ -172,10 +231,10 @@ public static class ExcelFramingExportService
                 return BlockFailure($"Could not find the green boundary after '{target.Heading}'.");
 
             DeleteOutputRange(sheet, headingRow + 1, nextHeaderRow - 1);
-            int guardCount = GuardRowCount(target, legend.Count);
+            int guardCount = GuardRowCount(outputTarget, legend.Count);
             if (guardCount > 0)
                 InsertOutputRows(sheet, headingRow + 1, guardCount);
-            foreach (ExcelFramingCategoryPlan category in target.Categories
+            foreach (ExcelFramingCategoryPlan category in outputTarget.Categories
                          .Where(category => !IsDirect(category))
                          .OrderByDescending(category => category.Order))
             {
@@ -194,7 +253,7 @@ public static class ExcelFramingExportService
             if (boundaryRow <= headingRow)
                 return BlockFailure($"Could not preserve the boundary after '{target.Heading}'.");
             TrimTrailingBlankOutputRows(sheet, headingRow + 1, boundaryRow);
-            foreach (ExcelFramingCategoryPlan category in target.Categories
+            foreach (ExcelFramingCategoryPlan category in outputTarget.Categories
                          .Where(IsDirect)
                          .OrderBy(category => category.Order))
             {
@@ -211,6 +270,11 @@ public static class ExcelFramingExportService
                     legend);
                 categoryCount++;
             }
+        }
+        foreach (ExcelFramingCategoryPlan category in sourceOnlyCategories)
+        {
+            WriteCategory(excel, workbook, sheet, 0, category, config, legend);
+            categoryCount++;
         }
         return new ExcelFramingBlockResult(true, "", categoryCount);
     }
@@ -274,6 +338,107 @@ public static class ExcelFramingExportService
         return new ExcelFramingBlockResult(true, "", categoryCount);
     }
 
+    private static ExcelFramingBlockResult AppendFramingBlocks(
+        dynamic excel,
+        dynamic workbook,
+        dynamic sheet,
+        IReadOnlyList<ExcelFramingTargetPlan> targets,
+        ExcelFramingExportConfig config,
+        IReadOnlyList<LegendRow> legend)
+    {
+        int categoryCount = 0;
+        var sourceOnlyCategories = new List<ExcelFramingCategoryPlan>();
+        foreach (ExcelFramingTargetPlan target in OrderTargetsBottomUp(sheet, targets))
+        {
+            sourceOnlyCategories.AddRange(
+                target.Categories
+                    .Where(IsSourceOnly)
+                    .OrderBy(category => category.Order));
+
+            ExcelFramingTargetPlan outputTarget = target with
+            {
+                Categories = target.Categories
+                    .Where(category => !IsSourceOnly(category))
+                    .ToList(),
+            };
+            if (outputTarget.Categories.Count == 0)
+                continue;
+
+            int headingRow = FindExactTextRow(sheet, target.Heading);
+            if (headingRow <= 0)
+                return BlockFailure($"Excel framing heading '{target.Heading}' was not found.");
+            if (!HeadingColorMatches(sheet, headingRow, config.TargetHeaderColor))
+            {
+                return BlockFailure(
+                    $"Excel heading '{target.Heading}' does not have configured color " +
+                    $"{config.TargetHeaderColor}; its block was not changed.");
+            }
+
+            int nextHeaderRow = FindNextConfiguredBoundaryRow(
+                sheet,
+                headingRow,
+                config);
+            if (nextHeaderRow <= headingRow)
+            {
+                nextHeaderRow = FindNextColoredHeadingRow(
+                    sheet,
+                    headingRow,
+                    config.TargetHeaderColor);
+            }
+            string nextHeadingText = nextHeaderRow > headingRow
+                ? CellText(sheet, nextHeaderRow, 1)
+                : "";
+            if (nextHeaderRow <= headingRow + 1 || nextHeadingText.Length == 0)
+                return BlockFailure($"Could not find the green boundary after '{target.Heading}'.");
+
+            int guardCount = GuardRowCount(outputTarget, legend.Count);
+            if (guardCount > 0)
+                InsertOutputRows(sheet, headingRow + 1, guardCount);
+            foreach (ExcelFramingCategoryPlan category in outputTarget.Categories
+                         .Where(category => !IsDirect(category))
+                         .OrderByDescending(category => category.Order))
+            {
+                WriteCategory(
+                    excel,
+                    workbook,
+                    sheet,
+                    headingRow + 1,
+                    category,
+                    config,
+                    legend);
+                categoryCount++;
+            }
+
+            int boundaryRow = FindExactTextRow(sheet, nextHeadingText);
+            if (boundaryRow <= headingRow)
+                return BlockFailure($"Could not preserve the boundary after '{target.Heading}'.");
+            TrimTrailingBlankOutputRows(sheet, headingRow + 1, boundaryRow);
+            foreach (ExcelFramingCategoryPlan category in outputTarget.Categories
+                         .Where(IsDirect)
+                         .OrderBy(category => category.Order))
+            {
+                boundaryRow = FindExactTextRow(sheet, nextHeadingText);
+                if (boundaryRow <= headingRow)
+                    return BlockFailure($"Could not preserve {category.Label} target boundary.");
+                WriteCategory(
+                    excel,
+                    workbook,
+                    sheet,
+                    boundaryRow,
+                    category,
+                    config,
+                    legend);
+                categoryCount++;
+            }
+        }
+        foreach (ExcelFramingCategoryPlan category in sourceOnlyCategories)
+        {
+            WriteCategory(excel, workbook, sheet, 0, category, config, legend);
+            categoryCount++;
+        }
+        return new ExcelFramingBlockResult(true, "", categoryCount);
+    }
+
     private static ExcelFramingBlockResult BlockFailure(string message) =>
         new(false, message, 0);
 
@@ -301,6 +466,23 @@ public static class ExcelFramingExportService
     {
         int sourceColumn = ExcelMacroTakeoffExportService.ColumnNumber(
             config.SourceStartColumn);
+        if (IsSourceOnly(category))
+        {
+            int sourceStartRow =
+                ExcelMacroTakeoffExportService.FindNextSourceStartRow(
+                    sheet,
+                    SourceStartRow,
+                    sourceColumn,
+                    SourceColumnCount);
+            WriteSourceRows(sheet, sourceStartRow, sourceColumn, category.Rows);
+            AppLog.Info(
+                $"Framing {category.Label}: wrote {category.Rows.Count} source row(s) " +
+                $"to {config.SourceStartColumn}{sourceStartRow}:" +
+                $"{ExcelMacroTakeoffExportService.ColumnName(sourceColumn + SourceColumnCount - 1)}" +
+                $"{sourceStartRow + category.Rows.Count - 1}; skipped A:H processing.");
+            return;
+        }
+
         WriteSourceRows(sheet, startRow, sourceColumn, category.Rows);
         int compactCount = category.Rows.Count;
         if (category.UseSum)
@@ -368,11 +550,13 @@ public static class ExcelFramingExportService
     private static bool IsDirect(ExcelFramingCategoryPlan category) =>
         string.Equals(
             category.Mode,
-            ExcelFramingCategoryModes.Details,
-            StringComparison.OrdinalIgnoreCase) ||
+            ExcelFramingCategoryModes.Direct,
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSourceOnly(ExcelFramingCategoryPlan category) =>
         string.Equals(
             category.Mode,
-            ExcelFramingCategoryModes.Direct,
+            ExcelFramingCategoryModes.Details,
             StringComparison.OrdinalIgnoreCase);
 
     private static int GuardRowCount(
@@ -380,7 +564,7 @@ public static class ExcelFramingExportService
         int legendRowCount)
     {
         int maximumSelection = target.Categories
-            .Where(category => !IsDirect(category))
+            .Where(category => !IsDirect(category) && !IsSourceOnly(category))
             .Select(category =>
                 category.Rows.Count +
                 (SupportsLegend(category) ? legendRowCount : 0))
@@ -595,6 +779,30 @@ public static class ExcelFramingExportService
                 sheet.Cells[row, 1].Interior.Color,
                 CultureInfo.InvariantCulture);
             if (actual == expected)
+                return row;
+        }
+        return 0;
+    }
+
+    private static int FindNextConfiguredBoundaryRow(
+        dynamic sheet,
+        int afterRow,
+        ExcelFramingExportConfig config)
+    {
+        HashSet<string> labels = config.Floors
+            .SelectMany(rule => new[]
+            {
+                rule.FramingHeading,
+                rule.HeaderWallHeading,
+                rule.SameFloorWallHeading,
+            })
+            .Select(label => (label ?? "").Trim())
+            .Where(label => label.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        int lastRow = LastUsedRow(sheet);
+        for (int row = afterRow + 1; row <= lastRow; row++)
+        {
+            if (labels.Contains(CellText(sheet, row, 1)))
                 return row;
         }
         return 0;

@@ -356,10 +356,10 @@ internal static class StructuralExcelMacroSmokeHarness
                             ]),
                         Category(
                             "details",
-                            "Details",
-                            ExcelFramingCategoryModes.Details,
-                            "",
-                            useSum: true,
+                             "Details",
+                             ExcelFramingCategoryModes.Details,
+                             "",
+                             useSum: false,
                             50,
                             [
                                 new ExcelFramingInputRow("1/A501", 1, "EA"),
@@ -408,22 +408,15 @@ internal static class StructuralExcelMacroSmokeHarness
         int joistRow = FindRow(sheet, "Joist 16\" o.c.", framingRow + 1, framingRow + 40);
         True(joistRow > 0, "Framing joist output inserted.");
         Equal(5, Number(sheet, $"C{joistRow}"), "framing joist grouped quantity");
-        int detailRow = FindRow(sheet, "1/A501", framingRow + 1, framingRow + 50);
-        if (detailRow == 0)
-        {
-            for (int row = framingRow; row <= framingRow + 60; row++)
-            {
-                string label = Text(sheet, $"A{row}");
-                if (label.Length > 0)
-                {
-                    Console.Error.WriteLine(
-                        $"FRAMING_DEBUG {row}: {label} | {Text(sheet, $"B{row}")} | " +
-                        $"{Text(sheet, $"C{row}")} | {Text(sheet, $"D{row}")}");
-                }
-            }
-        }
-        True(detailRow > 0, "Framing detail output inserted.");
-        Equal(3, Number(sheet, $"C{detailRow}"), "framing detail Sum quantity");
+        int detailRow = FindRow(sheet, "1/A501", "J");
+        int secondDetailRow = FindRow(sheet, "1/A501", "J", detailRow + 1);
+        True(detailRow > 0 && secondDetailRow > detailRow, "Framing details remain in J:L.");
+        Equal(1, Number(sheet, $"K{detailRow}"), "first detail source quantity");
+        Equal(2, Number(sheet, $"K{secondDetailRow}"), "second detail source quantity");
+        Equal("EA", Text(sheet, $"L{detailRow}"), "detail source unit");
+        True(
+            FindRow(sheet, "1/A501", framingRow + 1, framingRow + 50) == 0,
+            "Framing details are not inserted into A:H.");
         int nextFramingRow = FindRow(sheet, "3rd Floor Framing List", framingRow + 1);
         True(
             FindRow(
@@ -448,8 +441,50 @@ internal static class StructuralExcelMacroSmokeHarness
         True(
             FindRow(sheet, "Wall Sheathing", noteRow + 1, noteRow + 40) > 0,
             "Wall rows after the replaced header block were preserved.");
+
+        ExcelFramingExportPlan detailsOnly =
+            ExcelFramingExportPlanner.ForCategory(
+                plan,
+                ExcelFramingCategoryIds.Details);
+        ExcelFramingExportResult detailsResult =
+            ExcelFramingExportService.ExportWithExcel(
+                detailsOnly,
+                config,
+                legend,
+                excel,
+                appendFramingCategories: true);
+        True(detailsResult.Success, detailsResult.Message);
+        int appendedDetailRow = FindRow(
+            sheet,
+            "1/A501",
+            "J",
+            secondDetailRow + 1);
+        True(
+            appendedDetailRow > secondDetailRow,
+            "Details toolbar route appends another J:L source block.");
+        True(
+            FindRow(sheet, "1/A501", framingRow + 1, framingRow + 50) == 0,
+            "Details toolbar route still leaves A:H unchanged.");
+
+        ExcelFramingExportPlan postsOnly =
+            ExcelFramingExportPlanner.ForCategory(
+                plan,
+                ExcelFramingCategoryIds.Posts);
+        ExcelFramingExportResult postsResult =
+            ExcelFramingExportService.ExportWithExcel(
+                postsOnly,
+                config,
+                legend,
+                excel,
+                appendFramingCategories: true);
+        True(postsResult.Success, postsResult.Message);
+        True(
+            FindRow(sheet, "Beam (2)", framingRow + 1, framingRow + 60) > 0 &&
+            FindRow(sheet, "Joist 16\" o.c.", framingRow + 1, framingRow + 70) > 0,
+            "Posts toolbar route preserves existing Beam and Joist output.");
         Console.WriteLine(
-            "PASS framing block export: replaces green framing rows, preserves following wall rows, runs Sum before legend, and writes macro output.");
+            "PASS framing block export: replaces green framing rows, preserves following wall rows, " +
+            "runs Sum before legend, leaves Details source-only in J:L, and safely appends one category.");
     }
 
     private static ExcelFramingCategoryPlan Category(
@@ -507,6 +542,26 @@ internal static class StructuralExcelMacroSmokeHarness
         {
             if (string.Equals(
                     Text(sheet, $"A{row}"),
+                    text,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return row;
+            }
+        }
+        return 0;
+    }
+
+    private static int FindRow(
+        dynamic sheet,
+        string text,
+        string column,
+        int startRow = 1,
+        int endRow = 2300)
+    {
+        for (int row = startRow; row <= endRow; row++)
+        {
+            if (string.Equals(
+                    Text(sheet, $"{column}{row}"),
                     text,
                     StringComparison.OrdinalIgnoreCase))
             {

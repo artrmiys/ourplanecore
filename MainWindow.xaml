@@ -1523,13 +1523,57 @@
                                             ToolTip="Eve/Rakes: Eve by LF descending, then Rake by LF descending; run A6_Eve_Rakes">
                                         <TextBlock Text="E/R" FontSize="6.5" FontWeight="SemiBold"/>
                                     </Button>
-                                    <Button Style="{StaticResource TopCommandButton}"
-                                            Width="18" Height="18" Margin="4,0,4,2" Padding="0"
-                                            Click="BtnExcelMacroOpenings_Click"
-                                            ToolTip="Openings: append from Z158, run C_SumNearWindowValues per floor, then A5_Openings">
-                                        <TextBlock Text="OP" FontSize="7" FontWeight="SemiBold"/>
-                                    </Button>
-                                </StackPanel>
+                                     <Button Style="{StaticResource TopCommandButton}"
+                                             Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                             Click="BtnExcelMacroOpenings_Click"
+                                             ToolTip="Openings: append from Z158, run C_SumNearWindowValues per floor, then A5_Openings">
+                                         <TextBlock Text="OP" FontSize="7" FontWeight="SemiBold"/>
+                                     </Button>
+                                     <Border Height="1" Margin="8,3,8,3"
+                                             Background="{DynamicResource ControlBorderBrush}"/>
+                                     <Button Style="{StaticResource TopCommandButton}"
+                                             Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                             Click="BtnExcelFramingAll_Click"
+                                             ToolTip="Framing ALL: rebuild every configured framing and shifted-header block for the selected building. Details are appended to J:L only.">
+                                         <TextBlock Text="FR" FontSize="7" FontWeight="SemiBold"/>
+                                     </Button>
+                                     <Button Style="{StaticResource TopCommandButton}"
+                                             Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                             Click="BtnExcelFramingPosts_Click"
+                                             ToolTip="Posts: append the selected building's Posts category to its framing floor blocks.">
+                                         <TextBlock Text="PS" FontSize="7" FontWeight="SemiBold"/>
+                                     </Button>
+                                     <Button Style="{StaticResource TopCommandButton}"
+                                             Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                             Click="BtnExcelFramingBeams_Click"
+                                             ToolTip="Beams: append the selected building's Beams category to its framing floor blocks.">
+                                         <TextBlock Text="BM" FontSize="7" FontWeight="SemiBold"/>
+                                     </Button>
+                                     <Button Style="{StaticResource TopCommandButton}"
+                                             Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                             Click="BtnExcelFramingHeaders_Click"
+                                             ToolTip="Headers: rebuild only the shifted header blocks while preserving the following Wall Sheathing sections.">
+                                         <TextBlock Text="HD" FontSize="7" FontWeight="SemiBold"/>
+                                     </Button>
+                                     <Button Style="{StaticResource TopCommandButton}"
+                                             Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                             Click="BtnExcelFramingJoists_Click"
+                                             ToolTip="Joists: append grouped joists without running C_SumTheSameValues.">
+                                         <TextBlock Text="JS" FontSize="7" FontWeight="SemiBold"/>
+                                     </Button>
+                                     <Button Style="{StaticResource TopCommandButton}"
+                                             Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                             Click="BtnExcelFramingDetails_Click"
+                                             ToolTip="Details: append sorted source rows to the next free J:L block only; do not change A:H or run a macro.">
+                                         <TextBlock Text="DT" FontSize="7" FontWeight="SemiBold"/>
+                                     </Button>
+                                     <Button Style="{StaticResource TopCommandButton}"
+                                             Width="18" Height="18" Margin="4,0,4,2" Padding="0"
+                                             Click="BtnExcelFramingStairs_Click"
+                                             ToolTip="Stairs: append the selected building's Stairs category to its framing floor blocks.">
+                                         <TextBlock Text="ST" FontSize="7" FontWeight="SemiBold"/>
+                                     </Button>
+                                 </StackPanel>
                             </ScrollViewer>
                         </Border>
                     </Grid>

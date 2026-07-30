@@ -50,9 +50,10 @@ public static class ExcelFramingExportPlanner
         IReadOnlyList<TakeoffItem> takeoffItems,
         string scopeRoot,
         double fallbackScaleMetersPerPt,
-        ExcelFramingExportConfig config)
+        ExcelFramingExportConfig config,
+        bool requireIncludeInAll = true)
     {
-        if (!config.IncludeInAll)
+        if (requireIncludeInAll && !config.IncludeInAll)
             return ExcelFramingExportPlan.Failure("Framing export is disabled in Settings.");
 
         string normalizedScope = NormalizePath(scopeRoot);
@@ -123,6 +124,47 @@ public static class ExcelFramingExportPlanner
             headerTargets,
             warnings);
     }
+
+    public static ExcelFramingExportPlan ForCategory(
+        ExcelFramingExportPlan plan,
+        string categoryId)
+    {
+        if (!plan.Success)
+            return plan;
+
+        List<ExcelFramingTargetPlan> framingTargets =
+            FilterTargets(plan.FramingTargets, categoryId);
+        List<ExcelFramingTargetPlan> headerTargets =
+            FilterTargets(plan.HeaderTargets, categoryId);
+        if (framingTargets.Count == 0 && headerTargets.Count == 0)
+        {
+            return ExcelFramingExportPlan.Failure(
+                $"No measured {categoryId} rows were found in the selected building.");
+        }
+
+        return new ExcelFramingExportPlan(
+            true,
+            $"Prepared {categoryId} for {framingTargets.Count + headerTargets.Count} target block(s).",
+            framingTargets,
+            headerTargets,
+            plan.Warnings);
+    }
+
+    private static List<ExcelFramingTargetPlan> FilterTargets(
+        IReadOnlyList<ExcelFramingTargetPlan> targets,
+        string categoryId) =>
+        targets
+            .Select(target => target with
+            {
+                Categories = target.Categories
+                    .Where(category => string.Equals(
+                        category.Id,
+                        categoryId,
+                        StringComparison.OrdinalIgnoreCase))
+                    .ToList(),
+            })
+            .Where(target => target.Categories.Count > 0)
+            .ToList();
 
     private static List<ExcelFramingTargetPlan> BuildTargets(
         IEnumerable<MatchedItem> source,
