@@ -1,8 +1,8 @@
 # Excel Macro Export Workflow
 
-Status: implemented and verified on 2026-07-29.
+Status: implemented on 2026-07-29; Framing extension verified on 2026-07-30.
 
-Code checkpoint: `e3ead9f` (`Protect wall cleanup output rows`).
+Current code checkpoint: `30d296b` (`Add framing Excel macro export`).
 
 This document is the canonical operator and implementation reference for the
 OurPlanCore vertical Excel macro export strip and its `ALL` workflow.
@@ -39,6 +39,7 @@ vertical strip:
 Buttons:
 
 - `ALL` - runs the configured batch sequence;
+- `LG` - opens the current job's optional structural legend editor;
 - `SF` - SQFT;
 - `WL` - Walls;
 - `GB` - Gables;
@@ -142,6 +143,10 @@ SQFT
 The sequence is editable under `8 Settings > Excel macro actions`. A failed
 action stops the batch; later actions are not run. Missing action folders are
 skipped and included in the final summary.
+
+When `Include framing in ALL` is enabled, Framing runs once after the configured
+ordinary action sequence. A missing or empty Framing tree is reported as
+skipped; a Framing failure stops the remaining batch.
 
 ## Floor grouping
 
@@ -273,6 +278,121 @@ global for this job, and Apply / Run selected.
 Schema version 4 upgrades older saved configurations with the built-in Walls
 cleanup macro, range, and mandatory-label list.
 
+## Framing structural extension
+
+### Legend
+
+`LG` opens a compact text flyout like the calculator panel. Paste one or two
+tab-separated columns, one legend entry per line. Blank text is valid, so all
+supported structural macros continue to work without a legend.
+
+The legend is job-specific and is saved at:
+
+```text
+<job>\AI_Context\settings\excel_framing_legend.txt
+```
+
+The saved text is appended to the macro source selection only for structural
+categories that support the legend.
+
+### Expected Takeoffs tree
+
+The built-in Framing aliases recognize:
+
+```text
+framing
+├── 1st floor framing
+│   ├── posts
+│   ├── beams
+│   ├── headers
+│   │   ├── ext
+│   │   └── int
+│   ├── joists
+│   ├── details
+│   └── stairs
+├── 2nd floor framing
+├── 3rd floor framing
+├── 4th floor framing
+├── 5th floor framing
+└── roof framing
+```
+
+Floor and category aliases are editable, so equivalent lowercase Auto Tree
+names can be used without changing code.
+
+### Framing list targets
+
+Normal structural categories replace the output block immediately below the
+matching green `#99CC00` heading and before the next green heading:
+
+| Framing source | Excel heading |
+| --- | --- |
+| 1st floor framing | `1st Floor Framing List` |
+| 2nd floor framing | `2nd Floor Framing List` |
+| 3rd floor framing | `3rd Floor Framing List` |
+| 4th floor framing | `4th Floor Framing List` |
+| 5th floor framing | `5th Floor Framing List` |
+| roof / loft framing | `Roof Frame list` |
+
+Input is staged from column `J`; generated macro output replaces the target
+rows in `A:H`.
+
+Default category contract:
+
+| Category | Preprocess | Main processing |
+| --- | --- | --- |
+| Posts | `C_SumTheSameValues` | `C_PostsSort` |
+| Beams | `C_SumTheSameValues` | `C_BeamsSort` |
+| Headers ext/int | `C_SumTheSameValues` | `C_HeadersSort` |
+| Joists | none | group by takeoff name, then `C_JoistsSort` |
+| Details | `C_SumTheSameValues` | existing sheet-name sort, direct output |
+| Stairs | `C_SumTheSameValues` | direct output |
+
+Joists intentionally never run `C_SumTheSameValues`. For every takeoff-name
+group the input contract is all `(quantity / length)` rows first, immediately
+followed by the joist name/spacing row such as `2x10 16"`.
+
+### Header wall targets
+
+Headers do not remain inside the floor framing-list block. The service locates
+the old block beginning with:
+
+```text
+Note: The headers indicated on the plan
+```
+
+It replaces the full Ext./Int. Headers placeholder area with the
+`C_HeadersSort` result and preserves the next workbook section, including
+`Wall Sheathing`.
+
+Numeric floor mapping shifts down one wall level:
+
+| Header source | Wall block |
+| --- | --- |
+| 1st floor framing | `Basement Floor Walls` |
+| 2nd floor framing | `1st Floor Walls` |
+| 3rd floor framing | `2nd Floor Walls` |
+| 4th floor framing | `3rd Floor Walls` |
+| 5th floor framing | `4th Floor Walls` |
+
+Roof/loft headers go to the same-floor wall block of the highest occupied
+numeric framing floor. For example, when only 2nd and 3rd framing folders have
+data, 2nd headers go to `1st Floor Walls`, 3rd headers go to
+`2nd Floor Walls`, and roof headers go to `3rd Floor Walls`.
+
+### Editable Framing rules
+
+The Framing editor is part of `8 Settings > Excel macro actions` and exposes:
+
+- inclusion in `ALL`;
+- workbook, worksheet, source column, and Framing folder aliases;
+- Sum macro, target heading color, and header-note marker;
+- floor order/aliases, framing heading, shifted header target, and roof target;
+- category aliases, mode, main macro, Sum flag, and order.
+
+It uses the same built-in default, global default, per-job override, Reset,
+Save, and Apply pattern as the other Settings categories.
+
 ## Code ownership
 
 - `MainWindow.xaml`
@@ -282,9 +402,15 @@ cleanup macro, range, and mandatory-label list.
 - `MainWindow.ExcelMacroExport.cs`
   - single-action selection and execution.
 - `MainWindow.ExcelMacroBatch.cs`
-  - `ALL` orchestration and stop/skip summary.
+  - `ALL` orchestration, Framing tail step, and stop/skip summary.
+- `MainWindow.ExcelFramingLegend.cs`
+  - `LG` panel lifecycle and job-specific legend persistence.
 - `MainWindow.SettingsManager.ExcelActions.cs`
   - editable action, range, macro, whitelist, order, and floor rules.
+- `MainWindow.SettingsManager.ExcelFraming.cs`
+  - editable Framing floor/category/target/macro contract.
+- `Controls/ExcelFramingLegendPanel.xaml`
+  - compact legend text editor.
 - `Models/ExcelMacroExportConfig.cs`
   - defaults, schema migration, aliases, action order, cleanup contract.
 - `Models/ExcelMacroBatchPlanner.cs`
@@ -293,44 +419,55 @@ cleanup macro, range, and mandatory-label list.
   - recursive role matching, floor grouping, units, ordering.
 - `Models/ExcelMacroTakeoffExportService.cs`
   - Excel COM writing, VBA invocation, protection and restoration.
+- `Models/ExcelFramingExportConfig.cs`
+  - built-in Framing defaults and editable floor/category rules.
+- `Models/ExcelFramingExportPlanner.cs`
+  - Framing tree discovery, category rows, floor/header routing, and Joists.
+- `Models/ExcelFramingExportService.cs`
+  - structural Excel staging, macro execution, and exact block replacement.
+- `Models/ExcelFramingLegendStore.cs`
+  - atomic per-job legend persistence.
 - `Tests/ExcelMacroExportTests.cs`
   - config, scope, ordering, floor and whitelist regressions.
 - `Tests/ExcelMacroSmokeHarness.cs`
   - disposable real-workbook Excel COM validation.
+- `Tests/ExcelFramingExportTests.cs`
+  - Framing defaults, routing, Joists, aliases, and batch scope regressions.
+- `Tests/StructuralExcelMacroSmokeHarness.cs`
+  - direct real-workbook structural VBA and full replacement validation.
 
 ## Verification
 
-Implementation checkpoint verification:
+Current implementation verification:
 
 - Debug build: `0 warnings / 0 errors`;
-- C# regression harness: `647/647`;
+- C# regression harness: `654/654`;
 - real Excel COM smoke on a disposable copy of the selected
   `TemplateCom.xlsm`;
 - SQFT/Gables/Truss Heel `A2`, Walls `A3+B`, Parapet `A4`, Eve/Rakes `A6`,
   and Openings `C+A5` all passed;
 - Walls smoke protected 164 mandatory rows and left no temporary marker;
-- final Debug runtime: process responsive, `0 ERROR` after the latest
+- structural Sum, Beams, Posts, Headers, grouped Joists, Details, and complete
+  Framing/header block replacement all passed;
+- original template stayed byte-identical with SHA-256
+  `494C41CF4CC6DDB7A4C5D5492328B76ED18DC1E582E0AAE61BEBE5A15DB2569A`;
+- final installed runtime: `0 ERROR` after the latest
   `Application startup`, with `Loaded takeoffs` and `Viewport` evidence.
 
 ## Local release package
 
-The locally installed package was produced from documentation/source commit
-`98f8ad50e5fe250a23c855b4753a9231f1bc045c`:
+The current locally installed EXE was produced from source commit
+`30d296b8b042377f0da35bbaedcb5b5965fe6443`:
 
-- compressed self-contained single-file EXE: `171,886,381` bytes;
+- compressed self-contained single-file EXE: `171,931,210` bytes;
 - installed path:
   `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`;
 - SHA-256:
-  `5F4960E0A56805C915EFBAF861F4AF6D2EC6E77E727CCB6279E39FB9440E878C`;
-- ProductVersion:
-  `2.2.5+98f8ad50e5fe250a23c855b4753a9231f1bc045c`;
-- installed `TemplateCom.xlsm` exactly matches the verified source template,
-  SHA-256
-  `39554D070D0B2B2098623963EC6E8B52B421D45D964B337DFA076289C5B7C531`;
-- previous package files remain available as immutable `.bak` and timestamped
-  `.bak-20260729-...` files;
+  `A1200D906221D2C1D0E47AB24013B5D43C408310CC6A8CE36F74CE77A91437F2`;
+- the previous EXE remains available as a timestamped `.bak`;
 - `C:\Users\User\Desktop\OurPlanCore.lnk` targets the installed update EXE and
   uses the update directory as its working directory;
 - installed runtime validation loaded the Agrace job and emitted
   `Loaded takeoffs` and `Viewport` with `0 ERROR` after the latest startup;
-- GitHub publication was not requested.
+- this delivery updated only the EXE; the workbook and GitHub release were not
+  published.

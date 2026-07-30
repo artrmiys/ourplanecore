@@ -1,5 +1,55 @@
 ﻿# Development Log
 
+## 2026-07-30 Framing Excel Macro Export
+
+- Extended the right-side Excel workflow with a job-specific `LG` legend
+  flyout. It accepts pasted one- or two-column tab-separated text and persists
+  it at `<job>\AI_Context\settings\excel_framing_legend.txt`.
+- Extended `ALL` to discover one selected building's
+  `framing\<floor>\{posts,beams,headers\{ext,int},joists,details,stairs}` tree
+  and process Framing after the existing configured Excel actions.
+- Framing rows are written through `J:K` into the matching green
+  `#99CC00` blocks in `Detailed Frame List`. Posts, Beams, Headers, Details,
+  and Stairs first run `C_SumTheSameValues`; Joists intentionally do not.
+- Structural macro routing is:
+  `C_PostsSort`, `C_BeamsSort`, `C_HeadersSort`, and `C_JoistsSort`.
+  The optional `LG` text participates in the same supported macros both with
+  and without legend content.
+- Joists are grouped by takeoff name and emitted in the VBA input contract:
+  all `(quantity / length)` rows first, followed by the joist name/spacing row.
+  Details use the existing sheet-name comparer before direct insertion.
+- Header output replaces the complete placeholder block beginning with
+  `Note: The headers indicated on the plan`, while preserving the following
+  workbook sections such as `Wall Sheathing`. Header floor mapping shifts down
+  one wall level: 1st framing -> Basement Walls, 2nd -> 1st Walls, 3rd -> 2nd,
+  and so on. Roof/loft headers use the same-floor wall block of the highest
+  occupied numeric framing floor.
+- The complete Framing contract is editable under
+  `8 Settings > Excel macro actions`: workbook/sheet, folder aliases, source
+  column, sum macro, green heading color, header note, floor mappings,
+  category aliases/modes/macros/order, and inclusion in `ALL`. It follows the
+  standard built-in/global/per-job preset resolution.
+- Fixed `ALL` scope resolution so a direct root-level Auto Tree containing
+  Framing aliases is accepted, while a true mixed two-building selection is
+  still rejected.
+- Source commit: `30d296b8b042377f0da35bbaedcb5b5965fe6443`
+  (`Add framing Excel macro export`). Pre-change checkpoint:
+  `checkpoint-before-framing-excel-export-20260729`.
+- Verification passed: build `0 warnings / 0 errors`; C# harness `654/654`;
+  direct Excel COM smoke on a disposable copy of the real `TemplateCom.xlsm`
+  for Sum, Posts, Beams, Headers, grouped Joists, full block replacement, and
+  Details; original template SHA-256 remained
+  `494C41CF4CC6DDB7A4C5D5492328B76ED18DC1E582E0AAE61BEBE5A15DB2569A`.
+- Delivered only the compressed self-contained single-file EXE:
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`,
+  `171,931,210` bytes, SHA-256
+  `A1200D906221D2C1D0E47AB24013B5D43C408310CC6A8CE36F74CE77A91437F2`.
+  The Desktop shortcut targets this EXE and the final startup log segment has
+  `Loaded takeoffs`, `Viewport`, and `0 ERROR`. The workbook and GitHub release
+  were not published as part of this delivery.
+- Canonical operator/implementation reference:
+  `docs/30-takeoffs-measurements/EXCEL_MACRO_EXPORT_WORKFLOW_2026_07_29.md`.
+
 ## 2026-07-29 Excel Macro Export Strip and Walls Cleanup
 
 - Combined the right quick-command strip and Excel macro strip into one
