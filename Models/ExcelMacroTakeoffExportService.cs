@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -148,9 +149,18 @@ public static class ExcelMacroTakeoffExportService
             selection.Select();
 
             automationStage = $"running {action.MacroName}";
+            AppLog.Info(
+                $"Excel macro export stage starting. Action={action.Id}; " +
+                $"Workbook={actualWorkbookName}; Stage={automationStage}; Rows={rows.Count}.");
+            Stopwatch stageTimer = Stopwatch.StartNew();
             RunWorkbookMacro(excel, workbook, action.MacroName);
+            AppLog.Info(
+                $"Excel macro export stage completed. Action={action.Id}; " +
+                $"Workbook={actualWorkbookName}; Stage={automationStage}; " +
+                $"ElapsedMs={stageTimer.ElapsedMilliseconds}.");
 
             int protectedRowCount = 0;
+            bool usedFastAfterMacro = false;
             if (!string.IsNullOrWhiteSpace(action.AfterMacroName))
             {
                 automationStage =
@@ -163,7 +173,35 @@ public static class ExcelMacroTakeoffExportService
                     dynamic afterRange = sheet.Range[action.AfterMacroRange];
                     afterRange.Select();
                     automationStage = $"running {action.AfterMacroName}";
-                    RunWorkbookMacro(excel, workbook, action.AfterMacroName);
+                    AppLog.Info(
+                        $"Excel macro export stage starting. Action={action.Id}; " +
+                        $"Workbook={actualWorkbookName}; Stage={automationStage}; " +
+                        $"Range={action.AfterMacroRange}.");
+                    stageTimer.Restart();
+                    if (ExcelRangeCleanupService.CanReplaceMacro(action.AfterMacroName))
+                    {
+                        ExcelRangeCleanupResult cleanup =
+                            ExcelRangeCleanupService.CleanZeroAndBlankRows(
+                                excel,
+                                sheet,
+                                action.AfterMacroRange);
+                        usedFastAfterMacro = true;
+                        AppLog.Info(
+                            $"Excel fast cleanup completed. Action={action.Id}; " +
+                            $"Workbook={actualWorkbookName}; Range={action.AfterMacroRange}; " +
+                            $"ZeroRowsDeleted={cleanup.ZeroRowsDeleted}; " +
+                            $"BlankRowsDeleted={cleanup.BlankRowsDeleted}; " +
+                            $"BlankPasses={cleanup.BlankPassCount}; " +
+                            $"ElapsedMs={stageTimer.ElapsedMilliseconds}.");
+                    }
+                    else
+                    {
+                        RunWorkbookMacro(excel, workbook, action.AfterMacroName);
+                        AppLog.Info(
+                            $"Excel macro export stage completed. Action={action.Id}; " +
+                            $"Workbook={actualWorkbookName}; Stage={automationStage}; " +
+                            $"ElapsedMs={stageTimer.ElapsedMilliseconds}.");
+                    }
                 }
                 finally
                 {
@@ -186,7 +224,10 @@ public static class ExcelMacroTakeoffExportService
                 $"selected {selectedRange}, ran {action.MacroName}" +
                 (!string.IsNullOrWhiteSpace(action.AfterMacroName)
                     ? $", protected {protectedRowCount} mandatory row(s), " +
-                      $"selected {action.AfterMacroRange}, ran {action.AfterMacroName}"
+                      $"selected {action.AfterMacroRange}, " +
+                      (usedFastAfterMacro
+                          ? $"applied fast {action.AfterMacroName} cleanup"
+                          : $"ran {action.AfterMacroName}")
                     : "") +
                 ".";
             AppLog.Info(

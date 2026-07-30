@@ -227,13 +227,10 @@ public partial class MainWindow
         if (_currentJob == null)
             return [];
 
-        IReadOnlyList<string> managerRoots = SelectedTakeoffManagerExportRoots();
-        if (managerRoots.Count > 0)
-            return managerRoots;
+        if (TakeoffsTree.SelectedItem is TreeViewItem anchor)
+            return TakeoffTreeAnchorExportRoots(anchor);
 
-        return TakeoffsTree.SelectedItem is TreeViewItem anchor
-            ? TakeoffTreeAnchorExportRoots(anchor)
-            : [];
+        return SelectedTakeoffManagerExportRoots();
     }
 
     private IReadOnlyList<string> SelectedTakeoffManagerExportRoots()

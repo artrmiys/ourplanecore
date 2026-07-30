@@ -22,6 +22,9 @@ public partial class MainWindow
         }
 
         IReadOnlyList<string> selectedRoots = SelectedExcelAllExportRoots();
+        AppLog.Info(
+            $"Excel ALL UI scope candidates. Count={selectedRoots.Count}; " +
+            $"Roots={string.Join(" | ", selectedRoots)}.");
         ExcelMacroBatchScopeResult scope = ExcelMacroBatchPlanner.ResolveScope(
             _currentJob,
             _takeoffItems,
@@ -29,6 +32,7 @@ public partial class MainWindow
             _excelMacroExportConfig);
         if (!scope.Success)
         {
+            AppLog.Warn($"Excel ALL scope rejected: {scope.Message}");
             TxtStatus.Text = scope.Message;
             MessageBox.Show(
                 scope.Message,
@@ -37,6 +41,7 @@ public partial class MainWindow
                 MessageBoxImage.Information);
             return;
         }
+        AppLog.Info($"Excel ALL scope accepted. Root={scope.RootPath}; {scope.Message}");
 
         var planned = new List<(
             ExcelMacroExportActionConfig Action,

@@ -29,6 +29,9 @@ if (args.Length > 0 && args[0] == "storage-compact-smoke")
 if (args.Length > 0 && args[0] == "excel-macro-smoke")
     return ExcelMacroSmokeHarness.Run(args);
 
+if (args.Length > 0 && args[0] == "excel-walls-existing-smoke")
+    return ExcelWallsExistingWorkbookSmokeHarness.Run(args);
+
 if (args.Length > 0 && args[0] == "structural-excel-macro-smoke")
     return StructuralExcelMacroSmokeHarness.Run(args);
 
@@ -610,6 +613,7 @@ var tests = new List<(string Name, Action Run)>
     ("excel macro eves and rakes sort by LF descending", ExcelMacroExportTests.EvesAndRakesSortByLfDescending),
     ("excel macro ALL resolves one building root", ExcelMacroExportTests.AllScopeUsesOneBuildingAndRejectsMixedRoots),
     ("excel macro ALL uses the current tree anchor", ExcelMacroExportTests.AllUsesCurrentTreeAnchor),
+    ("excel macro fast cleanup batches equivalent row deletes", ExcelMacroExportTests.FastCleanupPlansBatchEquivalentDeletes),
     ("excel macro workbook resolver accepts renamed active workbook", ExcelMacroExportTests.WorkbookResolverAcceptsRenamedActiveWorkbook),
     ("excel macro workbook resolver rejects unsafe fallback", ExcelMacroExportTests.WorkbookResolverRejectsUnsafeFallback),
     ("excel macro cleanup keeps exact mandatory output labels", ExcelMacroExportTests.CleanupWhitelistUsesExactNormalizedLabels),

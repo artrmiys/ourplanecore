@@ -410,10 +410,59 @@ internal static class ExcelMacroExportTests
             "Excel ALL must use its single-anchor selection path");
         True(start >= 0 && end > start, "Excel ALL selection method must exist");
         string method = export[start..end];
+        int treeSelection = method.IndexOf(
+            "TakeoffsTree.SelectedItem is TreeViewItem anchor",
+            StringComparison.Ordinal);
+        int managerSelection = method.IndexOf(
+            "SelectedTakeoffManagerExportRoots()",
+            StringComparison.Ordinal);
         True(
             method.Contains("TakeoffTreeAnchorExportRoots(anchor)", StringComparison.Ordinal) &&
-            !method.Contains("GetSelectedTakeoffEntries", StringComparison.Ordinal),
+            !method.Contains("GetSelectedTakeoffEntries", StringComparison.Ordinal) &&
+            treeSelection >= 0 &&
+            managerSelection > treeSelection,
             "Excel ALL must prefer the current tree anchor over stale multi-selection");
+    }
+
+    public static void FastCleanupPlansBatchEquivalentDeletes()
+    {
+        object[,] values = new object[8, 8];
+        values[0, 0] = "keep";
+        values[1, 0] = "zero one";
+        values[1, 2] = 0d;
+        values[2, 1] = "zero two";
+        values[2, 2] = "0";
+        values[3, 0] = "keep";
+        values[4, 0] = "";
+        values[5, 1] = "\u00A0";
+        values[7, 0] = "tail";
+
+        IReadOnlyList<ExcelRowDeletionRange> zeroRanges =
+            ExcelRangeCleanupService.PlanZeroRowDeletions(
+                values,
+                firstRow: 25,
+                rowCount: 8,
+                columnCount: 8);
+        Equal(1, zeroRanges.Count, "contiguous zero rows use one Excel delete");
+        Equal(26, zeroRanges[0].FirstRow, "zero delete starts at first zero row");
+        Equal(27, zeroRanges[0].LastRow, "zero delete includes string numeric zero");
+
+        IReadOnlyList<ExcelRowDeletionRange> blankRanges =
+            ExcelRangeCleanupService.PlanBlankRowDeletions(
+                values,
+                firstRow: 25,
+                rowCount: 8,
+                columnCount: 8);
+        Equal(1, blankRanges.Count, "one blank run is collapsed in one Excel delete");
+        Equal(29, blankRanges[0].FirstRow, "blank collapse starts at run top");
+        Equal(30, blankRanges[0].LastRow, "blank collapse keeps the bottom blank row");
+        True(
+            ExcelRangeCleanupService.CanReplaceMacro(
+                "B_DeleteZeroRowsOnlyIn_AtoH"),
+            "known slow cleanup macro uses the fast compatible implementation");
+        True(
+            !ExcelRangeCleanupService.CanReplaceMacro("CustomCleanup"),
+            "custom after-macros must still run from the workbook");
     }
 
     public static void WorkbookResolverAcceptsRenamedActiveWorkbook()
