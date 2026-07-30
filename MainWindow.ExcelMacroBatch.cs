@@ -21,7 +21,7 @@ public partial class MainWindow
             return;
         }
 
-        IReadOnlyList<string> selectedRoots = SelectedCurrentExcelExportRoots();
+        IReadOnlyList<string> selectedRoots = SelectedExcelAllExportRoots();
         ExcelMacroBatchScopeResult scope = ExcelMacroBatchPlanner.ResolveScope(
             _currentJob,
             _takeoffItems,

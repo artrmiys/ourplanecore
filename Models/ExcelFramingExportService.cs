@@ -62,17 +62,15 @@ public static class ExcelFramingExportService
             dynamic? workbook = ExcelMacroTakeoffExportService.FindWorkbook(
                 excel,
                 config.WorkbookName,
-                out string openNames);
+                config.SheetName,
+                out ExcelWorkbookSelection workbookSelection);
             if (workbook == null)
-            {
-                string suffix = openNames.Length == 0
-                    ? ""
-                    : $" Open workbooks: {openNames}.";
-                return Failure(
-                    $"Open '{config.WorkbookName}' in Excel before running framing export.{suffix}");
-            }
+                return Failure(workbookSelection.Message);
 
             dynamic sheet;
+            string actualWorkbookName =
+                Convert.ToString(workbook.Name, CultureInfo.InvariantCulture) ??
+                config.WorkbookName;
             try
             {
                 sheet = workbook.Worksheets[config.SheetName];
@@ -80,7 +78,7 @@ public static class ExcelFramingExportService
             catch
             {
                 return Failure(
-                    $"Workbook '{config.WorkbookName}' does not contain sheet '{config.SheetName}'.");
+                    $"Workbook '{actualWorkbookName}' does not contain sheet '{config.SheetName}'.");
             }
 
             workbook.Activate();
@@ -112,7 +110,10 @@ public static class ExcelFramingExportService
             string message =
                 $"Framing: replaced {plan.FramingTargets.Count} framing block(s) and " +
                 $"{plan.HeaderTargets.Count} header block(s); ran {categoryCount} category export(s).";
-            AppLog.Info(message);
+            AppLog.Info(
+                $"{message} Workbook={actualWorkbookName}; " +
+                $"ConfiguredWorkbook={config.WorkbookName}; " +
+                $"UsedActiveWorkbook={workbookSelection.UsedActiveWorkbook}.");
             return new ExcelFramingExportResult(
                 true,
                 message,

@@ -390,6 +390,92 @@ internal static class ExcelMacroExportTests
             "reversed cleanup range should be rejected");
     }
 
+    public static void AllUsesCurrentTreeAnchor()
+    {
+        string batch = ReadRepoFile("MainWindow.ExcelMacroBatch.cs");
+        string export = ReadRepoFile("MainWindow.TakeoffsExport.cs");
+        int start = export.IndexOf(
+            "private IReadOnlyList<string> SelectedExcelAllExportRoots()",
+            StringComparison.Ordinal);
+        int end = start < 0
+            ? -1
+            : export.IndexOf(
+                "private IReadOnlyList<string> SelectedTakeoffManagerExportRoots()",
+                start,
+                StringComparison.Ordinal);
+        True(
+            batch.Contains(
+                "IReadOnlyList<string> selectedRoots = SelectedExcelAllExportRoots();",
+                StringComparison.Ordinal),
+            "Excel ALL must use its single-anchor selection path");
+        True(start >= 0 && end > start, "Excel ALL selection method must exist");
+        string method = export[start..end];
+        True(
+            method.Contains("TakeoffTreeAnchorExportRoots(anchor)", StringComparison.Ordinal) &&
+            !method.Contains("GetSelectedTakeoffEntries", StringComparison.Ordinal),
+            "Excel ALL must prefer the current tree anchor over stale multi-selection");
+    }
+
+    public static void WorkbookResolverAcceptsRenamedActiveWorkbook()
+    {
+        IReadOnlyList<ExcelWorkbookCandidate> candidates =
+        [
+            new("Other.xlsm", false, true, true),
+            new("Agrace_B2 H1-H2.xlsm", true, true, true),
+        ];
+
+        ExcelWorkbookSelection selection = ExcelWorkbookSelectionPolicy.Resolve(
+            "TemplateCom.xlsm",
+            "Detailed Frame List",
+            candidates);
+
+        True(selection.Success, selection.Message);
+        Equal(1, selection.CandidateIndex, "renamed active workbook index");
+        True(selection.UsedActiveWorkbook, "renamed active workbook is the explicit target");
+
+        ExcelWorkbookSelection activeWins = ExcelWorkbookSelectionPolicy.Resolve(
+            "Other.xlsm",
+            "Detailed Frame List",
+            candidates);
+        True(activeWins.Success, activeWins.Message);
+        Equal(1, activeWins.CandidateIndex, "active compatible workbook keeps priority");
+        True(activeWins.UsedActiveWorkbook, "active compatible workbook is intentional");
+
+        ExcelWorkbookSelection configuredFallback = ExcelWorkbookSelectionPolicy.Resolve(
+            "Other.xlsm",
+            "Detailed Frame List",
+            [
+                new("Other.xlsm", false, true, true),
+                new("Notes.xlsx", true, false, false),
+            ]);
+        True(configuredFallback.Success, configuredFallback.Message);
+        Equal(0, configuredFallback.CandidateIndex, "configured workbook is safe fallback");
+        True(
+            !configuredFallback.UsedActiveWorkbook,
+            "invalid active workbook must not receive export");
+    }
+
+    public static void WorkbookResolverRejectsUnsafeFallback()
+    {
+        ExcelWorkbookSelection wrongSheet = ExcelWorkbookSelectionPolicy.Resolve(
+            "TemplateCom.xlsm",
+            "Detailed Frame List",
+            [new("Agrace.xlsm", true, false, true)]);
+        True(!wrongSheet.Success, "active workbook without the required sheet must be rejected");
+        True(
+            wrongSheet.Message.Contains("does not contain worksheet", StringComparison.Ordinal),
+            "wrong-sheet failure must be actionable");
+
+        ExcelWorkbookSelection noMacros = ExcelWorkbookSelectionPolicy.Resolve(
+            "TemplateCom.xlsm",
+            "Detailed Frame List",
+            [new("Agrace.xlsx", true, true, false)]);
+        True(!noMacros.Success, "non-macro workbook must be rejected before writing");
+        True(
+            noMacros.Message.Contains("not macro-enabled", StringComparison.Ordinal),
+            "non-macro failure must be actionable");
+    }
+
     private static OurPlanCoreJob Job() =>
         new()
         {
@@ -484,5 +570,21 @@ internal static class ExcelMacroExportTests
     {
         if (Math.Abs(expected - actual) > 0.000001)
             throw new InvalidOperationException($"{message}: expected {expected}, got {actual}");
+    }
+
+    private static string ReadRepoFile(string relativePath) =>
+        File.ReadAllText(Path.Combine(RepoRoot(), relativePath));
+
+    private static string RepoRoot()
+    {
+        string? current = AppContext.BaseDirectory;
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if (File.Exists(Path.Combine(current, "ourplancore.csproj")))
+                return current;
+            current = Directory.GetParent(current)?.FullName;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the OurPlanCore repository root.");
     }
 }

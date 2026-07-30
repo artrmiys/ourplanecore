@@ -208,18 +208,9 @@ public partial class MainWindow
         if (_currentJob == null)
             return [];
 
-        if (WorkspaceTabs.SelectedItem is TabItem { Tag: not null } tab &&
-            string.Equals(tab.Tag.ToString(), "TakeoffManager", StringComparison.OrdinalIgnoreCase))
-        {
-            var managerRoots = TakeoffManagerGrid.SelectedItems
-                .OfType<TakeoffManagerRow>()
-                .Select(row => row.Item.FolderPath)
-                .Where(Directory.Exists)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            if (managerRoots.Count > 0)
-                return managerRoots;
-        }
+        IReadOnlyList<string> managerRoots = SelectedTakeoffManagerExportRoots();
+        if (managerRoots.Count > 0)
+            return managerRoots;
 
         if (TakeoffsTree.SelectedItem is not TreeViewItem anchor)
             return [];
@@ -228,13 +219,55 @@ public partial class MainWindow
         if (entries.Count > 0)
             return entries.Select(entry => entry.SourcePath).ToList();
 
-        return anchor.Tag switch
+        return TakeoffTreeAnchorExportRoots(anchor);
+    }
+
+    private IReadOnlyList<string> SelectedExcelAllExportRoots()
+    {
+        if (_currentJob == null)
+            return [];
+
+        IReadOnlyList<string> managerRoots = SelectedTakeoffManagerExportRoots();
+        if (managerRoots.Count > 0)
+            return managerRoots;
+
+        return TakeoffsTree.SelectedItem is TreeViewItem anchor
+            ? TakeoffTreeAnchorExportRoots(anchor)
+            : [];
+    }
+
+    private IReadOnlyList<string> SelectedTakeoffManagerExportRoots()
+    {
+        if (WorkspaceTabs.SelectedItem is not TabItem { Tag: not null } tab ||
+            !string.Equals(
+                tab.Tag.ToString(),
+                "TakeoffManager",
+                StringComparison.OrdinalIgnoreCase))
         {
-            TakeoffItem item when Directory.Exists(item.FolderPath) => [item.FolderPath],
-            TakeoffMeasurementNode node when Directory.Exists(node.Item.FolderPath) => [node.Item.FolderPath],
-            TakeoffFolderNode folder when Directory.Exists(folder.FolderPath) => [folder.FolderPath],
-            _ => [],
+            return [];
+        }
+
+        return TakeoffManagerGrid.SelectedItems
+            .OfType<TakeoffManagerRow>()
+            .Select(row => row.Item.FolderPath)
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> TakeoffTreeAnchorExportRoots(TreeViewItem anchor)
+    {
+        string? path = anchor.Tag switch
+        {
+            TakeoffItem item => item.FolderPath,
+            TakeoffMeasurementNode node => node.Item.FolderPath,
+            TakeoffFolderNode folder => folder.FolderPath,
+            _ => null,
         };
+
+        return !string.IsNullOrWhiteSpace(path) && Directory.Exists(path)
+            ? [path]
+            : [];
     }
 
     private string BuildTakeoffCsv()

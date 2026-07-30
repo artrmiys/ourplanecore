@@ -23,10 +23,15 @@ internal static class StructuralExcelMacroSmokeHarness
             "onc_structural_excel_macro_smoke",
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
-        string tempWorkbook = Path.Combine(tempRoot, "TemplateCom.xlsm");
+        string configuredWorkbook = Path.Combine(tempRoot, "TemplateCom.xlsm");
+        string tempWorkbook = Path.Combine(
+            tempRoot,
+            "RenamedTemplateComStructuralSmoke.xlsm");
+        File.Copy(args[1], configuredWorkbook);
         File.Copy(args[1], tempWorkbook);
 
         object? excelObject = null;
+        object? configuredWorkbookObject = null;
         object? workbookObject = null;
         bool ownsExcelInstance = false;
         int excelProcessId = 0;
@@ -51,6 +56,7 @@ internal static class StructuralExcelMacroSmokeHarness
             excel.Visible = false;
             excel.DisplayAlerts = false;
             excel.AutomationSecurity = 1;
+            configuredWorkbookObject = excel.Workbooks.Open(configuredWorkbook);
             workbookObject = excel.Workbooks.Open(tempWorkbook);
             dynamic workbook = workbookObject;
 
@@ -65,7 +71,7 @@ internal static class StructuralExcelMacroSmokeHarness
             TestFramingBlockExport(excel, workbook);
 
             Console.WriteLine(
-                "PASS structural Excel COM smoke: Sum, Beams, Posts, Headers, and grouped Joists.");
+                "PASS active renamed-workbook structural Excel COM smoke with TemplateCom also open: Sum, Beams, Posts, Headers, and grouped Joists.");
             return 0;
         }
         catch (Exception ex)
@@ -79,6 +85,8 @@ internal static class StructuralExcelMacroSmokeHarness
             {
                 if (ownsExcelInstance && workbookObject != null)
                     ((dynamic)workbookObject).Close(false);
+                if (ownsExcelInstance && configuredWorkbookObject != null)
+                    ((dynamic)configuredWorkbookObject).Close(false);
             }
             catch
             {
@@ -95,6 +103,7 @@ internal static class StructuralExcelMacroSmokeHarness
             }
 
             ReleaseCom(workbookObject);
+            ReleaseCom(configuredWorkbookObject);
             ReleaseCom(excelObject);
             GC.Collect();
             GC.WaitForPendingFinalizers();

@@ -23,10 +23,13 @@ internal static class ExcelMacroSmokeHarness
             "onc_excel_macro_smoke",
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
-        string tempWorkbook = Path.Combine(tempRoot, "TemplateCom.xlsm");
+        string configuredWorkbook = Path.Combine(tempRoot, "TemplateCom.xlsm");
+        string tempWorkbook = Path.Combine(tempRoot, "RenamedTemplateComSmoke.xlsm");
+        File.Copy(args[1], configuredWorkbook);
         File.Copy(args[1], tempWorkbook);
 
         object? excelObject = null;
+        object? configuredWorkbookObject = null;
         object? workbookObject = null;
         object? sheetObject = null;
         bool ownsExcelInstance = false;
@@ -51,10 +54,17 @@ internal static class ExcelMacroSmokeHarness
             excel.Visible = false;
             excel.DisplayAlerts = false;
             excel.AutomationSecurity = 1; // msoAutomationSecurityLow, disposable local copy only.
+            configuredWorkbookObject = excel.Workbooks.Open(configuredWorkbook);
             workbookObject = excel.Workbooks.Open(tempWorkbook);
             dynamic workbook = workbookObject;
             sheetObject = workbook.Worksheets["Detailed Frame List"];
             dynamic sheet = sheetObject;
+            dynamic configuredSheet =
+                ((dynamic)configuredWorkbookObject).Worksheets["Detailed Frame List"];
+            string configuredK10Before =
+                Convert.ToString(
+                    configuredSheet.Range["K10"].Value2,
+                    CultureInfo.InvariantCulture) ?? "";
 
             ExcelMacroExportConfig config = ExcelMacroExportConfig.BuildDefault();
             ExcelMacroExportActionConfig wallsAction =
@@ -162,9 +172,15 @@ internal static class ExcelMacroSmokeHarness
             Equal(3d, Convert.ToDouble(sheet.Range["AA159"].Value2, CultureInfo.InvariantCulture), "Floor 1 grouped quantity");
             Equal("4.25x3.25 d", Convert.ToString(sheet.Range["Z162"].Value2, CultureInfo.InvariantCulture) ?? "", "Floor 2 grouped opening");
             Equal(2d, Convert.ToDouble(sheet.Range["AA162"].Value2, CultureInfo.InvariantCulture), "Floor 2 grouped quantity");
+            Equal(
+                configuredK10Before,
+                Convert.ToString(
+                    configuredSheet.Range["K10"].Value2,
+                    CultureInfo.InvariantCulture) ?? "",
+                "configured workbook remains unchanged while renamed workbook is active");
 
             Console.WriteLine(
-                "PASS Excel COM smoke: SQFT/Gables/Truss Heel A2, Walls A3+B with mandatory-row preservation, Parapet A4, Openings C+A5, Eve/Rakes A6.");
+                "PASS active renamed-workbook Excel COM smoke with TemplateCom also open: SQFT/Gables/Truss Heel A2, Walls A3+B with mandatory-row preservation, Parapet A4, Openings C+A5, Eve/Rakes A6.");
             return 0;
         }
         catch (Exception ex)
@@ -178,6 +194,8 @@ internal static class ExcelMacroSmokeHarness
             {
                 if (ownsExcelInstance && workbookObject != null)
                     ((dynamic)workbookObject).Close(false);
+                if (ownsExcelInstance && configuredWorkbookObject != null)
+                    ((dynamic)configuredWorkbookObject).Close(false);
             }
             catch
             {
@@ -195,6 +213,7 @@ internal static class ExcelMacroSmokeHarness
 
             ReleaseCom(sheetObject);
             ReleaseCom(workbookObject);
+            ReleaseCom(configuredWorkbookObject);
             ReleaseCom(excelObject);
             GC.Collect();
             GC.WaitForPendingFinalizers();

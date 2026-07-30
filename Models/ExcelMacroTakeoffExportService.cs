@@ -73,17 +73,18 @@ public static class ExcelMacroTakeoffExportService
         try
         {
             dynamic excel = excelObject!;
-            dynamic? workbook = FindWorkbook(excel, action.WorkbookName, out string openNames);
+            dynamic? workbook = FindWorkbook(
+                excel,
+                action.WorkbookName,
+                action.SheetName,
+                out ExcelWorkbookSelection workbookSelection);
             if (workbook == null)
-            {
-                string suffix = string.IsNullOrWhiteSpace(openNames)
-                    ? ""
-                    : $" Open workbooks: {openNames}.";
-                return Failure(
-                    $"Open '{action.WorkbookName}' in Excel before running {action.Label}.{suffix}");
-            }
+                return Failure(workbookSelection.Message);
 
             dynamic sheet;
+            string actualWorkbookName =
+                Convert.ToString(workbook.Name, CultureInfo.InvariantCulture) ??
+                action.WorkbookName;
             try
             {
                 sheet = workbook.Worksheets[action.SheetName];
@@ -91,7 +92,7 @@ public static class ExcelMacroTakeoffExportService
             catch
             {
                 return Failure(
-                    $"Workbook '{action.WorkbookName}' does not contain sheet '{action.SheetName}'.");
+                    $"Workbook '{actualWorkbookName}' does not contain sheet '{action.SheetName}'.");
             }
 
             workbook.Activate();
@@ -188,7 +189,11 @@ public static class ExcelMacroTakeoffExportService
                       $"selected {action.AfterMacroRange}, ran {action.AfterMacroName}"
                     : "") +
                 ".";
-            AppLog.Info($"Excel macro export completed. Workbook={action.WorkbookName}; Sheet={action.SheetName}; {message}");
+            AppLog.Info(
+                $"Excel macro export completed. Workbook={actualWorkbookName}; " +
+                $"ConfiguredWorkbook={action.WorkbookName}; " +
+                $"UsedActiveWorkbook={workbookSelection.UsedActiveWorkbook}; " +
+                $"Sheet={action.SheetName}; {message}");
             return new ExcelMacroTakeoffExportResult(
                 true,
                 message,
@@ -379,25 +384,60 @@ public static class ExcelMacroTakeoffExportService
             lastUsedRow + Math.Max(0, action.BlankRowsBetween) + 1);
     }
 
-    internal static dynamic? FindWorkbook(dynamic excel, string workbookName, out string openNames)
+    internal static dynamic? FindWorkbook(
+        dynamic excel,
+        string workbookName,
+        string worksheetName,
+        out ExcelWorkbookSelection selection)
     {
-        var names = new List<string>();
+        var workbookObjects = new List<object>();
+        var candidates = new List<ExcelWorkbookCandidate>();
+        string activeName = "";
+        try
+        {
+            dynamic? activeWorkbook = excel.ActiveWorkbook;
+            activeName = activeWorkbook == null
+                ? ""
+                : Convert.ToString(activeWorkbook.Name, CultureInfo.InvariantCulture) ?? "";
+        }
+        catch
+        {
+            activeName = "";
+        }
+
         int count = Convert.ToInt32(excel.Workbooks.Count, CultureInfo.InvariantCulture);
         for (int index = 1; index <= count; index++)
         {
             dynamic workbook = excel.Workbooks[index];
             string name = Convert.ToString(workbook.Name, CultureInfo.InvariantCulture) ?? "";
-            if (name.Length > 0)
-                names.Add(name);
-            if (string.Equals(name, workbookName, StringComparison.OrdinalIgnoreCase))
-            {
-                openNames = string.Join(", ", names);
-                return workbook;
-            }
+            workbookObjects.Add(workbook);
+            candidates.Add(new ExcelWorkbookCandidate(
+                name,
+                string.Equals(name, activeName, StringComparison.OrdinalIgnoreCase),
+                WorkbookHasWorksheet(workbook, worksheetName),
+                ExcelWorkbookSelectionPolicy.IsMacroEnabledWorkbookName(name)));
         }
 
-        openNames = string.Join(", ", names);
-        return null;
+        selection = ExcelWorkbookSelectionPolicy.Resolve(
+            workbookName,
+            worksheetName,
+            candidates);
+        return selection.Success
+            ? workbookObjects[selection.CandidateIndex]
+            : null;
+    }
+
+    private static bool WorkbookHasWorksheet(dynamic workbook, string worksheetName)
+    {
+        try
+        {
+            dynamic worksheet = workbook.Worksheets[worksheetName];
+            return worksheet != null;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static IReadOnlyList<ExcelMacroProtectedCellSnapshot> ProtectOutputRows(
@@ -590,7 +630,7 @@ public static class ExcelMacroTakeoffExportService
         catch (COMException)
         {
             error =
-                "Open Excel and TemplateCom.xlsm, then run the Excel action again. " +
+                "Open Excel and the target macro workbook, then run the Excel action again. " +
                 "OurPlanCore will use the already-open workbook and will not close it.";
             return false;
         }
