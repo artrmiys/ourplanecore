@@ -199,6 +199,7 @@ public partial class MainWindow
             _excelSettingsFloorAliases[floor] = box;
         }
         content.Children.Add(floorGrid);
+        content.Children.Add(BuildExcelFramingSettingsSection());
 
         var buttons = HBar();
         buttons.Children.Add(MgrButton("Reset built-in", (_, _) =>
@@ -222,6 +223,16 @@ public partial class MainWindow
             }
             ExcelMacroExportConfigProvider.Install(_excelMacroExportConfig);
             await RunExcelMacroTakeoffActionAsync(_excelSettingsActionId);
+        }, primary: true));
+        buttons.Children.Add(MgrButton("Apply / Run ALL", async (_, _) =>
+        {
+            if (!TrySyncExcelSettingsFromUi(out string error))
+            {
+                SetExcelSettingsStatus(error, isError: true);
+                return;
+            }
+            ExcelMacroExportConfigProvider.Install(_excelMacroExportConfig);
+            await RunExcelMacroBatchAsync();
         }, primary: true));
         content.Children.Add(buttons);
 
@@ -348,6 +359,7 @@ public partial class MainWindow
             if (_excelSettingsFloorAliases.TryGetValue(floor, out TextBox? box))
                 box.Text = string.Join(", ", rule?.Aliases ?? []);
         }
+        BindExcelFramingSettingsFields();
     }
 
     private bool TrySyncExcelSettingsFromUi(out string error)
@@ -441,7 +453,7 @@ public partial class MainWindow
             });
         }
         _excelMacroExportConfig.FloorRules = floorRules;
-        return true;
+        return TrySyncExcelFramingSettingsFromUi(out error);
     }
 
     private void SyncExcelSettingsDraft()

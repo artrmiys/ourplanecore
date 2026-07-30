@@ -229,6 +229,8 @@ public partial class MainWindow
         bool excelIntegrationEnabled = IsModuleEnabled(ModuleId.ExcelIntegration);
         SetVisible(ExcelMacroExportPanel, excelIntegrationEnabled);
         ApplyExcelMacroStripModuleVisibility(excelIntegrationEnabled);
+        if (!excelIntegrationEnabled)
+            ExcelFramingLegendHost.Visibility = Visibility.Collapsed;
 
         bool detachedSheets = IsModuleEnabled(ModuleId.DetachedSheets);
         SetVisible(PagesCloseSheetsSplit, detachedSheets);

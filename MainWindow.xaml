@@ -1474,8 +1474,16 @@
                                             Margin="4,0,4,2"
                                             Padding="0"
                                             Click="BtnExcelMacroAll_Click"
-                                            ToolTip="Run ALL for one selected building/root: SQFT → Walls → Gables → Truss Heel → Parapet → Eve/Rakes → Openings">
+                                            ToolTip="Run ALL for one selected building/root: SQFT, Walls, Gables, Truss Heel, Parapet, Eve/Rakes, Openings, then framing floors and shifted Headers">
                                         <TextBlock Text="ALL" FontSize="6.5" FontWeight="SemiBold"/>
+                                    </Button>
+                                    <Button Style="{StaticResource TopCommandButton}"
+                                            Width="18" Height="18"
+                                            Margin="4,0,4,2"
+                                            Padding="0"
+                                            Click="BtnExcelFramingLegend_Click"
+                                            ToolTip="Open the job-specific legend used by Beams, Posts, and Headers. ALL also exports framing floors.">
+                                        <TextBlock Text="LG" FontSize="7" FontWeight="SemiBold"/>
                                     </Button>
                                     <Border Height="1" Margin="8,3,8,3"
                                             Background="{DynamicResource ControlBorderBrush}"/>
@@ -1553,6 +1561,17 @@
                             Visibility="Collapsed">
                         <controls:QuickCalcPanel x:Name="QuickCalc"
                                                  CloseRequested="QuickCalc_CloseRequested"/>
+                    </Border>
+
+                    <Border x:Name="ExcelFramingLegendHost"
+                            Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            Panel.ZIndex="31"
+                            Visibility="Collapsed">
+                        <controls:ExcelFramingLegendPanel
+                            x:Name="ExcelFramingLegend"
+                            CloseRequested="ExcelFramingLegend_CloseRequested"
+                            SaveRequested="ExcelFramingLegend_SaveRequested"/>
                     </Border>
 
                     <!-- Empty-state Start card: shown when no job is open -->

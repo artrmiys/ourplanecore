@@ -74,6 +74,7 @@ public partial class MainWindow
         _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
         _rasterDpiPresetConfig = SettingsPresetStore.ResolveRasterDpiPresets(_currentJob).Clone();
         _excelMacroExportConfig = SettingsPresetStore.ResolveExcelMacroExport(_currentJob).Clone();
+        LoadExcelFramingLegendForCurrentJob();
         _takeoffTemplateConfig = TakeoffTemplateStore.ResolveConfig(_currentJob).Clone();
         RefreshSheetManagerRasterPresetButtons();
         RefreshTakeoffTemplateEditors();

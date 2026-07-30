@@ -42,6 +42,8 @@ public partial class MainWindow
             ExcelMacroExportActionConfig Action,
             ExcelMacroPayloadResult Payload)>();
         var skipped = new List<string>();
+        ExcelFramingExportPlan framingPlan =
+            ExcelFramingExportPlan.Failure("Framing export is disabled in Settings.");
         using (ShowBusyOverlay("Preparing Excel ALL..."))
         {
             await WaitForBusyOverlayRenderAsync();
@@ -62,9 +64,20 @@ public partial class MainWindow
                 else
                     skipped.Add($"{action.Label}: {payload.Message}");
             }
+            if (_excelMacroExportConfig.Framing.IncludeInAll)
+            {
+                framingPlan = ExcelFramingExportPlanner.Build(
+                    _currentJob,
+                    _takeoffItems,
+                    scope.RootPath,
+                    _viewport.ScaleMetersPerPt,
+                    _excelMacroExportConfig.Framing);
+                if (!framingPlan.Success)
+                    skipped.Add($"Framing: {framingPlan.Message}");
+            }
         }
 
-        if (planned.Count == 0)
+        if (planned.Count == 0 && !framingPlan.Success)
         {
             string message =
                 $"{scope.Message}{Environment.NewLine}" +
@@ -82,6 +95,8 @@ public partial class MainWindow
             .SelectMany(entry => entry.Payload.Warnings.Select(
                 warning => $"{entry.Action.Label}: {warning}"))
             .ToList();
+        warnings.AddRange(
+            framingPlan.Warnings.Select(warning => $"Framing: {warning}"));
         if (warnings.Count > 0 && !ConfirmExcelBatchWarnings(warnings))
         {
             TxtStatus.Text = "Excel ALL cancelled before writing to Excel.";
@@ -89,25 +104,51 @@ public partial class MainWindow
         }
 
         var completed = new List<string>();
-        ExcelMacroTakeoffExportResult? failure = null;
+        string? failureMessage = null;
         string failedLabel = "";
+        int totalSteps = planned.Count + (framingPlan.Success ? 1 : 0);
+        int completedSteps = 0;
         for (int index = 0; index < planned.Count; index++)
         {
             (ExcelMacroExportActionConfig action, ExcelMacroPayloadResult payload) =
                 planned[index];
             using (ShowBusyOverlay(
-                       $"Excel ALL {index + 1}/{planned.Count}: {action.Label}..."))
+                       $"Excel ALL {completedSteps + 1}/{totalSteps}: {action.Label}..."))
             {
                 await WaitForBusyOverlayRenderAsync();
                 ExcelMacroTakeoffExportResult result =
                     ExcelMacroTakeoffExportService.ExportAndRun(payload.Rows, action);
                 if (!result.Success)
                 {
-                    failure = result;
+                    failureMessage = result.Message;
                     failedLabel = action.Label;
                     break;
                 }
                 completed.Add(action.Label);
+                completedSteps++;
+            }
+        }
+
+        if (failureMessage == null && framingPlan.Success)
+        {
+            using (ShowBusyOverlay(
+                       $"Excel ALL {completedSteps + 1}/{totalSteps}: Framing..."))
+            {
+                await WaitForBusyOverlayRenderAsync();
+                ExcelFramingExportResult framingResult =
+                    ExcelFramingExportService.Export(
+                        framingPlan,
+                        _excelMacroExportConfig.Framing,
+                        CurrentExcelFramingLegendText());
+                if (framingResult.Success)
+                {
+                    completed.Add("Framing");
+                }
+                else
+                {
+                    failedLabel = "Framing";
+                    failureMessage = framingResult.Message;
+                }
             }
         }
 
@@ -116,13 +157,13 @@ public partial class MainWindow
             completed,
             skipped,
             failedLabel,
-            failure?.Message);
+            failureMessage);
         TxtStatus.Text = summary.Replace(Environment.NewLine, " ");
         MessageBox.Show(
             summary,
             "Excel ALL",
             MessageBoxButton.OK,
-            failure == null ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            failureMessage == null ? MessageBoxImage.Information : MessageBoxImage.Warning);
     }
 
     private bool ConfirmExcelBatchWarnings(IReadOnlyList<string> warnings)

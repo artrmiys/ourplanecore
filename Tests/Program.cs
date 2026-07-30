@@ -29,6 +29,9 @@ if (args.Length > 0 && args[0] == "storage-compact-smoke")
 if (args.Length > 0 && args[0] == "excel-macro-smoke")
     return ExcelMacroSmokeHarness.Run(args);
 
+if (args.Length > 0 && args[0] == "structural-excel-macro-smoke")
+    return StructuralExcelMacroSmokeHarness.Run(args);
+
 string testGlobalRoot = Path.Combine(Path.GetTempPath(), "onc_tests_global", Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
 
@@ -607,6 +610,10 @@ var tests = new List<(string Name, Action Run)>
     ("excel macro eves and rakes sort by LF descending", ExcelMacroExportTests.EvesAndRakesSortByLfDescending),
     ("excel macro ALL resolves one building root", ExcelMacroExportTests.AllScopeUsesOneBuildingAndRejectsMixedRoots),
     ("excel macro cleanup keeps exact mandatory output labels", ExcelMacroExportTests.CleanupWhitelistUsesExactNormalizedLabels),
+    ("excel framing defaults match TemplateCom contract", ExcelFramingExportTests.DefaultsMatchTemplateAndMacroContract),
+    ("excel framing planner maps floors headers roof and details", ExcelFramingExportTests.PlannerMapsFloorsHeadersRoofAndDetails),
+    ("excel framing planner groups joists without Sum", ExcelFramingExportTests.PlannerBuildsGroupedJoistMacroInputWithoutSum),
+    ("excel macro ALL recognizes one framing house", ExcelFramingExportTests.AllScopeRecognizesFramingAsOneHouse),
     ("joist pitch persists on takeoff item", JoistPitchPersistsOnTakeoffItem),
     ("joist pitch applies item properties", JoistPitchAppliesItemProperties),
     ("page overlay persists through source rewrites", PageOverlayPersistsThroughSourceRewrites),

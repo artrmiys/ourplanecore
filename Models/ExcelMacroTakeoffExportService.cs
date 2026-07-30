@@ -379,7 +379,7 @@ public static class ExcelMacroTakeoffExportService
             lastUsedRow + Math.Max(0, action.BlankRowsBetween) + 1);
     }
 
-    private static dynamic? FindWorkbook(dynamic excel, string workbookName, out string openNames)
+    internal static dynamic? FindWorkbook(dynamic excel, string workbookName, out string openNames)
     {
         var names = new List<string>();
         int count = Convert.ToInt32(excel.Workbooks.Count, CultureInfo.InvariantCulture);
@@ -520,7 +520,7 @@ public static class ExcelMacroTakeoffExportService
         return matrix.GetValue(row, column);
     }
 
-    private static void RunWorkbookMacro(
+    internal static void RunWorkbookMacro(
         dynamic excel,
         dynamic workbook,
         string macroName)
@@ -577,7 +577,7 @@ public static class ExcelMacroTakeoffExportService
         return error.Length == 0;
     }
 
-    private static bool TryGetRunningExcel(out object? excelObject, out string error)
+    internal static bool TryGetRunningExcel(out object? excelObject, out string error)
     {
         excelObject = null;
         error = "";

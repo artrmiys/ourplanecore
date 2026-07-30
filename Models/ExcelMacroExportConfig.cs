@@ -6,10 +6,12 @@ namespace OurPlanCore;
 
 public sealed class ExcelMacroExportConfig
 {
-    public int SchemaVersion { get; set; } = 4;
+    public int SchemaVersion { get; set; } = 5;
     public List<ExcelMacroExportActionConfig> Actions { get; set; } = [];
     public List<ExcelMacroFloorRule> FloorRules { get; set; } = [];
     public List<string> BatchActionOrder { get; set; } = [];
+    public ExcelFramingExportConfig Framing { get; set; } =
+        ExcelFramingExportConfig.BuildDefault();
 
     public ExcelMacroExportConfig Clone() =>
         new()
@@ -18,6 +20,7 @@ public sealed class ExcelMacroExportConfig
             Actions = (Actions ?? []).Where(action => action != null).Select(action => action.Clone()).ToList(),
             FloorRules = (FloorRules ?? []).Where(rule => rule != null).Select(rule => rule.Clone()).ToList(),
             BatchActionOrder = [.. (BatchActionOrder ?? [])],
+            Framing = (Framing ?? ExcelFramingExportConfig.BuildDefault()).Clone(),
         };
 
     public ExcelMacroExportActionConfig Action(string id)
@@ -88,6 +91,10 @@ public sealed class ExcelMacroExportConfig
                     [.. defaultAction.AfterMacroProtectedLabels];
             }
         }
+        result.Framing = ExcelFramingExportConfig.Upgrade(
+            result.Framing,
+            defaults.Framing,
+            replaceWithDefaults: sourceSchema < 5);
         foreach (ExcelMacroExportActionConfig action in result.Actions)
         {
             if (!string.IsNullOrWhiteSpace(action.RowOrderMode))
@@ -249,6 +256,7 @@ public sealed class ExcelMacroExportConfig
                 ExcelMacroExportActionIds.EveRakes,
                 ExcelMacroExportActionIds.Openings,
             ],
+            Framing = ExcelFramingExportConfig.BuildDefault(),
         };
 }
 

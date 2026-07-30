@@ -337,6 +337,7 @@ public partial class MainWindow
             return;
         }
 
+        ExcelFramingLegendHost.Visibility = Visibility.Collapsed;
         QuickCalcHost.Visibility = Visibility.Visible;
         var slide = new TranslateTransform(QuickCalc.Width, 0);
         QuickCalcHost.RenderTransform = slide;

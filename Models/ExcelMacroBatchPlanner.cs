@@ -56,6 +56,10 @@ public static class ExcelMacroBatchPlanner
 
         HashSet<string> aliases = config.Actions
             .SelectMany(action => action.FolderAliases ?? [])
+            .Concat(config.Framing?.FramingFolderAliases ?? [])
+            .Concat(
+                (config.Framing?.Categories ?? [])
+                .SelectMany(category => category.FolderAliases ?? []))
             .Select(alias => alias.Trim())
             .Where(alias => alias.Length > 0)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
