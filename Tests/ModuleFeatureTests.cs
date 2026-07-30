@@ -193,6 +193,13 @@ internal static class ModuleFeatureTests
         AssertTrue(sheetManager.Contains("CancelActiveSheetManagerWorkForModuleDisable", StringComparison.Ordinal), "Sheet Manager active-work cancellation");
         AssertTrue(pageTabs.Contains("RequireModule(ModuleId.DetachedSheets", StringComparison.Ordinal), "detached sheet execution gate");
         AssertTrue(pageTabs.Contains("CloseDetachedSheetsForModuleDisable", StringComparison.Ordinal), "detached window close on module disable");
+        AssertTrue(xaml.Contains("x:Name=\"PagesCloseSheetsSplit\"", StringComparison.Ordinal), "Pages split close control");
+        AssertTrue(xaml.Contains("Click=\"BtnPagesCloseAllExceptViewport_Click\"", StringComparison.Ordinal), "close-all-except-viewport command binding");
+        AssertTrue(modules.Contains("SetVisible(PagesCloseSheetsSplit, detachedSheets)", StringComparison.Ordinal), "split close module gate");
+        AssertTrue(
+            pageTabs.Contains("_pageTabs.RemoveAll(tab => !ReferenceEquals(tab, viewportTab))", StringComparison.Ordinal) &&
+            pageTabs.Contains("_detachedSheetWindows.ToList()", StringComparison.Ordinal),
+            "close-all-except-viewport keeps the main tab and closes every detached window");
         AssertTrue(displaySettings.Contains("IsModuleEnabled(ModuleId.PdfLayers) && _settings.PdfLayersEnabled", StringComparison.Ordinal), "display settings PDF-layer gate");
         AssertTrue(displayOverlaySettings.Contains("IsModuleEnabled(ModuleId.PdfLayers) && _settings.PdfLayersEnabled", StringComparison.Ordinal), "overlay settings PDF-layer gate");
         AssertTrue(bookmarks.Contains("_pageBookmarks.Clear();", StringComparison.Ordinal) && bookmarks.Contains("LoadForJob();", StringComparison.Ordinal), "bookmark job isolation and restore");

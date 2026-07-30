@@ -1003,16 +1003,32 @@
                     <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
                         <DockPanel LastChildFill="True">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                <Button x:Name="BtnPagesCloseDetachedSecondMonitor"
-                                        Content="&#x2715;"
-                                        Click="BtnPagesCloseDetachedSecondMonitor_Click"
-                                        Width="22"
-                                        Height="22"
-                                        Padding="0"
-                                        FontSize="11"
-                                        Margin="0,0,4,0"
-                                        VerticalAlignment="Center"
-                                        ToolTip="Close all detached sheet windows on monitor 2"/>
+                                <Grid x:Name="PagesCloseSheetsSplit"
+                                      Margin="0,0,4,0"
+                                      VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="22"/>
+                                        <ColumnDefinition Width="28"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="BtnPagesCloseAllExceptViewport"
+                                            Content="&#x2715;"
+                                            Click="BtnPagesCloseAllExceptViewport_Click"
+                                            Width="22"
+                                            Height="22"
+                                            Padding="0"
+                                            FontSize="11"
+                                            ToolTip="Close every other sheet tab and all detached windows; keep the sheet shown in the main viewport"/>
+                                    <Button x:Name="BtnPagesCloseDetachedSecondMonitor"
+                                            Grid.Column="1"
+                                            Content="2&#x2715;"
+                                            Click="BtnPagesCloseDetachedSecondMonitor_Click"
+                                            Width="28"
+                                            Height="22"
+                                            Padding="0"
+                                            Margin="-1,0,0,0"
+                                            FontSize="10"
+                                            ToolTip="Close all detached sheet windows on monitor 2"/>
+                                </Grid>
                                 <Grid Margin="0,0,4,0" VerticalAlignment="Center">
                                     <Button x:Name="BtnPagesTileSecondMonitor"
                                             Content="Tile M2"

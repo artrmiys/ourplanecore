@@ -130,6 +130,41 @@ public partial class MainWindow
             TxtStatus.Text = "Pages tree: select one or more sheets first.";
     }
 
+    private void BtnPagesCloseAllExceptViewport_Click(object sender, RoutedEventArgs e)
+    {
+        PageTabState? viewportTab = _currentPage == null
+            ? null
+            : FindPageTab(_currentPage.FolderPath);
+        if (_currentPage != null && viewportTab == null)
+        {
+            viewportTab = new PageTabState(_currentPage.FolderPath, _currentPage.Name)
+            {
+                ViewState = _viewport.CaptureViewState(),
+            };
+            _pageTabs.Add(viewportTab);
+        }
+
+        int closedTabs = _pageTabs.RemoveAll(tab => !ReferenceEquals(tab, viewportTab));
+        if (viewportTab != null)
+        {
+            _activePageTab = viewportTab;
+            RefreshPageTabs(viewportTab);
+        }
+        else
+        {
+            _activePageTab = null;
+            RefreshPageTabs(null);
+        }
+
+        List<DetachedSheetWindow> detached = _detachedSheetWindows.ToList();
+        foreach (DetachedSheetWindow window in detached)
+            window.Close();
+
+        TxtStatus.Text = viewportTab == null
+            ? $"Closed {closedTabs} sheet tab(s) and {detached.Count} detached window(s)."
+            : $"Kept {_currentPage!.Name} in the main viewport; closed {closedTabs} other tab(s) and {detached.Count} detached window(s).";
+    }
+
     private void BtnPagesCloseDetachedSecondMonitor_Click(object sender, RoutedEventArgs e)
     {
         var targets = _detachedSheetWindows

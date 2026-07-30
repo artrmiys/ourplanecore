@@ -29,8 +29,11 @@ internal static class FolderTemplateDefaultTests
                 FolderPlanNode floor = Find(framing.Children, floorName, mode);
                 AssertNames(
                     floor.Children,
-                    ["Posts", "Beams", "Joists", "Details", "Stairs"],
+                    ["posts", "beams", "headers", "joists", "details", "stairs"],
                     $"{mode} {floorName} folders");
+
+                FolderPlanNode headers = Find(floor.Children, "headers", mode);
+                AssertNames(headers.Children, ["ext", "int"], $"{mode} {floorName} header folders");
             }
         }
     }
@@ -40,7 +43,7 @@ internal static class FolderTemplateDefaultTests
         FolderTemplateConfig defaults = FolderTemplateConfig.BuildDefault();
         foreach (string mode in new[] { "COM", "EWP" })
         {
-            FolderPlanNode shearWalls = Find(defaults.TreeFor(mode), "Shear Walls", mode);
+            FolderPlanNode shearWalls = Find(defaults.TreeFor(mode), "shear walls", mode);
             AssertNames(
                 shearWalls.Children,
                 Floors.Select(floor => floor.ShearName),
@@ -51,9 +54,32 @@ internal static class FolderTemplateDefaultTests
                 FolderPlanNode floor = Find(shearWalls.Children, floorName, mode);
                 AssertNames(
                     floor.Children,
-                    ["Shear", "Holdowns"],
+                    ["shear", "holdowns"],
                     $"{mode} {floorName} shear folders");
             }
+        }
+    }
+
+    public static void DefaultsUseLowercaseFolderNames()
+    {
+        FolderTemplateConfig defaults = FolderTemplateConfig.BuildDefault();
+        foreach (string mode in new[] { "COM", "EWP" })
+        {
+            foreach (FolderPlanNode node in Descendants(defaults.TreeFor(mode)))
+            {
+                if (!string.Equals(node.Name, node.Name.ToLowerInvariant(), StringComparison.Ordinal))
+                    throw new InvalidOperationException($"{mode}: folder '{node.Name}' is not lowercase.");
+            }
+        }
+    }
+
+    private static IEnumerable<FolderPlanNode> Descendants(IEnumerable<FolderPlanNode> nodes)
+    {
+        foreach (FolderPlanNode node in nodes)
+        {
+            yield return node;
+            foreach (FolderPlanNode child in Descendants(node.Children))
+                yield return child;
         }
     }
 

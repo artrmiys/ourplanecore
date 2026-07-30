@@ -128,20 +128,25 @@ public static partial class PlanSwiftFolderTemplateService
         new("framing", AutoTreeFloors
             .Select(floor => new FolderNode(floor.FramingName,
             [
-                new("Posts"),
-                new("Beams"),
-                new("Joists"),
-                new("Details"),
-                new("Stairs"),
+                new("posts"),
+                new("beams"),
+                new("headers",
+                [
+                    new("ext"),
+                    new("int"),
+                ]),
+                new("joists"),
+                new("details"),
+                new("stairs"),
             ]))
             .ToList());
 
     private static FolderNode BuildShearWallsNode() =>
-        new("Shear Walls", AutoTreeFloors
+        new("shear walls", AutoTreeFloors
             .Select(floor => new FolderNode(floor.ShearName,
             [
-                new("Shear"),
-                new("Holdowns"),
+                new("shear"),
+                new("holdowns"),
             ]))
             .ToList());
 

@@ -223,7 +223,7 @@ public partial class MainWindow
         ApplyExcelMacroStripModuleVisibility(excelIntegrationEnabled);
 
         bool detachedSheets = IsModuleEnabled(ModuleId.DetachedSheets);
-        SetVisible(BtnPagesCloseDetachedSecondMonitor, detachedSheets);
+        SetVisible(PagesCloseSheetsSplit, detachedSheets);
         SetVisible(BtnPagesTileSecondMonitor, detachedSheets);
         SetVisible(BtnPagesTileSecondMonitorVertical, detachedSheets);
         SetVisible(BtnSheetManagerDetach, detachedSheets);

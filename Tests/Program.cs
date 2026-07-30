@@ -569,6 +569,7 @@ var tests = new List<(string Name, Action Run)>
     ("folder template openings have numbered children", FolderTemplateOpeningsHaveNumberedChildren),
     ("folder template defaults include framing trade folders", FolderTemplateDefaultTests.DefaultsIncludeFramingTradeFolders),
     ("folder template defaults include shear and holdowns per floor", FolderTemplateDefaultTests.DefaultsIncludeShearAndHoldownsPerFloor),
+    ("folder template defaults use lowercase names", FolderTemplateDefaultTests.DefaultsUseLowercaseFolderNames),
     ("settings manager folder template edits auto persist", TakeoffsTreeRegressionTests.SettingsManagerFolderTemplateEditsAutoPersist),
     ("report template loads synthetic detailed frame list", ReportTemplateServiceTests.LoadsSyntheticDetailedFrameList),
     ("report template loads local template if present", ReportTemplateServiceTests.LoadsLocalTemplateIfPresent),
