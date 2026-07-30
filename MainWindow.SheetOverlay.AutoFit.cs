@@ -85,7 +85,12 @@ public partial class MainWindow
         PageInfo? latestTarget = OurPlanCoreJobStore.TryReadPage(targetPage.FolderPath);
         if (latestTarget == null ||
             string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) ||
-            !SameFolder(latestTarget.OverlayPageFolder, overlayPage.FolderPath))
+            !SameFolder(latestTarget.OverlayPageFolder, overlayPage.FolderPath) ||
+            (!string.IsNullOrWhiteSpace(targetPage.ActiveOverlayId) &&
+             !string.Equals(
+                 latestTarget.ActiveOverlayId,
+                 targetPage.ActiveOverlayId,
+                 StringComparison.OrdinalIgnoreCase)))
         {
             TxtStatus.Text = "Overlay auto fit skipped: overlay changed while fitting.";
             return;

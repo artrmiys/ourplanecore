@@ -10,8 +10,8 @@ public partial class MainWindow
         bool canSetOverlay = hasCurrentPage &&
                              !SameFolder(_currentPage!.FolderPath, candidatePage.FolderPath);
         bool currentHasOverlay = hasCurrentPage &&
-                                 !string.IsNullOrWhiteSpace(_currentPage!.OverlayPageFolder);
-        bool candidateHasOverlay = !string.IsNullOrWhiteSpace(candidatePage.OverlayPageFolder);
+                                 _currentPage!.OverlayLayers.Count > 0;
+        bool candidateHasOverlay = candidatePage.OverlayLayers.Count > 0;
         bool candidateIsCurrent = hasCurrentPage &&
                                   SameFolder(_currentPage!.FolderPath, candidatePage.FolderPath);
         PageInfo propertiesPage = candidateIsCurrent || candidateHasOverlay
@@ -37,6 +37,10 @@ public partial class MainWindow
             canSetOverlay,
             () => SetCurrentSheetOverlay(candidatePage)));
         menu.Items.Add(MakeMenuItem(
+            "Add This Sheet as New Overlay",
+            canSetOverlay,
+            () => AddCurrentSheetOverlay(candidatePage)));
+        menu.Items.Add(MakeMenuItem(
             "Overlay Properties...",
             hasCurrentPage || candidateHasOverlay,
             () => ShowSheetOverlayProperties(propertiesPage)));
@@ -50,17 +54,23 @@ public partial class MainWindow
     private ContextMenu BuildPageOverlayContextMenu(PageOverlayNode node)
     {
         var menu = new ContextMenu();
-        bool hasOverlay = !string.IsNullOrWhiteSpace(node.Page.OverlayPageFolder);
+        bool hasOverlay = node.Page.OverlayLayers.Any(layer =>
+            string.Equals(layer.Id, node.Layer.Id, StringComparison.OrdinalIgnoreCase));
+        int layerIndex = node.Page.OverlayLayers
+            .Select((layer, index) => (layer, index))
+            .FirstOrDefault(pair =>
+                string.Equals(pair.layer.Id, node.Layer.Id, StringComparison.OrdinalIgnoreCase))
+            .index;
         menu.Items.Add(MakeMenuItem(
             "Overlay Properties...",
             true,
-            () => ShowSheetOverlayProperties(node.Page)));
+            () => ActivateSheetOverlayLayer(node.Page, node.Layer.Id, showProperties: true)));
         if (IsCurrentJobReadOnly)
         {
             menu.Items.Add(MakeMenuItem(
                 "Open Overlay Sheet",
                 hasOverlay,
-                () => OpenSheetOverlaySource(node.Page)));
+                () => OpenSheetOverlaySource(node.Page, node.Layer)));
             menu.Items.Add(MakeMenuItem(
                 "Read-only: overlay editing is disabled",
                 false,
@@ -69,21 +79,27 @@ public partial class MainWindow
         }
 
         menu.Items.Add(MakeMenuItem(
-            node.Page.OverlayVisible ? "Hide Overlay" : "Show Overlay",
+            node.Layer.IsVisible ? "Hide Overlay" : "Show Overlay",
             hasOverlay,
-            () => SetSheetOverlayVisibility(node.Page, !node.Page.OverlayVisible)));
+            () => SetSheetOverlayVisibility(node.Page, node.Layer.Id, !node.Layer.IsVisible)));
         menu.Items.Add(MakeMenuItem(
             "Open Overlay Sheet",
             hasOverlay,
-            () => OpenSheetOverlaySource(node.Page)));
+            () => OpenSheetOverlaySource(node.Page, node.Layer)));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem(
-            "Clear Overlay",
+            "Move Layer Up",
+            hasOverlay && layerIndex < node.Page.OverlayLayers.Count - 1,
+            () => MoveSheetOverlayLayer(node.Page, node.Layer.Id, 1)));
+        menu.Items.Add(MakeMenuItem(
+            "Move Layer Down",
+            hasOverlay && layerIndex > 0,
+            () => MoveSheetOverlayLayer(node.Page, node.Layer.Id, -1)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem(
+            "Remove Overlay Layer",
             hasOverlay,
-            () =>
-            {
-                ClearPageOverlay(node.Page);
-            }));
+            () => RemoveSheetOverlayLayer(node.Page, node.Layer.Id)));
         return menu;
     }
 
@@ -101,6 +117,11 @@ public partial class MainWindow
             "Auto Fit Overlay",
             !IsCurrentJobReadOnly && _currentJob != null,
             () => AutoFitSheetOverlay(currentPage)));
+        menu.Items.Add(MakeMenuItem(
+            "Fit by 2 Points",
+            !IsCurrentJobReadOnly &&
+            !string.IsNullOrWhiteSpace(currentPage.OverlayPageFolder),
+            () => BeginSheetOverlayPointEdit(currentPage)));
         return true;
     }
 }

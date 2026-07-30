@@ -13,7 +13,9 @@ internal static class SheetOverlayPerformanceRegressionTests
             "private void QueueSheetOverlayLoadForPageOpen(",
             "private bool TryApplyCachedSheetOverlay(");
         string cache = ReadRepoFile("MainWindow.SheetOverlay.BitmapCache.cs");
-        string overlayPaint = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+        string overlayPaint = string.Concat(
+            ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs")),
+            ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlayLayers.cs")));
         string rendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Rendering.cs"));
         string recorder = ReadRepoFile(Path.Combine("Models", "ViewportPerformanceRecorder.cs"));
 

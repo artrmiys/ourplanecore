@@ -61,6 +61,11 @@
                            Foreground="{DynamicResource SecondaryForegroundBrush}"/>
 
                 <TextBlock Text="Source" Style="{StaticResource OverlaySectionHeader}"/>
+                <ComboBox x:Name="CmbOverlayLayer"
+                          Margin="0,0,0,5"
+                          MinHeight="24"
+                          SelectionChanged="OverlayLayer_SelectionChanged"
+                          DisplayMemberPath="DisplayName"/>
                 <Border BorderBrush="{DynamicResource ControlBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="2"
@@ -77,6 +82,11 @@
                           Margin="1,0,0,5"
                           Click="Visibility_Click"/>
                 <WrapPanel>
+                    <Button x:Name="BtnAdd"
+                            Content="Add..."
+                            Tag="Add"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
                     <Button x:Name="BtnOpenSource"
                             Content="Open Source"
                             Tag="OpenSource"
@@ -93,8 +103,20 @@
                             Click="CommandButton_Click"
                             Style="{StaticResource OverlayCompactButton}"/>
                     <Button x:Name="BtnClear"
-                            Content="Clear"
+                            Content="Remove"
                             Tag="Clear"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                    <Button x:Name="BtnMoveDown"
+                            Content="↓"
+                            ToolTip="Move active layer down"
+                            Tag="MoveDown"
+                            Click="CommandButton_Click"
+                            Style="{StaticResource OverlayCompactButton}"/>
+                    <Button x:Name="BtnMoveUp"
+                            Content="↑"
+                            ToolTip="Move active layer up"
+                            Tag="MoveUp"
                             Click="CommandButton_Click"
                             Style="{StaticResource OverlayCompactButton}"/>
                 </WrapPanel>
@@ -252,7 +274,46 @@
                     <Button x:Name="BtnColorGray" Tag="#546E7A" ToolTip="Gray"
                             Click="ColorButton_Click" Width="25" Height="22" Margin="0,0,4,4"
                             Background="#546E7A" BorderThickness="1"/>
+                    <Button x:Name="BtnColorCustom"
+                            ToolTip="Choose custom color"
+                            Click="CustomColorButton_Click"
+                            Width="29" Height="22" Margin="0,0,4,4"
+                            BorderThickness="1">
+                        <Button.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#E53935" Offset="0"/>
+                                <GradientStop Color="#FDD835" Offset="0.35"/>
+                                <GradientStop Color="#43A047" Offset="0.6"/>
+                                <GradientStop Color="#1E88E5" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Button.Background>
+                        <TextBlock Text="+" FontSize="15" FontWeight="Bold" Foreground="White"/>
+                    </Button>
                 </WrapPanel>
+
+                <TextBlock Text="Opacity" Style="{StaticResource OverlaySectionHeader}"/>
+                <Grid Margin="0,0,0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="48"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="SldOpacity"
+                            Minimum="5"
+                            Maximum="100"
+                            SmallChange="1"
+                            LargeChange="5"
+                            VerticalAlignment="Center"
+                            ValueChanged="OpacitySlider_ValueChanged"
+                            PreviewMouseLeftButtonUp="OpacitySlider_Commit"
+                            PreviewKeyUp="OpacitySlider_Commit"/>
+                    <TextBlock x:Name="TxtOpacity"
+                               Grid.Column="1"
+                               Text="100%"
+                               Margin="7,0,0,0"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               FontFamily="Consolas, Cascadia Mono, Segoe UI"/>
+                </Grid>
             </StackPanel>
         </ScrollViewer>
     </Border>

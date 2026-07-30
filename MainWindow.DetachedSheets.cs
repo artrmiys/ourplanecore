@@ -28,6 +28,7 @@ public partial class MainWindow
         {
             if (ReferenceEquals(_detachedSheetNavigationTarget, window))
                 _detachedSheetNavigationTarget = null;
+            ForgetDetachedSheetOverlay(window);
         };
         PdfViewport viewport = window.Viewport;
         viewport.ActiveAnnotationColor = _annotationColor;
@@ -62,6 +63,12 @@ public partial class MainWindow
         viewport.PdfSnapChanged += OnViewportPdfSnapChanged;
         viewport.BoxModeChanged += OnViewportBoxModeChanged;
         viewport.ContextRequested += request => OnDetachedViewportContextRequested(window, request);
+        viewport.SheetOverlayRenderScaleRefreshRequested += requestedScale =>
+        {
+            PageInfo page = OurPlanCoreJobStore.TryReadPage(window.Page.FolderPath)
+                ?? window.Page;
+            QueueDetachedSheetOverlays(window, page, requestedScale);
+        };
         viewport.ScaleChanged += scale => OnDetachedPageScaleChanged(window, scale);
         viewport.PageAnnotationAdded += _ => SaveDetachedPageAnnotations(window);
         viewport.PageAnnotationRemoved += _ => SaveDetachedPageAnnotations(window);
@@ -322,13 +329,23 @@ public partial class MainWindow
     private void RefreshDetachedSheetRenderQuality()
     {
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
             window.Viewport.RefreshRenderQuality();
+            PageInfo page = OurPlanCoreJobStore.TryReadPage(window.Page.FolderPath)
+                ?? window.Page;
+            QueueDetachedSheetOverlays(window, page);
+        }
     }
 
     private void RefreshDetachedSheetStaticRasterDpi()
     {
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+        {
             window.Viewport.RefreshStaticRasterDpi();
+            PageInfo page = OurPlanCoreJobStore.TryReadPage(window.Page.FolderPath)
+                ?? window.Page;
+            QueueDetachedSheetOverlays(window, page);
+        }
     }
 
     private void RefreshDetachedSheetsForPage(string pageFolder)
@@ -370,6 +387,7 @@ public partial class MainWindow
         // selection; the guard keeps that from wiping the Takeoffs tree.
         RunWithDetachedSelectionSyncGuard(() =>
             window.ShowPage(_currentJob, target, _takeoffItems, _settings, unitMode));
+        QueueDetachedSheetOverlays(window, target);
         TxtStatus.Text = $"Detached window now shows {target.Name}.";
         return true;
     }

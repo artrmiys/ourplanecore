@@ -13,6 +13,8 @@ internal static class SheetOverlayPropertiesRegressionTests
         AssertContainsAll(
             xaml,
             "TxtSourceSheet",
+            "CmbOverlayLayer",
+            "BtnAdd",
             "BtnOpenSource",
             "BtnChooseReplace",
             "BtnNextMatch",
@@ -30,10 +32,15 @@ internal static class SheetOverlayPropertiesRegressionTests
             "BtnColorGreen",
             "BtnColorOrange",
             "BtnColorMagenta",
-            "BtnColorGray");
+            "BtnColorGray",
+            "BtnColorCustom",
+            "SldOpacity",
+            "TxtOpacity");
         AssertTrue(
-            !xaml.Contains("Opacity", StringComparison.OrdinalIgnoreCase),
-            "opacity must stay out of the panel until renderer and persistence semantics agree");
+            panel.Contains("OpacityPreviewRequested", StringComparison.Ordinal) &&
+            panel.Contains("OpacityCommitRequested", StringComparison.Ordinal) &&
+            panel.Contains("SheetOverlayPropertiesCommand.SelectLayer", StringComparison.Ordinal),
+            "layer selection and opacity must use explicit preview/commit commands");
         AssertTrue(
             main.Contains("preserveCenterForScale: e.Component == SheetOverlayTransformComponent.Scale", StringComparison.Ordinal),
             "scale preview must preserve the displayed overlay center");
@@ -56,7 +63,10 @@ internal static class SheetOverlayPropertiesRegressionTests
             "\"Hide Overlay\"",
             "\"Show Overlay\"",
             "\"Open Overlay Sheet\"",
-            "\"Clear Overlay\"");
+            "\"Remove Overlay Layer\"",
+            "\"Move Layer Up\"",
+            "\"Move Layer Down\"",
+            "\"Fit by 2 Points\"");
         AssertTrue(
             !menus.Contains("Move Left", StringComparison.Ordinal) &&
             !menus.Contains("Move Right", StringComparison.Ordinal) &&
@@ -83,9 +93,7 @@ internal static class SheetOverlayPropertiesRegressionTests
             viewport,
             "public void CommitSheetOverlayTransformPreview(",
             "public void CancelSheetOverlayTransformPreview(");
-        string overlay = ReadRepoFile(Path.Combine(
-            "Controls",
-            "PdfViewport.SheetOverlay.cs"));
+        string overlay = ReadViewportSheetOverlaySources();
         string publishMethod = SliceBetween(
             overlay,
             "private void PublishSheetOverlayTransformChange(",
@@ -148,9 +156,7 @@ internal static class SheetOverlayPropertiesRegressionTests
         string selection = ReadRepoFile(Path.Combine(
             "Controls",
             "PdfViewport.SheetOverlaySelection.cs"));
-        string overlay = ReadRepoFile(Path.Combine(
-            "Controls",
-            "PdfViewport.SheetOverlay.cs"));
+        string overlay = ReadViewportSheetOverlaySources();
         string undo = ReadRepoFile(Path.Combine(
             "Controls",
             "PdfViewport.Undo.cs"));
@@ -160,7 +166,9 @@ internal static class SheetOverlayPropertiesRegressionTests
         string panel = ReadRepoFile(Path.Combine(
             "Controls",
             "SheetOverlayPropertiesPanel.xaml.cs"));
-        string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string main = string.Concat(
+            ReadRepoFile("MainWindow.SheetOverlay.cs"),
+            ReadRepoFile("MainWindow.SheetOverlay.Layers.cs"));
         string properties = ReadRepoFile("MainWindow.SheetOverlay.Properties.cs");
         string mouseDown = SliceBetween(
             selection,
@@ -221,8 +229,9 @@ internal static class SheetOverlayPropertiesRegressionTests
             "PublishSheetOverlayTransformChange(restored, status, postStatus: false)");
         AssertTrue(
             main.Contains(
-                "_viewport.PrepareSheetOverlayReload(page.FolderPath, page.OverlayPageFolder);",
-                StringComparison.Ordinal),
+                "_viewport.PrepareSheetOverlayReload(",
+                StringComparison.Ordinal) &&
+            main.Contains("page.ActiveOverlayId", StringComparison.Ordinal),
             "same-source async reloads must retain binding identity while their bitmap is unavailable");
         AssertTrue(
             panel.Contains("UndoRequested?.Invoke", StringComparison.Ordinal) &&
@@ -240,9 +249,7 @@ internal static class SheetOverlayPropertiesRegressionTests
         string cache = ReadRepoFile(Path.Combine(
             "Controls",
             "PdfViewport.StaticPageFrameCache.cs"));
-        string overlay = ReadRepoFile(Path.Combine(
-            "Controls",
-            "PdfViewport.SheetOverlay.cs"));
+        string overlay = ReadViewportSheetOverlaySources();
 
         AssertTrue(
             cache.Contains("!_sheetOverlayTransformPreviewActive", StringComparison.Ordinal),
@@ -254,9 +261,7 @@ internal static class SheetOverlayPropertiesRegressionTests
 
     public static void SheetOverlayLivePreviewSurvivesQualityBitmapReplacement()
     {
-        string overlay = ReadRepoFile(Path.Combine(
-            "Controls",
-            "PdfViewport.SheetOverlay.cs"));
+        string overlay = ReadViewportSheetOverlaySources();
         string selection = ReadRepoFile(Path.Combine(
             "Controls",
             "PdfViewport.SheetOverlaySelection.cs"));
@@ -272,8 +277,8 @@ internal static class SheetOverlayPropertiesRegressionTests
         AssertContainsAll(
             overlay,
             "bool preserveTransformGesture",
-            "preserveTransformGesture ? liveOffsetXPt : offsetXPt",
-            "preserveTransformGesture ? liveOverlayScale : overlayScale",
+            "preserveTransformGesture ? liveOffsetXPt : active.OffsetXPt",
+            "preserveTransformGesture ? liveOverlayScale : active.Scale",
             "sameBinding &&",
             "HasPendingSheetOverlayTransformGesture");
         AssertTrue(
@@ -330,7 +335,7 @@ internal static class SheetOverlayPropertiesRegressionTests
             "private void ApplySheetOverlayBitmapToViewport(");
         string failure = SliceBetween(
             asyncLoad,
-            "if (!result.Ok || result.Bitmap == null)",
+            "if (!result.Ok || result.Layers.Count == 0)",
             "ApplySheetOverlayBitmapToViewport(");
 
         AssertTrue(
@@ -339,8 +344,9 @@ internal static class SheetOverlayPropertiesRegressionTests
             "quality reloads must forward keep-existing while first page loads must explicitly clear on failure");
         AssertTrue(
             failure.Contains(
-                "_viewport.HasSheetOverlayBinding(latest.FolderPath, latest.OverlayPageFolder)",
+                "_viewport.HasSheetOverlayBinding(",
                 StringComparison.Ordinal) &&
+            failure.Contains("latest.ActiveOverlayId", StringComparison.Ordinal) &&
             failure.Contains("if (!retainedExistingOverlay)", StringComparison.Ordinal) &&
             failure.IndexOf("if (!retainedExistingOverlay)", StringComparison.Ordinal) <
             failure.IndexOf("_viewport.ClearSheetOverlay();", StringComparison.Ordinal),
@@ -388,6 +394,62 @@ internal static class SheetOverlayPropertiesRegressionTests
             "the Overlay Properties tab must follow Sheet Overlay module visibility");
     }
 
+    public static void SheetOverlayLayersShareViewportExportTreeAndDetachedRendering()
+    {
+        string viewport = ReadViewportSheetOverlaySources();
+        string main = string.Concat(
+            ReadRepoFile("MainWindow.SheetOverlay.cs"),
+            ReadRepoFile("MainWindow.SheetOverlay.Layers.cs"));
+        string detached = ReadRepoFile("MainWindow.SheetOverlay.Detached.cs");
+        string detachedHost = ReadRepoFile("MainWindow.DetachedSheets.cs");
+        string tree = ReadRepoFile("MainWindow.PageTakeoffLegend.cs");
+        string storage = ReadRepoFile(Path.Combine(
+            "Models",
+            "Storage",
+            "SheetOverlayLayerStore.cs"));
+
+        AssertContainsAll(
+            viewport,
+            "SetSheetOverlayLayers(",
+            "_sheetOverlayLayersBelow",
+            "_sheetOverlayLayersAbove",
+            "DrawSheetOverlayLayer(",
+            "PreviewSheetOverlayOpacity(",
+            "foreach (SheetOverlayBitmapLayer layer in _sheetOverlayLayersBelow)",
+            "foreach (SheetOverlayBitmapLayer layer in _sheetOverlayLayersAbove)",
+            "_sheetOverlayId");
+        AssertContainsAll(
+            main,
+            "TryBuildSheetOverlayLayers(",
+            "page.OverlayLayers.Where(item => item.IsVisible)",
+            "foreach (SheetOverlayLayerInfo layer in page.OverlayLayers.Where(item => item.IsVisible))",
+            "SetSheetOverlayLayers(layers, page.ActiveOverlayId, page.FolderPath)");
+        AssertContainsAll(
+            detached,
+            "QueueDetachedSheetOverlays(",
+            "TryBuildSheetOverlayLayers(",
+            "activeOverlayId: page.ActiveOverlayId",
+            "window.Viewport.SetSheetOverlayLayers(");
+        AssertContainsAll(
+            detachedHost,
+            "SheetOverlayRenderScaleRefreshRequested +=",
+            "QueueDetachedSheetOverlays(window, page, requestedScale)",
+            "QueueDetachedSheetOverlays(window, target)");
+        AssertTrue(
+            tree.Contains("foreach (SheetOverlayLayerInfo layer in page.OverlayLayers)", StringComparison.Ordinal) &&
+            tree.Contains("page.ActiveOverlayId", StringComparison.Ordinal) &&
+            tree.Contains("layer.Opacity * 100", StringComparison.Ordinal),
+            "Pages tree must expose every overlay layer and mark the active layer");
+        AssertContainsAll(
+            storage,
+            "sheet_overlays.json",
+            "FromLegacy(",
+            "WriteLegacyOverlayMirror",
+            "SetOpacity(",
+            "Move(",
+            "Remove(");
+    }
+
     private static void AssertContainsAll(string text, params string[] values)
     {
         foreach (string value in values)
@@ -397,6 +459,11 @@ internal static class SheetOverlayPropertiesRegressionTests
                 $"Expected source marker '{value}' was not found.");
         }
     }
+
+    private static string ReadViewportSheetOverlaySources() =>
+        string.Concat(
+            ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs")),
+            ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlayLayers.cs")));
 
     private static string SliceBetween(string source, string startMarker, string endMarker)
     {

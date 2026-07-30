@@ -1834,6 +1834,11 @@ internal static class TakeoffsTreeRegressionTests
             ReadRepoFile("MainWindow.PageTakeoffLegend.MoveSort.cs"),
             ReadRepoFile("MainWindow.PageTakeoffLegend.Visibility.cs"));
 
+    private static string ReadSheetOverlayViewportSources() =>
+        string.Concat(
+            ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs")),
+            ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlayLayers.cs")));
+
     private static string ReadPdfLayerRenderServiceSources() =>
         string.Concat(
             ReadRepoFile("Models/PdfLayerRenderService.cs"),
@@ -1856,9 +1861,9 @@ internal static class TakeoffsTreeRegressionTests
             overlay.Contains("RasterSheetCacheService.TryReadReady", StringComparison.Ordinal) &&
             overlay.Contains("Sheet overlay raster cache hit", StringComparison.Ordinal) &&
             overlay.Contains("QueueSheetOverlayRenderCacheWrite", StringComparison.Ordinal) &&
-            overlay.Contains("MinimumBrightSheetOverlayOpacity = 0.82", StringComparison.Ordinal) &&
+            overlay.Contains("DefaultSheetOverlayOpacity = 1.0", StringComparison.Ordinal) &&
             overlay.Contains("SheetOverlayAlphaBoost = 1.85", StringComparison.Ordinal) &&
-            overlay.Contains("SheetOverlayTintStyleVersion = \"bright-v2\"", StringComparison.Ordinal) &&
+            overlay.Contains("SheetOverlayTintStyleVersion = \"bright-v3-opacity\"", StringComparison.Ordinal) &&
             overlay.Contains("BuildBrightSheetOverlayColor", StringComparison.Ordinal),
             "sheet overlay rendering must read persisted cache, reuse ready raster sheets before PDF rendering, write after tinting, and keep overlays bright");
         AssertTrue(
@@ -1875,9 +1880,9 @@ internal static class TakeoffsTreeRegressionTests
             cache.Contains("BuildPdfFingerprint", StringComparison.Ordinal) &&
             cache.Contains("TryReadRelocatedCache", StringComparison.Ordinal) &&
             cache.Contains("PromoteRelocatedCache", StringComparison.Ordinal) &&
-            cache.Contains("TintStyleVersion = \"bright-v2\"", StringComparison.Ordinal) &&
+            cache.Contains("TintStyleVersion = \"bright-v3-opacity\"", StringComparison.Ordinal) &&
             cache.Contains("LayerStateKey", StringComparison.Ordinal),
-            "sheet overlay cache must be portable and keyed by source PDF identity, render state, tint, opacity, and layers");
+            "sheet overlay cache must be portable and keyed by source PDF identity, render state, tint, and layers");
     }
 
     public static void PdfTakeoffImportCommandIsWired()
@@ -3535,10 +3540,12 @@ internal static class TakeoffsTreeRegressionTests
 
     public static void SheetOverlayRenderingUsesSharperSampling()
     {
-        string source = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+        string source = ReadSheetOverlayViewportSources();
         string method = SliceMethod(source, "private void DrawSheetOverlay(SKCanvas canvas, SKRect visiblePdf)");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
-        string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string main = string.Concat(
+            ReadRepoFile("MainWindow.SheetOverlay.cs"),
+            ReadRepoFile("MainWindow.SheetOverlay.Layers.cs"));
         string shell = ReadRepoFile("MainWindow.xaml.cs");
 
         AssertTrue(
@@ -3549,7 +3556,7 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("SheetOverlayMaxRenderPixels", StringComparison.Ordinal),
             "sheet overlay underlay should use a bounded scale-aware bitmap and choose sampling from its actual display scale");
         AssertTrue(
-            method.Contains("IsAntialias = false", StringComparison.Ordinal) &&
+            source.Contains("IsAntialias = false", StringComparison.Ordinal) &&
             source.Contains("if (_renderNavigationFastFrame || _sheetOverlayBitmapScale <= 0)", StringComparison.Ordinal) &&
             source.Contains("_sheetOverlayBitmapScale > displayedScale * 1.05f", StringComparison.Ordinal) &&
             source.Contains("? SKFilterQuality.Medium", StringComparison.Ordinal) &&
@@ -3557,7 +3564,8 @@ internal static class TakeoffsTreeRegressionTests
             !source.Contains("SKFilterQuality.High", StringComparison.Ordinal),
             "sheet overlay sampling should stay crisp during navigation and near native scale, then smooth only settled minification without an expensive High filter");
         AssertTrue(
-            source.Contains("public bool HasSheetOverlay => _sheetOverlayBitmap != null", StringComparison.Ordinal),
+            source.Contains("public bool HasSheetOverlay =>", StringComparison.Ordinal) &&
+            source.Contains("_sheetOverlayLayersBelow.Count > 0", StringComparison.Ordinal),
             "viewport smoke tests need to wait until async sheet overlays are actually applied before exercising pan and zoom");
         AssertTrue(
             source.Contains("SheetOverlayRenderScaleRefreshRequested", StringComparison.Ordinal) &&
@@ -3572,7 +3580,7 @@ internal static class TakeoffsTreeRegressionTests
             main.Contains("fitAfter: !restoreView.HasValue", StringComparison.Ordinal) &&
             main.Contains("ResizeSheetOverlaySourceBitmap", StringComparison.Ordinal) &&
             main.Contains("sourceScale=", StringComparison.Ordinal) &&
-            main.Contains("bitmapScale: renderScale", StringComparison.Ordinal) &&
+            main.Contains("new SheetOverlayBitmapLayer(", StringComparison.Ordinal) &&
             shell.Contains("SheetOverlayRenderScaleRefreshRequested += OnSheetOverlayRenderScaleRefreshRequested", StringComparison.Ordinal),
             "main window sheet overlay loading should use zoom-aware render scale selection and wire viewport refresh requests");
     }
@@ -3590,8 +3598,12 @@ internal static class TakeoffsTreeRegressionTests
             menus.Contains("Open Overlay Sheet", StringComparison.Ordinal) &&
             menus.Contains("Hide Overlay", StringComparison.Ordinal) &&
             menus.Contains("Show Overlay", StringComparison.Ordinal) &&
-            menus.Contains("Clear Overlay", StringComparison.Ordinal) &&
-            menus.Contains("Auto Fit Overlay", StringComparison.Ordinal),
+            menus.Contains("Remove Overlay Layer", StringComparison.Ordinal) &&
+            menus.Contains("Add This Sheet as New Overlay", StringComparison.Ordinal) &&
+            menus.Contains("Move Layer Up", StringComparison.Ordinal) &&
+            menus.Contains("Move Layer Down", StringComparison.Ordinal) &&
+            menus.Contains("Auto Fit Overlay", StringComparison.Ordinal) &&
+            menus.Contains("Fit by 2 Points", StringComparison.Ordinal),
             "sheet overlay context menus should expose compact setup and properties commands");
         AssertTrue(
             !menus.Contains("Move Left", StringComparison.Ordinal) &&
@@ -3602,7 +3614,7 @@ internal static class TakeoffsTreeRegressionTests
             "fine transform commands should live in Overlay Properties instead of the context menu");
         AssertTrue(
             menus.Contains("ShowSheetOverlayProperties(propertiesPage)", StringComparison.Ordinal) &&
-            menus.Contains("ShowSheetOverlayProperties(node.Page)", StringComparison.Ordinal) &&
+            menus.Contains("ActivateSheetOverlayLayer(node.Page, node.Layer.Id", StringComparison.Ordinal) &&
             menus.Contains("ShowSheetOverlayProperties(currentPage)", StringComparison.Ordinal),
             "page, overlay-node, and viewport context menus should route advanced editing to Overlay Properties");
         AssertTrue(
@@ -3613,7 +3625,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void SheetOverlayTransformShortcutsAreWired()
     {
         string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
-        string overlay = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+        string overlay = ReadSheetOverlayViewportSources();
 
         AssertTrue(
             input.Contains("TryHandleSheetOverlayTransformShortcut(e)", StringComparison.Ordinal),
@@ -3659,7 +3671,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void SheetOverlayMouseDragIsWired()
     {
         string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
-        string overlay = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+        string overlay = ReadSheetOverlayViewportSources();
         string updateMethod = SliceMethod(overlay, "private bool TryUpdateSheetOverlayDrag(");
         string finishMethod = SliceMethod(overlay, "private bool FinishSheetOverlayDrag(");
 
@@ -3690,7 +3702,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void SheetOverlayPointEditUsesPdfSnap()
     {
         string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
-        string overlay = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+        string overlay = ReadSheetOverlayViewportSources();
         string pdfSnap = ReadRepoFile(Path.Combine("Controls", "PdfViewport.PdfSnap.cs"));
         string pointEdit = SliceMethod(overlay, "private bool HandleSheetOverlayPointEditClick(");
 
@@ -3731,9 +3743,9 @@ internal static class TakeoffsTreeRegressionTests
             "page-open overlay queue should surface a loading state when no cached overlay bitmap is ready yet");
         AssertTrue(
             asyncMethod.Contains("PageInfo? latest = OurPlanCoreJobStore.TryReadPage(page.FolderPath);", StringComparison.Ordinal) &&
-            asyncMethod.Contains("string.IsNullOrWhiteSpace(latest.OverlayPageFolder)", StringComparison.Ordinal) &&
-            asyncMethod.Contains("!latest.OverlayVisible", StringComparison.Ordinal) &&
-            asyncMethod.Contains("!SameFolder(latest.OverlayPageFolder, page.OverlayPageFolder)", StringComparison.Ordinal) &&
+            asyncMethod.Contains("latest.OverlayLayers.Count == 0", StringComparison.Ordinal) &&
+            asyncMethod.Contains("SheetOverlayRevisionKey(latest)", StringComparison.Ordinal) &&
+            asyncMethod.Contains("SheetOverlayRevisionKey(page)", StringComparison.Ordinal) &&
             asyncMethod.Contains("LoadSheetOverlay(latest)", StringComparison.Ordinal) &&
             asyncMethod.Contains("ApplySheetOverlayBitmapToViewport(", StringComparison.Ordinal) &&
             asyncMethod.Contains("latest,", StringComparison.Ordinal),

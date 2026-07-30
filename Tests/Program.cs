@@ -153,6 +153,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay auto fit uses undoable transform gateway", SheetOverlayPropertiesRegressionTests.SheetOverlayAutoFitUsesUndoableTransformGateway),
     ("sheet overlay quality refresh failure keeps current bitmap", SheetOverlayPropertiesRegressionTests.SheetOverlayQualityRefreshFailureKeepsCurrentBitmap),
     ("sheet overlay frame honors read-only page and module lifecycle", SheetOverlayPropertiesRegressionTests.SheetOverlayFrameHonorsReadOnlyPageAndModuleLifecycle),
+    ("sheet overlay layers share viewport export tree and detached rendering", SheetOverlayPropertiesRegressionTests.SheetOverlayLayersShareViewportExportTreeAndDetachedRendering),
     ("sheet overlay transform shortcuts are wired", TakeoffsTreeRegressionTests.SheetOverlayTransformShortcutsAreWired),
     ("sheet overlay transform dialog has fine adjustments", TakeoffsTreeRegressionTests.SheetOverlayTransformDialogHasFineAdjustments),
     ("sheet overlay mouse drag is wired", TakeoffsTreeRegressionTests.SheetOverlayMouseDragIsWired),
@@ -513,6 +514,7 @@ var tests = new List<(string Name, Action Run)>
     ("page corrupt source json is quarantined", StorageTests.PageCorruptSourceJsonIsQuarantined),
     ("page source json repairs from sheet metadata", StorageTests.PageSourceJsonRepairsFromSheetMetadata),
     ("page overlay references rebase after page move", StorageTests.PageOverlayReferencesRebaseAfterPageMove),
+    ("page multiple overlay layers persist copy reorder and rebase", StorageTests.PageMultipleOverlayLayersPersistCopyReorderAndRebase),
     ("page source json repair restores reciprocal overlay", StorageTests.PageSourceJsonRepairRestoresReciprocalOverlay),
     ("page annotations save load normalize defaults", StorageTests.PageAnnotationsSaveLoadNormalizeDefaults),
     ("page annotations follow moved page folder", StorageTests.PageAnnotationsFollowMovedPageFolder),
@@ -5121,9 +5123,16 @@ static void SheetOverlayRenderCacheRoundTrips()
             OverlayColor = page.OverlayColor,
             OverlayOpacity = 0.75,
         };
-        AssertFalse(
-            SheetOverlayRenderCache.TryRead(changedPage, overlayPage, 1.25f, out _, out _, out _),
-            "changing overlay opacity should invalidate the tinted overlay cache");
+        AssertTrue(
+            SheetOverlayRenderCache.TryRead(
+                changedPage,
+                overlayPage,
+                1.25f,
+                out SKBitmap? opacityCached,
+                out _,
+                out _),
+            "changing draw-time overlay opacity should reuse the color-tinted bitmap cache");
+        opacityCached?.Dispose();
     }
     finally
     {

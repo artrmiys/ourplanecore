@@ -599,6 +599,104 @@ internal static class StorageTests
         });
     }
 
+    public static void PageMultipleOverlayLayersPersistCopyReorderAndRebase()
+    {
+        WithTempJob("Multiple Overlay Layers", job =>
+        {
+            PageInfo basePage = CreatePageItem(job, "A100");
+            PageInfo firstSource = CreatePageItem(job, "A101");
+            PageInfo secondSource = CreatePageItem(job, "A102");
+
+            OurPlanCoreJobStore.SavePageOverlay(
+                basePage.FolderPath,
+                firstSource.FolderPath,
+                "#1E88E5",
+                0.6);
+            PageInfo firstState = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
+                ?? throw new InvalidOperationException("first overlay state missing");
+            string firstId = firstState.ActiveOverlayId;
+            string secondId = OurPlanCoreJobStore.AddPageOverlay(
+                basePage.FolderPath,
+                secondSource.FolderPath,
+                "#D81B60",
+                0.35);
+            OurPlanCoreJobStore.SavePageOverlayTransform(
+                basePage.FolderPath,
+                secondId,
+                14,
+                -9,
+                1.15,
+                7.5);
+            OurPlanCoreJobStore.SavePageOverlayColor(
+                basePage.FolderPath,
+                secondId,
+                "#123ABC");
+            OurPlanCoreJobStore.SavePageOverlayOpacity(
+                basePage.FolderPath,
+                secondId,
+                0.27);
+            OurPlanCoreJobStore.SavePageOverlayVisibility(
+                basePage.FolderPath,
+                secondId,
+                false);
+
+            PageInfo layered = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
+                ?? throw new InvalidOperationException("layered page missing");
+            AssertEqual("2", layered.OverlayLayers.Count.ToString(), "overlay layer count");
+            AssertEqual(secondId, layered.ActiveOverlayId, "new layer becomes active");
+            AssertEqual("#123ABC", layered.OverlayColor, "active layer color");
+            AssertClose(0.27, layered.OverlayOpacity, "active layer opacity");
+            AssertClose(14, layered.OverlayOffsetXPt, "active layer x");
+            AssertClose(-9, layered.OverlayOffsetYPt, "active layer y");
+            AssertClose(1.15, layered.OverlayScale, "active layer scale");
+            AssertClose(7.5, layered.OverlayRotationDegrees, "active layer rotation");
+            AssertFalse(layered.OverlayVisible, "active layer visibility");
+            AssertTrue(
+                File.Exists(Path.Combine(basePage.FolderPath, "sheet_overlays.json")),
+                "overlay manifest exists");
+
+            SourceInfo mirror = OurPlanCoreJobStore.ReadSource(basePage.FolderPath)
+                ?? throw new InvalidOperationException("legacy overlay mirror missing");
+            AssertEqual(
+                secondSource.FolderPath,
+                Path.GetFullPath(Path.Combine(basePage.FolderPath, mirror.OverlayPageFolder)),
+                "legacy source mirror tracks active layer");
+
+            OurPlanCoreJobStore.MovePageOverlayLayer(basePage.FolderPath, secondId, -1);
+            OurPlanCoreJobStore.SetActivePageOverlay(basePage.FolderPath, firstId);
+            PageInfo reordered = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
+                ?? throw new InvalidOperationException("reordered page missing");
+            AssertEqual(secondId, reordered.OverlayLayers[0].Id, "layer moved down");
+            AssertEqual(firstId, reordered.ActiveOverlayId, "active layer selection persists");
+
+            string copyParent = OurPlanCoreJobStore.CreateFolder(job.PagesRoot, "Copies");
+            string copiedPath = OurPlanCoreJobStore.CopyNode(basePage.FolderPath, copyParent);
+            PageInfo copied = OurPlanCoreJobStore.TryReadPage(copiedPath)
+                ?? throw new InvalidOperationException("copied layered page missing");
+            AssertEqual("2", copied.OverlayLayers.Count.ToString(), "copied overlay layer count");
+            AssertEqual(firstId, copied.ActiveOverlayId, "copied active layer");
+
+            string movedParent = OurPlanCoreJobStore.CreateFolder(job.PagesRoot, "Moved");
+            string movedSecondSource = OurPlanCoreJobStore.MoveNode(secondSource.FolderPath, movedParent);
+            int changed = OurPlanCoreJobStore.RebasePageOverlayReferences(
+                job.PagesRoot,
+                [(secondSource.FolderPath, movedSecondSource)]);
+            AssertEqual("2", changed.ToString(), "both layered targets rebase");
+            PageInfo rebased = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
+                ?? throw new InvalidOperationException("rebased layered page missing");
+            AssertEqual(
+                movedSecondSource,
+                rebased.OverlayLayers[0].SourcePageFolder,
+                "moved overlay source rebased");
+
+            OurPlanCoreJobStore.RemovePageOverlay(basePage.FolderPath, secondId);
+            PageInfo removed = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
+                ?? throw new InvalidOperationException("layer removal state missing");
+            AssertEqual("1", removed.OverlayLayers.Count.ToString(), "one overlay remains");
+            AssertEqual(firstId, removed.ActiveOverlayId, "remaining layer stays active");
+        });
+    }
+
     private static void AssertPageSourceState(string pageFolder, string overlayPageFolder)
     {
         PageInfo page = OurPlanCoreJobStore.TryReadPage(pageFolder)

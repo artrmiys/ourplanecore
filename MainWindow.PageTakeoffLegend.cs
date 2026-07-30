@@ -46,38 +46,53 @@ public partial class MainWindow
             RegisterPageTreeItemSubtree(child);
         }
 
-        if (IsModuleEnabled(ModuleId.SheetOverlay) &&
-            !string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+        if (IsModuleEnabled(ModuleId.SheetOverlay))
         {
-            TreeViewItem overlayItem = CreatePageOverlayTreeItem(page);
-            pageItem.Items.Add(overlayItem);
-            RegisterPageTreeItemSubtree(overlayItem);
+            foreach (SheetOverlayLayerInfo layer in page.OverlayLayers)
+            {
+                TreeViewItem overlayItem = CreatePageOverlayTreeItem(page, layer);
+                pageItem.Items.Add(overlayItem);
+                RegisterPageTreeItemSubtree(overlayItem);
+            }
         }
     }
 
-    private TreeViewItem CreatePageOverlayTreeItem(PageInfo page)
+    private TreeViewItem CreatePageOverlayTreeItem(
+        PageInfo page,
+        SheetOverlayLayerInfo layer)
     {
-        string overlayName = OverlayPageName(page);
-        var node = new PageOverlayNode(page, overlayName);
+        string overlayName = OverlayPageName(layer.SourcePageFolder);
+        var node = new PageOverlayNode(page, layer, overlayName);
         return new TreeViewItem
         {
-            Header = BuildPageOverlayHeader(page, overlayName),
+            Header = BuildPageOverlayHeader(page, layer, overlayName),
             Tag = node,
             ContextMenu = BuildPageOverlayContextMenu(node),
         };
     }
 
-    private FrameworkElement BuildPageOverlayHeader(PageInfo page, string overlayName)
+    private FrameworkElement BuildPageOverlayHeader(
+        PageInfo page,
+        SheetOverlayLayerInfo layer,
+        string overlayName)
     {
         var secondaryBrush = (Brush)Application.Current.Resources["SecondaryForegroundBrush"]
             ?? new SolidColorBrush(Color.FromRgb(128, 128, 128));
-        Brush swatchBrush = BrushFromHex(page.OverlayColor, Brushes.Gray);
+        Brush swatchBrush = BrushFromHex(layer.Color, Brushes.Gray);
+        bool isActive = string.Equals(
+            page.ActiveOverlayId,
+            layer.Id,
+            StringComparison.OrdinalIgnoreCase);
 
-        var dock = new DockPanel { LastChildFill = true, Opacity = page.OverlayVisible ? 1.0 : 0.58 };
+        var dock = new DockPanel
+        {
+            LastChildFill = true,
+            Opacity = layer.IsVisible ? 1.0 : 0.58,
+        };
         var transform = new TextBlock
         {
-            Text = page.OverlayVisible
-                ? $"{page.OverlayScale:0.###}x  {page.OverlayOffsetXPt:0.#},{page.OverlayOffsetYPt:0.#}"
+            Text = layer.IsVisible
+                ? $"{layer.Scale:0.###}x  {layer.Opacity * 100:0}%"
                 : "hidden",
             Foreground = secondaryBrush,
             FontSize = 10,
@@ -94,9 +109,11 @@ public partial class MainWindow
         {
             Width = 12,
             Height = 12,
-            Background = page.OverlayVisible ? swatchBrush : Brushes.Transparent,
-            BorderBrush = secondaryBrush,
-            BorderThickness = new Thickness(1),
+            Background = layer.IsVisible ? swatchBrush : Brushes.Transparent,
+            BorderBrush = isActive
+                ? new SolidColorBrush(Color.FromRgb(0xF4, 0x9B, 0x24))
+                : secondaryBrush,
+            BorderThickness = new Thickness(isActive ? 2 : 1),
             Margin = new Thickness(0, 0, 6, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -106,43 +123,46 @@ public partial class MainWindow
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        nameRow.Children.Add(BuildPageOverlayVisibilityDot(page, swatchBrush));
+        nameRow.Children.Add(BuildPageOverlayVisibilityDot(page, layer, swatchBrush));
         nameRow.Children.Add(colorBox);
         nameRow.Children.Add(new TextBlock
         {
-            Text = $"Overlay: {overlayName}",
-            FontWeight = FontWeights.Normal,
+            Text = $"{(isActive ? "● " : "")}Overlay: {overlayName}",
+            FontWeight = isActive ? FontWeights.SemiBold : FontWeights.Normal,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
         dock.Children.Add(nameRow);
-        dock.ToolTip = page.OverlayVisible
-            ? "Sheet overlay. Right-click to hide, move, scale, recolor, or clear."
-            : "Sheet overlay is hidden. Right-click to show it.";
+        dock.ToolTip = layer.IsVisible
+            ? "Overlay layer. Click to activate; right-click for layer actions."
+            : "Overlay layer is hidden. Click the dot to show it.";
         return dock;
     }
 
-    private FrameworkElement BuildPageOverlayVisibilityDot(PageInfo page, Brush swatchBrush)
+    private FrameworkElement BuildPageOverlayVisibilityDot(
+        PageInfo page,
+        SheetOverlayLayerInfo layer,
+        Brush swatchBrush)
     {
         var dot = new Border
         {
             Width = 11,
             Height = 11,
             CornerRadius = new CornerRadius(6),
-            Background = page.OverlayVisible ? swatchBrush : Brushes.Transparent,
+            Background = layer.IsVisible ? swatchBrush : Brushes.Transparent,
             BorderBrush = swatchBrush,
             BorderThickness = new Thickness(1.5),
             Margin = new Thickness(2, 0, 7, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Cursor = Cursors.Hand,
             Tag = PageOverlayVisibilityToggleTag,
-            ToolTip = page.OverlayVisible
+            ToolTip = layer.IsVisible
                 ? $"Hide overlay on {page.Name}"
                 : $"Show overlay on {page.Name}",
         };
         dot.PreviewMouseLeftButtonDown += (_, e) =>
         {
-            TogglePageOverlayVisibility(page);
+            TogglePageOverlayVisibility(page, layer.Id);
             e.Handled = true;
         };
         return dot;

@@ -13,7 +13,7 @@ namespace OurPlanCore;
 public static partial class SheetOverlayRenderCache
 {
     public const string CacheRootEnvironmentVariable = "OURPLANCORE_SHEET_OVERLAY_CACHE_ROOT";
-    private const string TintStyleVersion = "bright-v2";
+    private const string TintStyleVersion = "bright-v3-opacity";
 
     private const int MaxEntries = 256;
     private const long MaxBytes = 800_000_000;
@@ -234,7 +234,6 @@ public static partial class SheetOverlayRenderCache
                 OverlayPageIndex = identity.OverlayPageIndex,
                 RenderScale = identity.RenderScale,
                 Color = identity.Color,
-                Opacity = identity.Opacity,
                 LayerStateKey = identity.LayerStateKey,
                 WidthPt = widthPt,
                 HeightPt = heightPt,
@@ -269,7 +268,7 @@ public static partial class SheetOverlayRenderCache
         out CacheIdentity identity)
     {
         paths = new CachePaths("", "", "", "");
-        identity = new CacheIdentity("", "", 0, 0, 0, 0, "", 0, "");
+        identity = new CacheIdentity("", "", 0, 0, 0, 0, "", "");
 
         if (string.IsNullOrWhiteSpace(overlayPage.PdfPath) || overlayPage.PdfPage < 0)
             return false;
@@ -287,7 +286,6 @@ public static partial class SheetOverlayRenderCache
             overlayPage.PdfPage,
             NormalizeScale(renderScale),
             NormalizeColor(page.OverlayColor),
-            NormalizeOpacity(page.OverlayOpacity),
             LayerStateKey(overlayPage.PdfLayers));
         string hash = Hash(identity.Key);
         string directory = Path.Combine(CacheRoot(), hash[..2]);
@@ -354,9 +352,6 @@ public static partial class SheetOverlayRenderCache
 
     private static string NormalizeColor(string? color) =>
         string.IsNullOrWhiteSpace(color) ? "#E53935" : color.Trim().ToUpperInvariant();
-
-    private static double NormalizeOpacity(double opacity) =>
-        Math.Round(double.IsNaN(opacity) || double.IsInfinity(opacity) || opacity <= 0 ? 0.55 : Math.Clamp(opacity, 0.05, 1.0), 3);
 
     private static string LayerStateKey(IReadOnlyList<PdfLayerInfo> layers) =>
         layers.Count == 0
@@ -505,7 +500,6 @@ public static partial class SheetOverlayRenderCache
         int OverlayPageIndex,
         float RenderScale,
         string Color,
-        double Opacity,
         string LayerStateKey)
     {
         public string Key =>
@@ -524,8 +518,6 @@ public static partial class SheetOverlayRenderCache
                 "|",
                 Color,
                 "|",
-                Opacity.ToString("0.###", CultureInfo.InvariantCulture),
-                "|",
                 LayerStateKey);
     }
 
@@ -538,7 +530,6 @@ public static partial class SheetOverlayRenderCache
         public int OverlayPageIndex { get; set; }
         public float RenderScale { get; set; }
         public string Color { get; set; } = "";
-        public double Opacity { get; set; }
         public string LayerStateKey { get; set; } = "";
         public float WidthPt { get; set; }
         public float HeightPt { get; set; }
@@ -554,7 +545,6 @@ public static partial class SheetOverlayRenderCache
             OverlayPageIndex == identity.OverlayPageIndex &&
             Math.Abs(RenderScale - identity.RenderScale) < 0.001 &&
             string.Equals(Color, identity.Color, StringComparison.OrdinalIgnoreCase) &&
-            Math.Abs(Opacity - identity.Opacity) < 0.001 &&
             string.Equals(LayerStateKey, identity.LayerStateKey, StringComparison.Ordinal) &&
             WidthPt > 0 &&
             HeightPt > 0;

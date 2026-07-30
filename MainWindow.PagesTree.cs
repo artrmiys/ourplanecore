@@ -457,7 +457,7 @@ public partial class MainWindow
         }
         else if (e.NewValue is TreeViewItem { Tag: PageOverlayNode overlay })
         {
-            ShowSheetOverlayProperties(overlay.Page);
+            ActivateSheetOverlayLayer(overlay.Page, overlay.Layer.Id, showProperties: true);
         }
     }
 
@@ -676,9 +676,9 @@ public partial class MainWindow
             SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
             if (IsPageOverlayVisibilityToggleSource(e.OriginalSource as DependencyObject))
-                TogglePageOverlayVisibility(overlay.Page);
+                TogglePageOverlayVisibility(overlay.Page, overlay.Layer.Id);
             else
-                ShowSheetOverlayProperties(overlay.Page);
+                ActivateSheetOverlayLayer(overlay.Page, overlay.Layer.Id, showProperties: true);
             e.Handled = true;
             return;
         }

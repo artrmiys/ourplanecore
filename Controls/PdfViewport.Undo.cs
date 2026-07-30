@@ -443,6 +443,7 @@ public sealed partial class PdfViewport
     private void PushSheetOverlayTransformUndo(
         string targetPageFolder,
         string overlayPageFolder,
+        string overlayId,
         SheetOverlayTransformSnapshot before,
         SheetOverlayTransformSnapshot after,
         string status)
@@ -468,6 +469,7 @@ public sealed partial class PdfViewport
                 new SheetOverlayTransformUndo(
                     targetPageFolder,
                     overlayPageFolder,
+                    overlayId,
                     before,
                     after)),
             coalesce: false);
@@ -651,6 +653,7 @@ public sealed partial class PdfViewport
             !SheetOverlayReciprocalService.SameFolder(
                 _sheetOverlaySourcePageFolder,
                 undo.OverlayPageFolder) ||
+            !string.Equals(_sheetOverlayId, undo.OverlayId, StringComparison.OrdinalIgnoreCase) ||
             CurrentSheetOverlayTransform() is not { } current ||
             HasSheetOverlayTransformChanged(current, undo.After))
         {
@@ -766,6 +769,7 @@ public sealed partial class PdfViewport
     private sealed record SheetOverlayTransformUndo(
         string TargetPageFolder,
         string OverlayPageFolder,
+        string OverlayId,
         SheetOverlayTransformSnapshot Before,
         SheetOverlayTransformSnapshot After);
 

@@ -303,6 +303,7 @@ public partial class MainWindow
             _detachedSheetWindows.Add(window);
             opened.Add(window);
             window.Show();
+            QueueDetachedSheetOverlays(window, page);
         }
 
         // Show() activates each new window, which would arm it as the

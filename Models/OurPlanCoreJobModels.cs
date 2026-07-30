@@ -41,6 +41,8 @@ public sealed class PageInfo
     public List<string> TakeoffLayerOrder { get; set; } = [];
     public List<string> HiddenTakeoffs { get; set; } = [];
     public List<string> HiddenMeasurements { get; set; } = [];
+    public string ActiveOverlayId { get; init; } = "";
+    public IReadOnlyList<SheetOverlayLayerInfo> OverlayLayers { get; init; } = [];
     public string OverlayPageFolder { get; init; } = "";
     public bool OverlayVisible { get; init; } = true;
     public string OverlayColor { get; init; } = "#E53935";

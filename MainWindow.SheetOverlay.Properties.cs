@@ -57,6 +57,8 @@ public partial class MainWindow
         OverlayPropertiesPanel.TransformCommitRequested += OverlayPropertiesPanel_TransformCommitRequested;
         OverlayPropertiesPanel.TransformCancelRequested += OverlayPropertiesPanel_TransformCancelRequested;
         OverlayPropertiesPanel.UndoRequested += OverlayPropertiesPanel_UndoRequested;
+        OverlayPropertiesPanel.OpacityPreviewRequested += OverlayPropertiesPanel_OpacityPreviewRequested;
+        OverlayPropertiesPanel.OpacityCommitRequested += OverlayPropertiesPanel_OpacityCommitRequested;
         _viewport.SheetOverlayTransformChanged += OnSheetOverlayTransformChangedForProperties;
         _viewport.SheetOverlayTransformPreviewChanged += OnSheetOverlayTransformPreviewChanged;
         _sheetOverlayPropertiesInitialized = true;
@@ -120,10 +122,17 @@ public partial class MainWindow
                                      Math.Abs(latest.OverlayOffsetXPt),
                                      Math.Abs(latest.OverlayOffsetYPt)) * 1.25 + 72);
 
+        IReadOnlyList<SheetOverlayLayerChoice> layerChoices = latest.OverlayLayers
+            .Select((layer, index) => new SheetOverlayLayerChoice(
+                layer.Id,
+                $"{index + 1}. {OverlayPageName(layer.SourcePageFolder)}"))
+            .ToList();
         OverlayPropertiesPanel.SetState(new SheetOverlayPropertiesState(
             latest.Name,
             sourcePage?.Name ?? OverlaySourceFallbackName(latest.OverlayPageFolder),
             sourcePage?.PdfPath ?? latest.OverlayPageFolder,
+            latest.ActiveOverlayId,
+            layerChoices,
             hasOverlay,
             latest.OverlayVisible,
             IsCurrentJobReadOnly,
@@ -132,6 +141,7 @@ public partial class MainWindow
             latest.OverlayScale,
             latest.OverlayRotationDegrees,
             latest.OverlayColor,
+            latest.OverlayOpacity,
             offsetRange));
         if (activateFrame)
         {
@@ -172,6 +182,9 @@ public partial class MainWindow
         CancelSheetOverlayPropertiesPreview(postStatus: false);
         switch (e.Command)
         {
+            case SheetOverlayPropertiesCommand.Add:
+                ChooseSheetOverlayAutoSelectCandidate(page, addAsNew: true);
+                break;
             case SheetOverlayPropertiesCommand.ChooseReplace:
                 ChooseSheetOverlayAutoSelectCandidate(page);
                 break;
@@ -185,6 +198,16 @@ public partial class MainWindow
                 ClearPageOverlay(page);
                 _viewport.SetSheetOverlaySelectionActive(false);
                 RefreshSheetOverlayProperties(ReadLatestSheetOverlayPage(page));
+                break;
+            case SheetOverlayPropertiesCommand.SelectLayer:
+                ActivateSheetOverlayLayer(page, e.Value, showProperties: false);
+                RefreshSheetOverlayProperties(ReadLatestSheetOverlayPage(page), activateFrame: true);
+                break;
+            case SheetOverlayPropertiesCommand.MoveUp:
+                MoveSheetOverlayLayer(page, page.ActiveOverlayId, 1);
+                break;
+            case SheetOverlayPropertiesCommand.MoveDown:
+                MoveSheetOverlayLayer(page, page.ActiveOverlayId, -1);
                 break;
             case SheetOverlayPropertiesCommand.AutoFit:
                 AutoFitSheetOverlay(page);
@@ -210,7 +233,46 @@ public partial class MainWindow
             case SheetOverlayPropertiesCommand.SetColor:
                 SetPageSheetOverlayColor(page, e.Value);
                 break;
+            case SheetOverlayPropertiesCommand.ChooseCustomColor:
+                ChooseCustomSheetOverlayColor(page);
+                break;
         }
+    }
+
+    private void ChooseCustomSheetOverlayColor(PageInfo page)
+    {
+        var dialog = new OverlayColorPaletteDialog(page.OverlayColor)
+        {
+            Owner = this,
+        };
+        if (dialog.ShowDialog() == true)
+            SetPageSheetOverlayColor(page, dialog.SelectedColor);
+    }
+
+    private void OverlayPropertiesPanel_OpacityPreviewRequested(
+        object? sender,
+        SheetOverlayOpacityEventArgs e)
+    {
+        PageInfo? page = ResolveSheetOverlayPropertiesPage();
+        if (page == null || IsCurrentJobReadOnly)
+            return;
+
+        _viewport.PreviewSheetOverlayOpacity(
+            page.FolderPath,
+            page.OverlayPageFolder,
+            page.ActiveOverlayId,
+            (float)e.Opacity);
+    }
+
+    private void OverlayPropertiesPanel_OpacityCommitRequested(
+        object? sender,
+        SheetOverlayOpacityEventArgs e)
+    {
+        PageInfo? page = ResolveSheetOverlayPropertiesPage();
+        if (page == null || IsCurrentJobReadOnly)
+            return;
+
+        SetPageSheetOverlayOpacity(page, e.Opacity);
     }
 
     private void OverlayPropertiesPanel_TransformPreviewRequested(
@@ -276,7 +338,11 @@ public partial class MainWindow
         if (_currentPage == null ||
             string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder) ||
             !SameFolder(_currentPage.FolderPath, change.TargetPageFolder) ||
-            !SameFolder(_currentPage.OverlayPageFolder, change.OverlayPageFolder))
+            !SameFolder(_currentPage.OverlayPageFolder, change.OverlayPageFolder) ||
+            !string.Equals(
+                _currentPage.ActiveOverlayId,
+                change.OverlayId,
+                StringComparison.OrdinalIgnoreCase))
         {
             AppLog.Warn(
                 $"Ignored stale sheet overlay transform; target='{change.TargetPageFolder}'; " +
@@ -290,6 +356,7 @@ public partial class MainWindow
 
         OurPlanCoreJobStore.SavePageOverlayTransform(
             change.TargetPageFolder,
+            change.OverlayId,
             change.OffsetXPt,
             change.OffsetYPt,
             change.OverlayScale,
@@ -300,6 +367,7 @@ public partial class MainWindow
             _currentPage = updated;
             ClearReciprocalSheetOverlay(updated);
             RefreshPageOverlayTreeNode(updated);
+            RefreshDetachedSheetOverlaysForPage(updated.FolderPath);
         }
 
         TxtStatus.Text = change.Status;
@@ -331,11 +399,19 @@ public partial class MainWindow
     }
 
     private void SetSheetOverlayVisibility(PageInfo page, bool visible)
+        => SetSheetOverlayVisibility(page, page.ActiveOverlayId, visible);
+
+    private void SetSheetOverlayVisibility(
+        PageInfo page,
+        string overlayId,
+        bool visible)
     {
         PageInfo latest = ReadLatestSheetOverlayPage(page);
-        if (latest.OverlayVisible != visible)
+        SheetOverlayLayerInfo? layer = latest.OverlayLayers.FirstOrDefault(item =>
+            string.Equals(item.Id, overlayId, StringComparison.OrdinalIgnoreCase));
+        if (layer != null && layer.IsVisible != visible)
         {
-            TogglePageOverlayVisibility(latest);
+            TogglePageOverlayVisibility(latest, overlayId);
             return;
         }
 
@@ -406,7 +482,8 @@ public partial class MainWindow
         }
 
         _viewport.SetSheetOverlaySelectionActive(
-            active: true,
+            active: page.OverlayVisible &&
+                    !string.IsNullOrWhiteSpace(page.ActiveOverlayId),
             canEdit: !IsCurrentJobReadOnly);
     }
 
@@ -420,6 +497,7 @@ public partial class MainWindow
     private void FinishSheetOverlayStateRefresh(PageInfo page, string status)
     {
         RefreshPageOverlayTreeNode(page);
+        RefreshDetachedSheetOverlaysForPage(page.FolderPath);
         if (_currentPage != null && SameFolder(_currentPage.FolderPath, page.FolderPath))
         {
             RefreshSheetOverlayProperties(
@@ -435,6 +513,8 @@ public partial class MainWindow
             "",
             "",
             "",
+            "",
+            [],
             false,
             false,
             true,
@@ -443,6 +523,7 @@ public partial class MainWindow
             1,
             0,
             DefaultSheetOverlayColor,
+            DefaultSheetOverlayOpacity,
             720);
 
     private static string OverlaySourceFallbackName(string folder) =>

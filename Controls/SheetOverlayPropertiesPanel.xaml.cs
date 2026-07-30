@@ -10,15 +10,20 @@ namespace OurPlanCore.Controls;
 public enum SheetOverlayPropertiesCommand
 {
     OpenSource,
+    Add,
     ChooseReplace,
     NextMatch,
     Clear,
+    SelectLayer,
+    MoveUp,
+    MoveDown,
     AutoFit,
     FindBest,
     EditByPoints,
     ResetTransform,
     SetVisibility,
     SetColor,
+    ChooseCustomColor,
 }
 
 public enum SheetOverlayTransformComponent
@@ -29,10 +34,14 @@ public enum SheetOverlayTransformComponent
     Rotation,
 }
 
+public sealed record SheetOverlayLayerChoice(string Id, string DisplayName);
+
 public sealed record SheetOverlayPropertiesState(
     string TargetSheetName,
     string SourceSheetName,
     string SourcePath,
+    string ActiveOverlayId,
+    IReadOnlyList<SheetOverlayLayerChoice> Layers,
     bool HasOverlay,
     bool IsVisible,
     bool IsReadOnly,
@@ -41,6 +50,7 @@ public sealed record SheetOverlayPropertiesState(
     double OverlayScale,
     double OverlayRotationDegrees,
     string OverlayColor,
+    double OverlayOpacity,
     double OffsetSliderRangePt);
 
 public sealed record SheetOverlayTransformValues(
@@ -67,6 +77,11 @@ public sealed class SheetOverlayTransformEventArgs(
     public SheetOverlayTransformValues Values { get; } = values;
 }
 
+public sealed class SheetOverlayOpacityEventArgs(double opacity) : EventArgs
+{
+    public double Opacity { get; } = opacity;
+}
+
 public partial class SheetOverlayPropertiesPanel : UserControl
 {
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
@@ -74,12 +89,16 @@ public partial class SheetOverlayPropertiesPanel : UserControl
     private bool _previewPending;
     private bool _hasOverlay;
     private bool _isReadOnly;
+    private int _layerCount;
+    private int _activeLayerIndex = -1;
 
     public event EventHandler<SheetOverlayPropertiesCommandEventArgs>? CommandRequested;
     public event EventHandler<SheetOverlayTransformEventArgs>? TransformPreviewRequested;
     public event EventHandler? TransformCommitRequested;
     public event EventHandler? TransformCancelRequested;
     public event EventHandler? UndoRequested;
+    public event EventHandler<SheetOverlayOpacityEventArgs>? OpacityPreviewRequested;
+    public event EventHandler<SheetOverlayOpacityEventArgs>? OpacityCommitRequested;
 
     public SheetOverlayPropertiesPanel()
     {
@@ -94,6 +113,11 @@ public partial class SheetOverlayPropertiesPanel : UserControl
             _hasOverlay = state.HasOverlay;
             _isReadOnly = state.IsReadOnly;
             _previewPending = false;
+            _layerCount = state.Layers.Count;
+            CmbOverlayLayer.ItemsSource = state.Layers;
+            CmbOverlayLayer.SelectedItem = state.Layers.FirstOrDefault(layer =>
+                string.Equals(layer.Id, state.ActiveOverlayId, StringComparison.OrdinalIgnoreCase));
+            _activeLayerIndex = CmbOverlayLayer.SelectedIndex;
 
             TxtTargetSheet.Text = string.IsNullOrWhiteSpace(state.TargetSheetName)
                 ? "No sheet open"
@@ -121,6 +145,8 @@ public partial class SheetOverlayPropertiesPanel : UserControl
                 state.OverlayScale,
                 state.OverlayRotationDegrees));
             UpdateColorSelection(state.OverlayColor);
+            SldOpacity.Value = Math.Clamp(state.OverlayOpacity * 100, 5, 100);
+            TxtOpacity.Text = $"{SldOpacity.Value:0}%";
             ApplyAvailability();
         }
         finally
@@ -163,10 +189,14 @@ public partial class SheetOverlayPropertiesPanel : UserControl
         bool canEdit = !_isReadOnly;
         bool canEditOverlay = _hasOverlay && canEdit;
         ChkVisible.IsEnabled = canEditOverlay;
+        CmbOverlayLayer.IsEnabled = canEditOverlay;
+        BtnAdd.IsEnabled = canEdit;
         BtnOpenSource.IsEnabled = _hasOverlay;
         BtnChooseReplace.IsEnabled = canEdit;
         BtnNextMatch.IsEnabled = canEditOverlay;
         BtnClear.IsEnabled = canEditOverlay;
+        BtnMoveDown.IsEnabled = canEditOverlay && _activeLayerIndex > 0;
+        BtnMoveUp.IsEnabled = canEditOverlay && _activeLayerIndex >= 0 && _activeLayerIndex < _layerCount - 1;
         BtnAutoFit.IsEnabled = canEdit;
         BtnFindBest.IsEnabled = canEdit;
         BtnEditPoints.IsEnabled = canEditOverlay;
@@ -176,6 +206,8 @@ public partial class SheetOverlayPropertiesPanel : UserControl
             control.IsEnabled = canEditOverlay;
         foreach (Button button in ColorButtons())
             button.IsEnabled = canEditOverlay;
+        BtnColorCustom.IsEnabled = canEditOverlay;
+        SldOpacity.IsEnabled = canEditOverlay;
     }
 
     private Control[] TransformControls() =>
@@ -368,6 +400,20 @@ public partial class SheetOverlayPropertiesPanel : UserControl
                 toggleValue: ChkVisible.IsChecked == true));
     }
 
+    private void OverlayLayer_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsInitialized ||
+            _updating ||
+            CmbOverlayLayer.SelectedItem is not SheetOverlayLayerChoice layer)
+            return;
+
+        CommandRequested?.Invoke(
+            this,
+            new SheetOverlayPropertiesCommandEventArgs(
+                SheetOverlayPropertiesCommand.SelectLayer,
+                layer.Id));
+    }
+
     private void CommandButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string commandText } ||
@@ -389,6 +435,38 @@ public partial class SheetOverlayPropertiesPanel : UserControl
             new SheetOverlayPropertiesCommandEventArgs(
                 SheetOverlayPropertiesCommand.SetColor,
                 color));
+    }
+
+    private void CustomColorButton_Click(object sender, RoutedEventArgs e) =>
+        CommandRequested?.Invoke(
+            this,
+            new SheetOverlayPropertiesCommandEventArgs(
+                SheetOverlayPropertiesCommand.ChooseCustomColor));
+
+    private void OpacitySlider_ValueChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsInitialized)
+            return;
+
+        TxtOpacity.Text = $"{SldOpacity.Value:0}%";
+        if (!IsInitialized || _updating)
+            return;
+
+        OpacityPreviewRequested?.Invoke(
+            this,
+            new SheetOverlayOpacityEventArgs(SldOpacity.Value / 100.0));
+    }
+
+    private void OpacitySlider_Commit(object sender, RoutedEventArgs e)
+    {
+        if (_updating)
+            return;
+
+        OpacityCommitRequested?.Invoke(
+            this,
+            new SheetOverlayOpacityEventArgs(SldOpacity.Value / 100.0));
     }
 
     private void UpdateColorSelection(string color)

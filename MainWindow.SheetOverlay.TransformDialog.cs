@@ -191,11 +191,14 @@ public partial class MainWindow
     }
 
     private static string OverlayPageName(PageInfo page)
+        => OverlayPageName(page.OverlayPageFolder);
+
+    private static string OverlayPageName(string overlayPageFolder)
     {
-        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+        if (string.IsNullOrWhiteSpace(overlayPageFolder))
             return "none";
 
-        return OurPlanCoreJobStore.TryReadPage(page.OverlayPageFolder)?.Name
-            ?? OurPlanCoreJobStore.DisplayName(page.OverlayPageFolder);
+        return OurPlanCoreJobStore.TryReadPage(overlayPageFolder)?.Name
+            ?? OurPlanCoreJobStore.DisplayName(overlayPageFolder);
     }
 }

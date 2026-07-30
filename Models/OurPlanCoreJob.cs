@@ -86,6 +86,46 @@ public static class OurPlanCoreJobStore
         double overlayOpacity) =>
         PageStore.SavePageOverlay(pageFolder, overlayPageFolder, overlayColor, overlayOpacity);
 
+    public static string AddPageOverlay(
+        string pageFolder,
+        string overlayPageFolder,
+        string overlayColor,
+        double overlayOpacity) =>
+        SheetOverlayLayerStore.Add(pageFolder, overlayPageFolder, overlayColor, overlayOpacity);
+
+    public static void SetActivePageOverlay(string pageFolder, string overlayId) =>
+        SheetOverlayLayerStore.SetActive(pageFolder, overlayId);
+
+    public static void SavePageOverlayVisibility(string pageFolder, string overlayId, bool isVisible) =>
+        SheetOverlayLayerStore.SetVisibility(pageFolder, overlayId, isVisible);
+
+    public static void SavePageOverlayColor(string pageFolder, string overlayId, string color) =>
+        SheetOverlayLayerStore.SetColor(pageFolder, overlayId, color);
+
+    public static void SavePageOverlayOpacity(string pageFolder, string overlayId, double opacity) =>
+        SheetOverlayLayerStore.SetOpacity(pageFolder, overlayId, opacity);
+
+    public static void SavePageOverlayTransform(
+        string pageFolder,
+        string overlayId,
+        double offsetXPt,
+        double offsetYPt,
+        double overlayScale,
+        double overlayRotationDegrees) =>
+        SheetOverlayLayerStore.SetTransform(
+            pageFolder,
+            overlayId,
+            offsetXPt,
+            offsetYPt,
+            overlayScale,
+            overlayRotationDegrees);
+
+    public static void MovePageOverlayLayer(string pageFolder, string overlayId, int delta) =>
+        SheetOverlayLayerStore.Move(pageFolder, overlayId, delta);
+
+    public static void RemovePageOverlay(string pageFolder, string overlayId) =>
+        SheetOverlayLayerStore.Remove(pageFolder, overlayId);
+
     public static void SavePageOverlayVisibility(string pageFolder, bool isVisible) =>
         PageStore.SavePageOverlayVisibility(pageFolder, isVisible);
 

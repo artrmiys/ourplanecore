@@ -42,13 +42,6 @@ public sealed partial class PdfViewport
     private float _sheetOverlayDragStartOffsetYPt;
     private SheetOverlayTransformSnapshot? _sheetOverlayDragStartTransform;
 
-    public bool HasSheetOverlay => _sheetOverlayBitmap != null;
-
-    public bool HasSheetOverlayBinding(string targetPageFolder, string overlayPageFolder) =>
-        _sheetOverlayBitmap != null &&
-        SheetOverlayReciprocalService.SameFolder(_sheetOverlayTargetPageFolder, targetPageFolder) &&
-        SheetOverlayReciprocalService.SameFolder(_sheetOverlaySourcePageFolder, overlayPageFolder);
-
     public void SetSheetOverlay(
         SKBitmap bitmap,
         float widthPt,
@@ -62,58 +55,44 @@ public sealed partial class PdfViewport
         int overlayPageIndex = 0,
         IReadOnlyList<PdfLayerInfo>? overlayLayers = null,
         float bitmapScale = 0,
-        string overlayPageFolder = "")
+        string overlayPageFolder = "",
+        string overlayId = "",
+        float overlayOpacity = 1)
     {
-        string nextOverlayPageFolder = overlayPageFolder ?? "";
-        bool sameBinding =
-            !string.IsNullOrWhiteSpace(_sheetOverlayTargetPageFolder) &&
-            !string.IsNullOrWhiteSpace(_sheetOverlaySourcePageFolder) &&
-            SheetOverlayReciprocalService.SameFolder(
-                _sheetOverlayTargetPageFolder,
-                _pageFolder) &&
-            SheetOverlayReciprocalService.SameFolder(
-                _sheetOverlaySourcePageFolder,
-                nextOverlayPageFolder);
-        bool preserveTransformGesture =
-            sameBinding &&
-            HasPendingSheetOverlayTransformGesture;
-        float liveOffsetXPt = _sheetOverlayOffsetXPt;
-        float liveOffsetYPt = _sheetOverlayOffsetYPt;
-        float liveOverlayScale = _sheetOverlayScale;
-        float liveOverlayRotationDegrees = _sheetOverlayRotationDegrees;
-
-        ClearSheetOverlayCore(
-            preserveTransformGesture,
-            preserveBindingIdentity: sameBinding);
-        _sheetOverlayBitmap = bitmap;
-        _sheetOverlayWidthPt = widthPt;
-        _sheetOverlayHeightPt = heightPt;
-        _sheetOverlayOffsetXPt = preserveTransformGesture ? liveOffsetXPt : offsetXPt;
-        _sheetOverlayOffsetYPt = preserveTransformGesture ? liveOffsetYPt : offsetYPt;
-        _sheetOverlayScale = NormalizeSheetOverlayScale(
-            preserveTransformGesture ? liveOverlayScale : overlayScale);
-        _sheetOverlayRotationDegrees = NormalizeSheetOverlayRotation(
-            preserveTransformGesture ? liveOverlayRotationDegrees : overlayRotationDegrees);
-        _sheetOverlayBitmapScale = bitmapScale > 0 ? bitmapScale : InferSheetOverlayBitmapScale(bitmap, widthPt);
-        _lastSheetOverlayRefreshRequestScale = _sheetOverlayBitmapScale;
-        _sheetOverlayName = overlayName ?? "";
-        _sheetOverlayTargetPageFolder = _pageFolder;
-        _sheetOverlaySourcePageFolder = nextOverlayPageFolder;
-        if (!string.IsNullOrWhiteSpace(overlayPdfPath))
-            SetOverlayPdfSnapSource(overlayPdfPath, overlayPageIndex, _sheetOverlayName, overlayLayers);
-        MaybeRequestSheetOverlayRenderScaleRefresh();
-        RequestRepaint();
+        SetSheetOverlayLayers(
+        [
+            new SheetOverlayBitmapLayer(
+                overlayId,
+                overlayPageFolder,
+                overlayName,
+                bitmap,
+                widthPt,
+                heightPt,
+                offsetXPt,
+                offsetYPt,
+                overlayScale,
+                overlayRotationDegrees,
+                overlayOpacity,
+                bitmapScale,
+                overlayPdfPath,
+                overlayPageIndex,
+                overlayLayers ?? []),
+        ],
+        overlayId,
+        _pageFolder);
     }
 
     public void PrepareSheetOverlayReload(
         string targetPageFolder,
-        string overlayPageFolder)
+        string overlayPageFolder,
+        string overlayId = "")
     {
         ClearSheetOverlayCore(
             preserveTransformGesture: false,
             preserveBindingIdentity: false);
         _sheetOverlayTargetPageFolder = targetPageFolder ?? "";
         _sheetOverlaySourcePageFolder = overlayPageFolder ?? "";
+        _sheetOverlayId = overlayId ?? "";
     }
 
     public void ClearSheetOverlay() =>
@@ -130,12 +109,15 @@ public sealed partial class PdfViewport
 
         _sheetOverlayBitmap?.Dispose();
         _sheetOverlayBitmap = null;
+        DisposeSheetOverlayLayers(_sheetOverlayLayersBelow);
+        DisposeSheetOverlayLayers(_sheetOverlayLayersAbove);
         _sheetOverlayWidthPt = 0;
         _sheetOverlayHeightPt = 0;
         _sheetOverlayOffsetXPt = 0;
         _sheetOverlayOffsetYPt = 0;
         _sheetOverlayScale = 1;
         _sheetOverlayRotationDegrees = 0;
+        _sheetOverlayOpacity = 1;
         _sheetOverlayBitmapScale = 0;
         _lastSheetOverlayRefreshRequestScale = 0;
         _sheetOverlayName = "";
@@ -143,6 +125,7 @@ public sealed partial class PdfViewport
         {
             _sheetOverlayTargetPageFolder = "";
             _sheetOverlaySourcePageFolder = "";
+            _sheetOverlayId = "";
         }
         ClearOverlayPdfSnapSource();
         RequestRepaint();
@@ -610,7 +593,8 @@ public sealed partial class PdfViewport
         float offsetYPt,
         float overlayScale,
         float overlayRotationDegrees,
-        string status)
+        string status,
+        string overlayId = "")
     {
         if (_sheetOverlayBitmap == null ||
             IsReadOnlyMode ||
@@ -622,7 +606,9 @@ public sealed partial class PdfViewport
                 targetPageFolder) ||
             !SheetOverlayReciprocalService.SameFolder(
                 _sheetOverlaySourcePageFolder,
-                overlayPageFolder))
+                overlayPageFolder) ||
+            (!string.IsNullOrWhiteSpace(overlayId) &&
+             !string.Equals(_sheetOverlayId, overlayId, StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }
@@ -673,6 +659,7 @@ public sealed partial class PdfViewport
             PushSheetOverlayTransformUndo(
                 _pageFolder,
                 _sheetOverlaySourcePageFolder,
+                _sheetOverlayId,
                 start,
                 current,
                 "overlay transform");
@@ -689,6 +676,7 @@ public sealed partial class PdfViewport
         SheetOverlayTransformChanged?.Invoke(new SheetOverlayTransformChange(
             _pageFolder,
             _sheetOverlaySourcePageFolder,
+            _sheetOverlayId,
             transform.OffsetXPt,
             transform.OffsetYPt,
             transform.OverlayScale,
@@ -726,49 +714,6 @@ public sealed partial class PdfViewport
         return new SKPoint(
             (dx * cos + dy * sin) / scale,
             (-dx * sin + dy * cos) / scale);
-    }
-
-    private void DrawSheetOverlay(SKCanvas canvas, SKRect visiblePdf)
-    {
-        if (_sheetOverlayBitmap == null || _pdfW <= 0 || _pdfH <= 0)
-            return;
-
-        using var paint = new SKPaint
-        {
-            // Keep navigation and near-native linework crisp. Settled minification
-            // uses Medium sampling to suppress stair-stepping without blurring an
-            // overlay that is already at (or below) the displayed resolution.
-            IsAntialias = false,
-            FilterQuality = CurrentSheetOverlayFilterQuality(),
-        };
-
-        float width = _sheetOverlayWidthPt > 0 ? _sheetOverlayWidthPt : _pdfW;
-        float height = _sheetOverlayHeightPt > 0 ? _sheetOverlayHeightPt : _pdfH;
-        if (width <= 0 || height <= 0)
-            return;
-
-        SKRect displayBounds = OverlayDisplayBounds(width, height);
-        if (!RectsIntersect(displayBounds, visiblePdf))
-            return;
-
-        canvas.Save();
-        canvas.ClipRect(visiblePdf);
-        canvas.Translate(_sheetOverlayOffsetXPt, _sheetOverlayOffsetYPt);
-        canvas.RotateDegrees(_sheetOverlayRotationDegrees);
-        canvas.Scale(_sheetOverlayScale);
-        canvas.DrawBitmap(_sheetOverlayBitmap, new SKRect(0, 0, width, height), paint);
-        canvas.Restore();
-    }
-
-    private SKFilterQuality CurrentSheetOverlayFilterQuality()
-    {
-        if (_renderNavigationFastFrame || _sheetOverlayBitmapScale <= 0)
-            return SKFilterQuality.None;
-
-        float displayedScale = Math.Max(0.001f, _zoom * _sheetOverlayScale);
-        return _sheetOverlayBitmapScale > displayedScale * 1.05f
-            ? SKFilterQuality.Medium
-            : SKFilterQuality.None;
     }
 
     private static SKRect IntersectRects(SKRect a, SKRect b)
@@ -959,19 +904,44 @@ public sealed partial class PdfViewport
     private void MaybeRequestSheetOverlayRenderScaleRefresh()
     {
         if (_sheetOverlayTransformPreviewActive ||
-            _sheetOverlayBitmap == null ||
-            _sheetOverlayBitmapScale <= 0 ||
+            !HasSheetOverlay ||
             _zoom <= 0 ||
             _isFastNavigating)
         {
             return;
         }
 
-        float desired = ViewportRenderPolicy.SelectSheetOverlayRenderScale(
-            _zoom * _sheetOverlayScale,
-            _sheetOverlayWidthPt,
-            _sheetOverlayHeightPt);
-        if (desired <= _sheetOverlayBitmapScale * 1.18f ||
+        float currentScale = float.MaxValue;
+        float desired = 0;
+        void ConsiderLayer(float widthPt, float heightPt, float scale, float bitmapScale)
+        {
+            if (widthPt <= 0 || heightPt <= 0 || bitmapScale <= 0)
+                return;
+
+            currentScale = Math.Min(currentScale, bitmapScale);
+            desired = Math.Max(
+                desired,
+                ViewportRenderPolicy.SelectSheetOverlayRenderScale(
+                    _zoom * scale,
+                    widthPt,
+                    heightPt));
+        }
+
+        if (_sheetOverlayBitmap != null)
+        {
+            ConsiderLayer(
+                _sheetOverlayWidthPt,
+                _sheetOverlayHeightPt,
+                _sheetOverlayScale,
+                _sheetOverlayBitmapScale);
+        }
+        foreach (SheetOverlayBitmapLayer layer in _sheetOverlayLayersBelow)
+            ConsiderLayer(layer.WidthPt, layer.HeightPt, layer.Scale, layer.BitmapScale);
+        foreach (SheetOverlayBitmapLayer layer in _sheetOverlayLayersAbove)
+            ConsiderLayer(layer.WidthPt, layer.HeightPt, layer.Scale, layer.BitmapScale);
+
+        if (currentScale == float.MaxValue ||
+            desired <= currentScale * 1.18f ||
             desired <= _lastSheetOverlayRefreshRequestScale * 1.01f)
         {
             return;

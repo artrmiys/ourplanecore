@@ -60,7 +60,9 @@ public partial class MainWindow
         }
     }
 
-    private async void ChooseSheetOverlayAutoSelectCandidate(PageInfo page)
+    private async void ChooseSheetOverlayAutoSelectCandidate(
+        PageInfo page,
+        bool addAsNew = false)
     {
         if (!RequireModule(ModuleId.SheetOverlay, "Choose Sheet Overlay"))
             return;
@@ -116,8 +118,11 @@ public partial class MainWindow
             ApplySheetOverlayAutoSelectedFit(
                 targetPage,
                 selectedSearch,
-                replaceExistingOverlay: true,
-                statusLabel: "Selected overlay candidate");
+                replaceExistingOverlay: !addAsNew,
+                statusLabel: addAsNew
+                    ? "Added overlay layer"
+                    : "Selected overlay candidate",
+                addAsNew: addAsNew);
             HandleSheetOverlayCandidatePostAction(targetPage, selectedSearch, dialog.SelectedAction);
         }
         catch (Exception ex)
@@ -179,7 +184,8 @@ public partial class MainWindow
         SheetOverlayAutoFitCandidateSearch search,
         bool replaceExistingOverlay = false,
         bool skipCurrentOverlay = false,
-        string statusLabel = "")
+        string statusLabel = "",
+        bool addAsNew = false)
     {
         if (search.OverlayPage == null || search.Read == null)
         {
@@ -194,7 +200,8 @@ public partial class MainWindow
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) &&
+        if (!addAsNew &&
+            !string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) &&
             !SameFolder(latestTarget.OverlayPageFolder, search.OverlayPage.FolderPath) &&
             !replaceExistingOverlay)
         {
@@ -202,18 +209,30 @@ public partial class MainWindow
             return;
         }
 
-        if (replaceExistingOverlay &&
+        if (!addAsNew &&
+            replaceExistingOverlay &&
             !string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) &&
             !SameFolder(latestTarget.OverlayPageFolder, search.OverlayPage.FolderPath))
         {
             ClearReciprocalSheetOverlay(latestTarget);
         }
 
-        OurPlanCoreJobStore.SavePageOverlay(
-            latestTarget.FolderPath,
-            search.OverlayPage.FolderPath,
-            SheetOverlaySaveColor(latestTarget),
-            SheetOverlaySaveOpacity(latestTarget));
+        if (addAsNew)
+        {
+            OurPlanCoreJobStore.AddPageOverlay(
+                latestTarget.FolderPath,
+                search.OverlayPage.FolderPath,
+                SheetOverlaySaveColor(latestTarget),
+                DefaultSheetOverlayOpacity);
+        }
+        else
+        {
+            OurPlanCoreJobStore.SavePageOverlay(
+                latestTarget.FolderPath,
+                search.OverlayPage.FolderPath,
+                SheetOverlaySaveColor(latestTarget),
+                SheetOverlaySaveOpacity(latestTarget));
+        }
         OurPlanCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true);
 
         PageInfo selectedTarget = OurPlanCoreJobStore.TryReadPage(latestTarget.FolderPath) ?? latestTarget;

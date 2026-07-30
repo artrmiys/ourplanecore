@@ -46,11 +46,28 @@ public sealed record ViewportAiCropSelectionRequest(
 public sealed record SheetOverlayTransformChange(
     string TargetPageFolder,
     string OverlayPageFolder,
+    string OverlayId,
     float OffsetXPt,
     float OffsetYPt,
     float OverlayScale,
     float OverlayRotationDegrees,
     string Status);
+public sealed record SheetOverlayBitmapLayer(
+    string Id,
+    string SourcePageFolder,
+    string Name,
+    SKBitmap Bitmap,
+    float WidthPt,
+    float HeightPt,
+    float OffsetXPt,
+    float OffsetYPt,
+    float Scale,
+    float RotationDegrees,
+    float Opacity,
+    float BitmapScale,
+    string PdfPath,
+    int PdfPageIndex,
+    IReadOnlyList<PdfLayerInfo> PdfLayers);
 public sealed record BeamMeasurementRequest(
     SKPoint StartPdf,
     SKPoint EndPdf,

@@ -136,10 +136,18 @@ public partial class MainWindow
             _sheetOverlayLoadVersion++;
             _viewport.SetSheetOverlaySelectionActive(false);
             _viewport.ClearSheetOverlay();
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+                window.Viewport.ClearSheetOverlay();
         }
         else if (_moduleUiApplied && _currentPage != null)
         {
             QueueSheetOverlayLoadForPageOpen(_currentPage);
+            foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            {
+                PageInfo page = OurPlanCoreJobStore.TryReadPage(window.Page.FolderPath)
+                    ?? window.Page;
+                QueueDetachedSheetOverlays(window, page);
+            }
         }
         if (_moduleUiApplied && _lastSheetOverlayModuleEnabled != IsModuleEnabled(ModuleId.SheetOverlay) &&
             _currentJob != null)

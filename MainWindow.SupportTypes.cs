@@ -82,7 +82,10 @@ public partial class MainWindow
     private sealed record TakeoffMeasurementNode(TakeoffItem Item, Measurement Measurement);
     private sealed record TakeoffSectionDrag(IReadOnlyList<TakeoffMeasurementNode> Nodes);
     private sealed record PageTakeoffNode(PageInfo Page, TakeoffItem Takeoff);
-    private sealed record PageOverlayNode(PageInfo Page, string OverlayName);
+    private sealed record PageOverlayNode(
+        PageInfo Page,
+        SheetOverlayLayerInfo Layer,
+        string OverlayName);
     private sealed record PageTakeoffLegendDrag(string PageFolder, IReadOnlyList<string> TakeoffFolders);
     private sealed record AiMarkerInput(string MarkerType, string SampleKind, string Value, string Note);
     private sealed record MarkerSetInput(string Name, string Description);
