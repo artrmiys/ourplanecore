@@ -165,6 +165,8 @@ internal static class ModuleFeatureTests
         string takeoffProperties = ReadRepoFile("MainWindow.TakeoffsProperties.cs");
         string pageMetadata = ReadRepoFile("MainWindow.PagesPdfMetadata.cs");
         string pageSetup = ReadRepoFile("MainWindow.PageSetup.cs");
+        string pageHeaderResources = ReadRepoFile(Path.Combine("Resources", "PageHeaderResources.xaml"));
+        string appResources = ReadRepoFile(Path.Combine("Resources", "AppResources.xaml"));
 
         string[] namedWorkspaces =
         [
@@ -195,6 +197,10 @@ internal static class ModuleFeatureTests
         AssertTrue(pageTabs.Contains("CloseDetachedSheetsForModuleDisable", StringComparison.Ordinal), "detached window close on module disable");
         AssertTrue(xaml.Contains("x:Name=\"PagesCloseSheetsSplit\"", StringComparison.Ordinal), "Pages split close control");
         AssertTrue(xaml.Contains("Click=\"BtnPagesCloseAllExceptViewport_Click\"", StringComparison.Ordinal), "close-all-except-viewport command binding");
+        AssertTrue(xaml.Contains("Text=\"&#x2715;\"", StringComparison.Ordinal), "split close control has one shared X glyph");
+        AssertFalse(xaml.Contains("Content=\"2&#x2715;\"", StringComparison.Ordinal), "split close control does not show a second-monitor 2X label");
+        AssertTrue(pageHeaderResources.Contains("x:Key=\"PagesCloseSplitSegmentButton\"", StringComparison.Ordinal), "split close segment visual style");
+        AssertTrue(appResources.Contains("Source=\"PageHeaderResources.xaml\"", StringComparison.Ordinal), "page header resources merged");
         AssertTrue(modules.Contains("SetVisible(PagesCloseSheetsSplit, detachedSheets)", StringComparison.Ordinal), "split close module gate");
         AssertTrue(
             pageTabs.Contains("_pageTabs.RemoveAll(tab => !ReferenceEquals(tab, viewportTab))", StringComparison.Ordinal) &&
