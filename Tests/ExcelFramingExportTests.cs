@@ -13,6 +13,7 @@ internal static class ExcelFramingExportTests
         Equal("J", config.SourceStartColumn, "source column");
         Equal("C_SumTheSameValues", config.SumMacroName, "sum macro");
         Equal("#99CC00", config.TargetHeaderColor, "green heading");
+        Equal("#FFFF00", config.ProtectedNoteRowColor, "protected yellow note row");
         Equal(
             "Roof Frame list",
             config.Floors.Single(rule => rule.IsRoof).FramingHeading,
@@ -38,6 +39,7 @@ internal static class ExcelFramingExportTests
             "processed non-joist defaults run Sum");
 
         ExcelFramingExportConfig legacy = config.Clone();
+        legacy.ProtectedNoteRowColor = "";
         ExcelFramingCategoryConfig legacyDetails =
             legacy.Categories.Single(category => category.Id == "details");
         legacyDetails.UseSum = true;
@@ -48,6 +50,7 @@ internal static class ExcelFramingExportTests
             replaceWithDefaults: false);
         ExcelFramingCategoryConfig upgradedDetails =
             upgraded.Categories.Single(category => category.Id == "details");
+        Equal("#FFFF00", upgraded.ProtectedNoteRowColor, "legacy protected note color");
         True(
             !upgradedDetails.UseSum && upgradedDetails.MacroName.Length == 0,
             "legacy Details settings migrate to source-only J:L behavior");

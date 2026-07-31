@@ -388,6 +388,9 @@ internal static class StructuralExcelMacroSmokeHarness
             "P2 - (3) 2x6",
             "B1 - (2) 2x10",
             "H5 - (3) 1 3/4 x 11 7/8 LVL");
+        dynamic originalSheet = workbook.Worksheets[config.SheetName];
+        int originalFramingRow = FindRow(originalSheet, "2nd Floor Framing List");
+        string protectedNoteText = Text(originalSheet, $"A{originalFramingRow + 1}");
 
         ExcelFramingExportResult result =
             ExcelFramingExportService.ExportWithExcel(
@@ -400,11 +403,21 @@ internal static class StructuralExcelMacroSmokeHarness
         dynamic sheet = workbook.Worksheets[config.SheetName];
         int framingRow = FindRow(sheet, "2nd Floor Framing List");
         True(framingRow > 0, "Framing target heading remains present.");
-        Equal("Posts (3)", Text(sheet, $"A{framingRow + 1}"), "framing post label");
-        Equal(9, Number(sheet, $"C{framingRow + 1}"), "framing post quantity");
+        int contentStartRow = FirstRowAfterColor(
+            sheet,
+            framingRow,
+            config.ProtectedNoteRowColor);
+        Equal(
+            protectedNoteText,
+            Text(sheet, $"A{framingRow + 1}"),
+            "protected yellow note text");
+        Equal("Posts (3)", Text(sheet, $"A{contentStartRow}"), "framing post label");
+        Equal(9, Number(sheet, $"C{contentStartRow}"), "framing post quantity");
+        NoFillAndRegular(sheet, contentStartRow, "framing post style");
         int beamRow = FindRow(sheet, "Beam (2)", framingRow + 1, framingRow + 30);
         True(beamRow > 0, "Framing beam output inserted.");
         Equal("B1", Text(sheet, $"E{beamRow}"), "framing beam legend mark");
+        NoFillAndRegular(sheet, beamRow, "framing beam style");
         int joistRow = FindRow(sheet, "Joist 16\" o.c.", framingRow + 1, framingRow + 40);
         True(joistRow > 0, "Framing joist output inserted.");
         Equal(5, Number(sheet, $"C{joistRow}"), "framing joist grouped quantity");
@@ -478,6 +491,17 @@ internal static class StructuralExcelMacroSmokeHarness
                 excel,
                 appendFramingCategories: true);
         True(postsResult.Success, postsResult.Message);
+        framingRow = FindRow(sheet, "2nd Floor Framing List");
+        contentStartRow = FirstRowAfterColor(
+            sheet,
+            framingRow,
+            config.ProtectedNoteRowColor);
+        Equal(
+            protectedNoteText,
+            Text(sheet, $"A{framingRow + 1}"),
+            "appended category preserves yellow note text");
+        Equal("Posts (3)", Text(sheet, $"A{contentStartRow}"), "appended post below note");
+        NoFillAndRegular(sheet, contentStartRow, "appended post style");
         True(
             FindRow(sheet, "Beam (2)", framingRow + 1, framingRow + 60) > 0 &&
             FindRow(sheet, "Joist 16\" o.c.", framingRow + 1, framingRow + 70) > 0,
@@ -531,6 +555,46 @@ internal static class StructuralExcelMacroSmokeHarness
 
     private static bool HasFormula(dynamic sheet, string address) =>
         Convert.ToBoolean(sheet.Range[address].HasFormula, CultureInfo.InvariantCulture);
+
+    private static int FirstRowAfterColor(
+        dynamic sheet,
+        int headingRow,
+        string color)
+    {
+        int row = headingRow + 1;
+        int expected = OleColor(color);
+        while (CellColor(sheet, row) == expected)
+            row++;
+        return row;
+    }
+
+    private static void NoFillAndRegular(dynamic sheet, int row, string label)
+    {
+        int pattern = Convert.ToInt32(
+            sheet.Cells[row, 1].Interior.Pattern,
+            CultureInfo.InvariantCulture);
+        bool bold = Convert.ToBoolean(
+            sheet.Cells[row, 1].Font.Bold,
+            CultureInfo.InvariantCulture);
+        True(pattern == -4142, $"{label}: expected no fill, got pattern {pattern}.");
+        True(!bold, $"{label}: expected regular font.");
+    }
+
+    private static int CellColor(dynamic sheet, int row) =>
+        Convert.ToInt32(
+            sheet.Cells[row, 1].Interior.Color,
+            CultureInfo.InvariantCulture);
+
+    private static int OleColor(string color)
+    {
+        int rgb = int.Parse(
+            color.Trim().TrimStart('#'),
+            NumberStyles.HexNumber,
+            CultureInfo.InvariantCulture);
+        return (rgb >> 16) & 0xFF |
+               ((rgb >> 8) & 0xFF) << 8 |
+               (rgb & 0xFF) << 16;
+    }
 
     private static int FindRow(
         dynamic sheet,

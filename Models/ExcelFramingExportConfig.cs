@@ -34,6 +34,7 @@ public sealed class ExcelFramingExportConfig
     public string HeaderNoteText { get; set; } =
         "Note: The headers indicated on the plan";
     public string TargetHeaderColor { get; set; } = "#99CC00";
+    public string ProtectedNoteRowColor { get; set; } = "#FFFF00";
     public List<ExcelFramingFloorRule> Floors { get; set; } = [];
     public List<ExcelFramingCategoryConfig> Categories { get; set; } = [];
 
@@ -48,6 +49,7 @@ public sealed class ExcelFramingExportConfig
             SumMacroName = SumMacroName,
             HeaderNoteText = HeaderNoteText,
             TargetHeaderColor = TargetHeaderColor,
+            ProtectedNoteRowColor = ProtectedNoteRowColor,
             Floors = (Floors ?? [])
                 .Where(rule => rule != null)
                 .Select(rule => rule.Clone())
@@ -101,6 +103,8 @@ public sealed class ExcelFramingExportConfig
             result.HeaderNoteText = defaults.HeaderNoteText;
         if (string.IsNullOrWhiteSpace(result.TargetHeaderColor))
             result.TargetHeaderColor = defaults.TargetHeaderColor;
+        if (string.IsNullOrWhiteSpace(result.ProtectedNoteRowColor))
+            result.ProtectedNoteRowColor = defaults.ProtectedNoteRowColor;
         foreach (ExcelFramingCategoryConfig category in result.Categories.Where(
                      category => string.Equals(
                          category.Mode,

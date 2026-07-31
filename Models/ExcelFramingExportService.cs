@@ -26,6 +26,8 @@ public static class ExcelFramingExportService
     private const int SourceStartRow = 10;
     private const int XlShiftDown = -4121;
     private const int XlShiftUp = -4162;
+    private const int XlFormatFromRightOrBelow = 1;
+    private const int XlPatternNone = -4142;
 
     public static ExcelFramingExportResult Export(
         ExcelFramingExportPlan plan,
@@ -230,10 +232,12 @@ public static class ExcelFramingExportService
             if (nextHeaderRow <= headingRow + 1 || nextHeadingText.Length == 0)
                 return BlockFailure($"Could not find the green boundary after '{target.Heading}'.");
 
-            DeleteOutputRange(sheet, headingRow + 1, nextHeaderRow - 1);
+            int contentStartRow = FindFramingContentStartRow(
+                sheet, headingRow, nextHeaderRow, config.ProtectedNoteRowColor);
+            DeleteOutputRange(sheet, contentStartRow, nextHeaderRow - 1);
             int guardCount = GuardRowCount(outputTarget, legend.Count);
             if (guardCount > 0)
-                InsertOutputRows(sheet, headingRow + 1, guardCount);
+                InsertOutputRows(sheet, contentStartRow, guardCount, copyFromBelow: true);
             foreach (ExcelFramingCategoryPlan category in outputTarget.Categories
                          .Where(category => !IsDirect(category))
                          .OrderByDescending(category => category.Order))
@@ -242,7 +246,7 @@ public static class ExcelFramingExportService
                     excel,
                     workbook,
                     sheet,
-                    headingRow + 1,
+                    contentStartRow,
                     category,
                     config,
                     legend);
@@ -252,7 +256,7 @@ public static class ExcelFramingExportService
             int boundaryRow = FindExactTextRow(sheet, nextHeadingText);
             if (boundaryRow <= headingRow)
                 return BlockFailure($"Could not preserve the boundary after '{target.Heading}'.");
-            TrimTrailingBlankOutputRows(sheet, headingRow + 1, boundaryRow);
+            TrimTrailingBlankOutputRows(sheet, contentStartRow, boundaryRow);
             foreach (ExcelFramingCategoryPlan category in outputTarget.Categories
                          .Where(IsDirect)
                          .OrderBy(category => category.Order))
@@ -391,9 +395,11 @@ public static class ExcelFramingExportService
             if (nextHeaderRow <= headingRow + 1 || nextHeadingText.Length == 0)
                 return BlockFailure($"Could not find the green boundary after '{target.Heading}'.");
 
+            int contentStartRow = FindFramingContentStartRow(
+                sheet, headingRow, nextHeaderRow, config.ProtectedNoteRowColor);
             int guardCount = GuardRowCount(outputTarget, legend.Count);
             if (guardCount > 0)
-                InsertOutputRows(sheet, headingRow + 1, guardCount);
+                InsertOutputRows(sheet, contentStartRow, guardCount, copyFromBelow: true);
             foreach (ExcelFramingCategoryPlan category in outputTarget.Categories
                          .Where(category => !IsDirect(category))
                          .OrderByDescending(category => category.Order))
@@ -402,7 +408,7 @@ public static class ExcelFramingExportService
                     excel,
                     workbook,
                     sheet,
-                    headingRow + 1,
+                    contentStartRow,
                     category,
                     config,
                     legend);
@@ -412,7 +418,7 @@ public static class ExcelFramingExportService
             int boundaryRow = FindExactTextRow(sheet, nextHeadingText);
             if (boundaryRow <= headingRow)
                 return BlockFailure($"Could not preserve the boundary after '{target.Heading}'.");
-            TrimTrailingBlankOutputRows(sheet, headingRow + 1, boundaryRow);
+            TrimTrailingBlankOutputRows(sheet, contentStartRow, boundaryRow);
             foreach (ExcelFramingCategoryPlan category in outputTarget.Categories
                          .Where(IsDirect)
                          .OrderBy(category => category.Order))
@@ -540,6 +546,7 @@ public static class ExcelFramingExportService
             excel,
             workbook,
             category.MacroName);
+        NormalizeBeamPostOutputStyle(sheet, startRow, selectionCount, category);
         ClearSourceRows(
             sheet,
             startRow,
@@ -662,14 +669,18 @@ public static class ExcelFramingExportService
     private static void InsertOutputRows(
         dynamic sheet,
         int startRow,
-        int count)
+        int count,
+        bool copyFromBelow = false)
     {
         if (count <= 0)
             return;
         dynamic range = sheet.Range[
             sheet.Cells[startRow, 1],
             sheet.Cells[startRow + count - 1, OutputColumnCount]];
-        range.Insert(XlShiftDown);
+        if (copyFromBelow)
+            range.Insert(XlShiftDown, XlFormatFromRightOrBelow);
+        else
+            range.Insert(XlShiftDown);
     }
 
     private static void TrimTrailingBlankOutputRows(
@@ -784,6 +795,15 @@ public static class ExcelFramingExportService
         return 0;
     }
 
+    private static int FindFramingContentStartRow(
+        dynamic sheet, int headingRow, int boundaryRow, string protectedNoteColor)
+    {
+        int row = headingRow + 1;
+        while (row < boundaryRow && HeadingColorMatches(sheet, row, protectedNoteColor))
+            row++;
+        return row;
+    }
+
     private static int FindNextConfiguredBoundaryRow(
         dynamic sheet,
         int afterRow,
@@ -841,12 +861,27 @@ public static class ExcelFramingExportService
         range.Delete(XlShiftUp);
     }
 
-    private static bool HeadingColorMatches(dynamic sheet, int row, string color)
-    {
-        int actual = Convert.ToInt32(
+    private static bool HeadingColorMatches(dynamic sheet, int row, string color) =>
+        Convert.ToInt32(
             sheet.Cells[row, 1].Interior.Color,
-            CultureInfo.InvariantCulture);
-        return actual == OleColor(color);
+            CultureInfo.InvariantCulture) == OleColor(color);
+
+    private static void NormalizeBeamPostOutputStyle(
+        dynamic sheet,
+        int startRow,
+        int rowCount,
+        ExcelFramingCategoryPlan category)
+    {
+        bool isBeamOrPost =
+            string.Equals(category.Id, ExcelFramingCategoryIds.Beams, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(category.Id, ExcelFramingCategoryIds.Posts, StringComparison.OrdinalIgnoreCase);
+        if (rowCount <= 0 || !isBeamOrPost)
+            return;
+        dynamic range = sheet.Range[
+            sheet.Cells[startRow, 1],
+            sheet.Cells[startRow + rowCount - 1, OutputColumnCount]];
+        range.Interior.Pattern = XlPatternNone;
+        range.Font.Bold = false;
     }
 
     private static int LastUsedRow(dynamic sheet)
@@ -901,6 +936,7 @@ public static class ExcelFramingExportService
             try
             {
                 _ = OleColor(config.TargetHeaderColor);
+                _ = OleColor(config.ProtectedNoteRowColor);
             }
             catch (FormatException ex)
             {

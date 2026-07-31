@@ -19,6 +19,7 @@ public partial class MainWindow
     private TextBox? _excelFramingSumMacro;
     private TextBox? _excelFramingHeaderNote;
     private TextBox? _excelFramingHeaderColor;
+    private TextBox? _excelFramingProtectedNoteColor;
     private TextBox? _excelFramingFloors;
     private TextBox? _excelFramingCategories;
 
@@ -74,6 +75,8 @@ public partial class MainWindow
         _excelFramingHeaderNote =
             AddExcelField(fields, 3, 0, "Header note text", 1);
         Grid.SetColumnSpan(_excelFramingHeaderNote, 3);
+        _excelFramingProtectedNoteColor =
+            AddExcelField(fields, 4, 0, "Protected note color", 1);
         section.Children.Add(fields);
 
         section.Children.Add(new TextBlock
@@ -131,6 +134,7 @@ public partial class MainWindow
         SetText(_excelFramingSumMacro, framing.SumMacroName);
         SetText(_excelFramingHeaderNote, framing.HeaderNoteText);
         SetText(_excelFramingHeaderColor, framing.TargetHeaderColor);
+        SetText(_excelFramingProtectedNoteColor, framing.ProtectedNoteRowColor);
         SetText(
             _excelFramingFloors,
             string.Join(
@@ -159,6 +163,8 @@ public partial class MainWindow
         string sumMacro = TextOf(_excelFramingSumMacro);
         string headerNote = TextOf(_excelFramingHeaderNote);
         string color = TextOf(_excelFramingHeaderColor).ToUpperInvariant();
+        string protectedNoteColor =
+            TextOf(_excelFramingProtectedNoteColor).ToUpperInvariant();
         if (workbook.Length == 0 || sheet.Length == 0)
             error = "Framing workbook and worksheet are required.";
         else if (ExcelMacroTakeoffExportService.ColumnNumber(sourceColumn) <= 0)
@@ -169,6 +175,8 @@ public partial class MainWindow
             error = "Framing header note text is required.";
         else if (!ExcelColorPattern.IsMatch(color))
             error = "Framing block color must use #RRGGBB.";
+        else if (!ExcelColorPattern.IsMatch(protectedNoteColor))
+            error = "Framing protected note color must use #RRGGBB.";
         if (error.Length > 0)
             return false;
 
@@ -195,6 +203,7 @@ public partial class MainWindow
             SumMacroName = sumMacro,
             HeaderNoteText = headerNote,
             TargetHeaderColor = color,
+            ProtectedNoteRowColor = protectedNoteColor,
             Floors = floors,
             Categories = categories,
         };
