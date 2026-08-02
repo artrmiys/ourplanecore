@@ -154,6 +154,46 @@ internal static class ExcelMacroExportTests
         Equal("EA", result.Rows[3].Unit, "opening unit");
     }
 
+    public static void OpeningsStripOnlyOneCharacterDotFloorPrefix()
+    {
+        Equal(
+            "5.00x3.00 d",
+            ExcelMacroPayloadBuilder.TrimOpeningFloorPrefix("1. 5.00x3.00 d"),
+            "opening floor prefix");
+        Equal(
+            "5,00x3.00 d",
+            ExcelMacroPayloadBuilder.TrimOpeningFloorPrefix("5,00x3.00 d"),
+            "opening without floor prefix");
+        Equal(
+            "5.00x3.00 d",
+            ExcelMacroPayloadBuilder.TrimOpeningFloorPrefix("5.00x3.00 d"),
+            "decimal point must not be treated as a floor prefix");
+
+        OurPlanCoreJob job = Job();
+        string house = Path.Combine(job.TakeoffsRoot, "House 3");
+        TakeoffItem prefixed = PointItem(
+            Path.Combine(house, "openings", "1. 5.00x3.00 d"),
+            "1. 5.00x3.00 d",
+            count: 2);
+        TakeoffItem plain = PointItem(
+            Path.Combine(house, "openings", "1", "4.00x2.00 w"),
+            "4.00x2.00 w",
+            count: 1);
+
+        ExcelMacroPayloadResult result = ExcelMacroPayloadBuilder.Build(
+            job,
+            [prefixed, plain],
+            [house],
+            fallbackScaleMetersPerPt: 0,
+            ExcelMacroExportConfig.BuildDefault(),
+            ExcelMacroExportActionIds.Openings);
+
+        True(result.Success, result.Message);
+        Equal("1", result.Rows[0].Name, "opening floor header");
+        Equal("5.00x3.00 d", result.Rows[1].Name, "prefixed opening payload name");
+        Equal("4.00x2.00 w", result.Rows[2].Name, "plain opening payload name");
+    }
+
     public static void SeparateBuildingFoldersAreRejected()
     {
         OurPlanCoreJob job = Job();

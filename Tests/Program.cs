@@ -606,6 +606,7 @@ var tests = new List<(string Name, Action Run)>
     ("excel macro defaults match TemplateCom contract", ExcelMacroExportTests.DefaultsMatchTemplateComContract),
     ("excel macro walls build numeric floor groups", ExcelMacroExportTests.WallsBuildNumericFloorGroupsAndImperialValues),
     ("excel macro openings use floors one through five", ExcelMacroExportTests.OpeningsUseConfiguredFloorsOneThroughFive),
+    ("excel macro openings strip one-character dot floor prefix", ExcelMacroExportTests.OpeningsStripOnlyOneCharacterDotFloorPrefix),
     ("excel macro export rejects separate buildings", ExcelMacroExportTests.SeparateBuildingFoldersAreRejected),
     ("excel macro preprocess ranges exclude floor headers", ExcelMacroExportTests.PerFloorPreprocessRangesExcludeFloorHeaders),
     ("excel macro additional actions route their folders", ExcelMacroExportTests.AdditionalActionsRouteTheirOwnFolders),

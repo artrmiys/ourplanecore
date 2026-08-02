@@ -117,6 +117,13 @@ public static class ExcelMacroPayloadBuilder
             }
 
             ExcelMacroPayloadRow row = BuildItemRow(match.Item, fallbackScaleMetersPerPt, action);
+            if (string.Equals(
+                    action.Id,
+                    ExcelMacroExportActionIds.Openings,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                row = row with { Name = TrimOpeningFloorPrefix(row.Name) };
+            }
             if (row.Value is not > 0)
                 continue;
             if (!groups.TryGetValue(floor.Value, out List<ExcelMacroPayloadRow>? floorRows))
@@ -179,6 +186,14 @@ public static class ExcelMacroPayloadBuilder
             "point" => new ExcelMacroPayloadRow(item.Name, raw, "EA"),
             _ => new ExcelMacroPayloadRow(item.Name, raw, ""),
         };
+    }
+
+    internal static string TrimOpeningFloorPrefix(string name)
+    {
+        string value = name ?? "";
+        return value.Length >= 3 && value[1] == '.' && char.IsWhiteSpace(value[2])
+            ? value[2..].TrimStart()
+            : value;
     }
 
     internal static List<ExcelMacroPayloadRow> OrderRows(
