@@ -23,10 +23,17 @@ public sealed partial class PdfViewport
 
         foreach (Measurement area in GetSelectedMeasurements().Where(IsJoistEdgeControlTarget))
         {
-            (SKPoint startCenter, SKPoint endCenter) = JoistEdgeControlCenters(area);
+            (SKPoint topCenter, SKPoint bottomCenter) = JoistEdgeControlCenters(area);
             (bool startEnabled, bool endEnabled) = JoistTakeoffCalculator.ResolveEdgeJoists(area);
-            DrawJoistEdgeControl(canvas, startCenter, startEnabled);
-            DrawJoistEdgeControl(canvas, endCenter, endEnabled);
+            JoistEdgeControlSide topSide = TopJoistEdgeControlSide(area);
+            DrawJoistEdgeControl(
+                canvas,
+                topCenter,
+                EdgeEnabled(topSide, startEnabled, endEnabled));
+            DrawJoistEdgeControl(
+                canvas,
+                bottomCenter,
+                EdgeEnabled(OppositeEdgeControlSide(topSide), startEnabled, endEnabled));
         }
     }
 
@@ -89,13 +96,15 @@ public sealed partial class PdfViewport
 
         foreach (Measurement area in GetSelectedMeasurements().Where(IsJoistEdgeControlTarget).Reverse())
         {
-            (SKPoint startCenter, SKPoint endCenter) = JoistEdgeControlCenters(area);
+            (SKPoint topCenter, SKPoint bottomCenter) = JoistEdgeControlCenters(area);
             float radius = ScreenToPdfDistance(
                 JoistEdgeControlSizePx / 2f + JoistEdgeControlHitPaddingPx);
-            JoistEdgeControlSide? side = DistanceSquared(pdf, startCenter) <= radius * radius
-                ? JoistEdgeControlSide.Start
-                : DistanceSquared(pdf, endCenter) <= radius * radius
-                    ? JoistEdgeControlSide.End
+            JoistEdgeControlSide topSide = TopJoistEdgeControlSide(area);
+            bool hitTopControl = DistanceSquared(pdf, topCenter) <= radius * radius;
+            JoistEdgeControlSide? side = hitTopControl
+                ? topSide
+                : DistanceSquared(pdf, bottomCenter) <= radius * radius
+                    ? OppositeEdgeControlSide(topSide)
                     : null;
             if (!side.HasValue)
                 continue;
@@ -111,7 +120,7 @@ public sealed partial class PdfViewport
             area.JoistEdgeOverridesSet = true;
             NotifyMeasurementsChanged([area]);
             RequestRepaint();
-            string edgeName = side == JoistEdgeControlSide.Start ? "start" : "end";
+            string edgeName = hitTopControl ? "upper/left" : "lower/right";
             bool enabled = side == JoistEdgeControlSide.Start
                 ? area.JoistStartEdgeEnabled
                 : area.JoistEndEdgeEnabled;
@@ -122,68 +131,41 @@ public sealed partial class PdfViewport
         return false;
     }
 
-    private (SKPoint StartCenter, SKPoint EndCenter) JoistEdgeControlCenters(Measurement area)
+    private (SKPoint TopCenter, SKPoint BottomCenter) JoistEdgeControlCenters(Measurement area)
     {
         SKRect bounds = RawMeasurementBounds(area);
         float inset = ScreenToPdfDistance(JoistEdgeControlInsetPx);
-        float half = ScreenToPdfDistance(JoistEdgeControlSizePx / 2f + 2f);
-        float minimumGap = ScreenToPdfDistance(JoistEdgeControlSizePx + 6f);
-        return FindJoistEdgeControlPairInside(area, bounds, inset, half, minimumGap);
-    }
-
-    private static (SKPoint StartCenter, SKPoint EndCenter) FindJoistEdgeControlPairInside(
-        Measurement area,
-        SKRect bounds,
-        float inset,
-        float half,
-        float minimumGap)
-    {
         float left = bounds.Left + inset;
-        float right = Math.Max(left, bounds.Right - inset);
-        float maximumVerticalInset = Math.Max(
-            inset,
-            (bounds.Height - minimumGap) / 2f);
-
-        const int verticalSteps = 12;
-        const int horizontalSteps = 32;
-        for (int verticalStep = 0; verticalStep <= verticalSteps; verticalStep++)
-        {
-            float verticalProgress = verticalStep / (float)verticalSteps;
-            float verticalInset = inset +
-                                  (maximumVerticalInset - inset) * verticalProgress;
-            float top = bounds.Top + verticalInset;
-            float bottom = bounds.Bottom - verticalInset;
-            if (bottom < top)
-                break;
-
-            for (int horizontalStep = 0; horizontalStep <= horizontalSteps; horizontalStep++)
-            {
-                float horizontalProgress = horizontalStep / (float)horizontalSteps;
-                float x = left + (right - left) * horizontalProgress;
-                var start = new SKPoint(x, top);
-                var end = new SKPoint(x, bottom);
-                if (JoistEdgeControlFitsArea(area, start, half) &&
-                    JoistEdgeControlFitsArea(area, end, half))
-                {
-                    return (start, end);
-                }
-            }
-        }
-
         return (
             new SKPoint(left, bounds.Top + inset),
             new SKPoint(left, bounds.Bottom - inset));
     }
 
-    private static bool JoistEdgeControlFitsArea(Measurement area, SKPoint center, float half)
+    private static JoistEdgeControlSide TopJoistEdgeControlSide(Measurement area)
     {
-        float sample = half * 0.92f;
-        return PointInMeasurementFill(area, center) &&
-               PointInMeasurementFill(area, new SKPoint(center.X - sample, center.Y - sample)) &&
-               PointInMeasurementFill(area, new SKPoint(center.X + sample, center.Y - sample)) &&
-               PointInMeasurementFill(area, new SKPoint(center.X - sample, center.Y + sample)) &&
-               PointInMeasurementFill(area, new SKPoint(center.X + sample, center.Y + sample));
+        double direction = JoistTakeoffCalculator.NormalizeDirectionDegrees(
+            area.JoistDirectionDegrees);
+        double radians = direction * Math.PI / 180.0;
+        double normalX = -Math.Sin(radians);
+        double normalY = Math.Cos(radians);
+        bool startIsTopOrLeft = Math.Abs(normalY) >= Math.Abs(normalX)
+            ? normalY >= 0
+            : normalX >= 0;
+        return startIsTopOrLeft
+            ? JoistEdgeControlSide.Start
+            : JoistEdgeControlSide.End;
     }
+
+    private static JoistEdgeControlSide OppositeEdgeControlSide(JoistEdgeControlSide side) =>
+        side == JoistEdgeControlSide.Start
+            ? JoistEdgeControlSide.End
+            : JoistEdgeControlSide.Start;
+
+    private static bool EdgeEnabled(
+        JoistEdgeControlSide side,
+        bool startEnabled,
+        bool endEnabled) =>
+        side == JoistEdgeControlSide.Start ? startEnabled : endEnabled;
 
     private static bool IsJoistEdgeControlTarget(Measurement measurement) =>
         measurement.JoistEnabled &&
