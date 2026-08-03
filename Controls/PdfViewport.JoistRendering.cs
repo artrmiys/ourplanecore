@@ -67,8 +67,8 @@ public sealed partial class PdfViewport
 
     private SKPaint CreateExtraJoistGlowPaint() => new()
     {
-        Color = new SKColor(0xF4, 0x9B, 0x24, 115),
-        StrokeWidth = ScreenToPdfDistance(4.2f * MeasurementStrokeScaleFactor()),
+        Color = new SKColor(0xF4, 0x9B, 0x24, 145),
+        StrokeWidth = ScreenToPdfDistance(4.6f * MeasurementStrokeScaleFactor()),
         IsAntialias = true,
         Style = SKPaintStyle.Stroke,
         StrokeCap = SKStrokeCap.Round,

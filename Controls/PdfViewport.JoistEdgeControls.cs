@@ -127,19 +127,19 @@ public sealed partial class PdfViewport
         SKRect bounds = RawMeasurementBounds(area);
         float inset = ScreenToPdfDistance(JoistEdgeControlInsetPx);
         float half = ScreenToPdfDistance(JoistEdgeControlSizePx / 2f + 2f);
-        float y = bounds.Top + inset;
-        float left = bounds.Left + inset;
-        float right = bounds.Right - inset;
-        if (right - left < inset * 2f)
+        float x = bounds.Left + inset;
+        float top = bounds.Top + inset;
+        float bottom = bounds.Bottom - inset;
+        if (bottom - top < inset * 2f)
         {
-            float center = (bounds.Left + bounds.Right) / 2f;
-            left = center - inset;
-            right = center + inset;
+            float center = (bounds.Top + bounds.Bottom) / 2f;
+            top = center - inset;
+            bottom = center + inset;
         }
 
         SKPoint interior = FindJoistEdgeControlInterior(area, bounds);
-        SKPoint start = MoveJoistEdgeControlInside(area, new SKPoint(left, y), interior, half);
-        SKPoint end = MoveJoistEdgeControlInside(area, new SKPoint(right, y), interior, half);
+        SKPoint start = MoveJoistEdgeControlInside(area, new SKPoint(x, top), interior, half);
+        SKPoint end = MoveJoistEdgeControlInside(area, new SKPoint(x, bottom), interior, half);
         return (start, end);
     }
 

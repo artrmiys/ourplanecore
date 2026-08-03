@@ -412,8 +412,11 @@ internal static class JoistExtraModelTests
             rendering.Contains("DrawJoistEdgeControls(canvas)", StringComparison.Ordinal) &&
             edges.Contains("area.JoistEdgeOverridesSet = true", StringComparison.Ordinal) &&
             edges.Contains("RawMeasurementBounds(area)", StringComparison.Ordinal) &&
+            edges.Contains("float x = bounds.Left + inset", StringComparison.Ordinal) &&
+            edges.Contains("new SKPoint(x, top)", StringComparison.Ordinal) &&
+            edges.Contains("new SKPoint(x, bottom)", StringComparison.Ordinal) &&
             edges.Contains("JoistEdgeControlFitsArea", StringComparison.Ordinal),
-            "selected Joist Areas must expose persistent start/end viewport checkboxes");
+            "selected Joist Areas must expose persistent start/end checkboxes along the inside-left edge");
         AssertTrue(
             joistRendering.Contains("segment.IsExtra && !selectedExtra", StringComparison.Ordinal) &&
             joistRendering.Contains("extraGlow", StringComparison.Ordinal),
