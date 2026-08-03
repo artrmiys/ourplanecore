@@ -412,9 +412,11 @@ internal static class JoistExtraModelTests
             rendering.Contains("DrawJoistEdgeControls(canvas)", StringComparison.Ordinal) &&
             edges.Contains("area.JoistEdgeOverridesSet = true", StringComparison.Ordinal) &&
             edges.Contains("RawMeasurementBounds(area)", StringComparison.Ordinal) &&
-            edges.Contains("float x = bounds.Left + inset", StringComparison.Ordinal) &&
-            edges.Contains("new SKPoint(x, top)", StringComparison.Ordinal) &&
-            edges.Contains("new SKPoint(x, bottom)", StringComparison.Ordinal) &&
+            edges.Contains("FindJoistEdgeControlPairInside", StringComparison.Ordinal) &&
+            edges.Contains("float top = bounds.Top + verticalInset", StringComparison.Ordinal) &&
+            edges.Contains("float bottom = bounds.Bottom - verticalInset", StringComparison.Ordinal) &&
+            edges.Contains("var start = new SKPoint(x, top)", StringComparison.Ordinal) &&
+            edges.Contains("var end = new SKPoint(x, bottom)", StringComparison.Ordinal) &&
             edges.Contains("JoistEdgeControlFitsArea", StringComparison.Ordinal),
             "selected Joist Areas must expose persistent start/end checkboxes along the inside-left edge");
         AssertTrue(
