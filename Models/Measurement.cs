@@ -28,6 +28,9 @@ public sealed class Measurement
     public bool           JoistDirectionLocked { get; set; }
     public bool           JoistDirectionFollowsAreaRotation { get; set; } = true;
     public bool           JoistAddEndJoist { get; set; } = true;
+    public bool           JoistStartEdgeEnabled { get; set; } = true;
+    public bool           JoistEndEdgeEnabled { get; set; }
+    public bool           JoistEdgeOverridesSet { get; set; }
     public string         JoistPitch { get; set; } = "";
     public string         JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
     public bool           JoistShowLabels { get; set; }

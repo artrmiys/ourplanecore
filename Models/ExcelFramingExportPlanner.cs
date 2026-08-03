@@ -302,8 +302,7 @@ public static class ExcelFramingExportPlanner
                     measurements,
                     fallbackScaleMetersPerPt,
                     UnitMode.Imperial);
-            foreach (JoistLengthGroup group in regular.Concat(extra)
-                         .OrderByDescending(group => group.Length))
+            foreach (JoistLengthGroup group in regular.OrderByDescending(group => group.Length))
             {
                 rows.Add(new ExcelFramingInputRow(
                     $"({group.Count} / {FormatNumber(group.Length)})"));
@@ -322,7 +321,17 @@ public static class ExcelFramingExportPlanner
                 name =
                     $"{name} {FormatNumber(firstItem.JoistSpacingInches)}\"".Trim();
             }
-            rows.Add(new ExcelFramingInputRow(name));
+            if (regular.Count > 0)
+                rows.Add(new ExcelFramingInputRow(name));
+            if (extra.Count > 0)
+            {
+                foreach (JoistLengthGroup group in extra.OrderByDescending(group => group.Length))
+                {
+                    rows.Add(new ExcelFramingInputRow(
+                        $"({group.Count} / {FormatNumber(group.Length)})"));
+                }
+                rows.Add(new ExcelFramingInputRow($"Extra {name}"));
+            }
         }
         return rows;
     }

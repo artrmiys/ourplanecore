@@ -22,6 +22,7 @@ public sealed partial class PdfViewport
         int vertexIndex,
         bool preserveCutRegions = false)
     {
+        ClearSelectedExtraJoist();
         var next = measurements
             .Where(m => _measurementSet.Contains(m) && IsMeasurementOnActivePage(m))
             .Distinct()
@@ -132,6 +133,7 @@ public sealed partial class PdfViewport
 
     private void SetSelectedAnnotations(IReadOnlyList<PageAnnotation> annotations, PageAnnotation? primary, int vertexIndex)
     {
+        ClearSelectedExtraJoist();
         var next = annotations
             .Where(annotation => _annotations.Contains(annotation) && IsAnnotationVisibleOnActivePage(annotation))
             .Distinct()
@@ -220,6 +222,7 @@ public sealed partial class PdfViewport
     private void ClearSelection()
     {
         CancelExtraJoistPlacement(postStatus: false);
+        ClearSelectedExtraJoist();
         bool changed = _selectedMeasurement != null ||
                        _selectedMeasurements.Count > 0 ||
                        _selectedCutRegions.Count > 0 ||
@@ -273,6 +276,9 @@ public sealed partial class PdfViewport
 
     private void DeleteSelectedOverlay()
     {
+        if (TryDeleteSelectedExtraJoist())
+            return;
+
         if (TryDeleteSelectedCutRegions())
             return;
 
@@ -563,6 +569,8 @@ public sealed partial class PdfViewport
     {
         if (ReferenceEquals(_extraJoistPlacementMeasurement, measurement))
             CancelExtraJoistPlacement(postStatus: false);
+        if (ReferenceEquals(_selectedExtraJoistOwner, measurement))
+            ClearSelectedExtraJoist();
         _selectedMeasurements.Remove(measurement);
         _selectedCutRegions.RemoveWhere(cutRegion => ReferenceEquals(cutRegion.Parent, measurement));
         _selectedMeasurementVertexIndices.Remove(measurement);

@@ -54,9 +54,13 @@ public partial class MainWindow
         }
 
         JoistLayoutSummary summary = JoistTakeoffCalculator.Summarize(areas, _viewport.ScaleMetersPerPt);
+        int customized = areas.Count(area => area.JoistEdgeOverridesSet);
         string endStatus = item.JoistAddEndJoist
-            ? "Add End Joist is applied to every Area segment."
-            : "Add End Joist is off for every Area segment.";
+            ? "Default far edge is on"
+            : "Default is one start edge";
+        if (customized > 0)
+            endStatus += $"; {customized} Area segment(s) keep their viewport edge overrides";
+        endStatus += ".";
         TxtStatus.Text = $"Regular joists refreshed for all {areas.Count} Area segment(s) in {item.Name}: " +
                          $"{JoistTakeoffCalculator.FormatSummary(summary, _viewport.UnitMode)}. {endStatus}";
     }

@@ -176,13 +176,16 @@ public partial class MainWindow
         bool initialJoistShowLabels = seedJoistEnableDefaults
             ? JoistTakeoffDefaults.ShowLabels
             : item.JoistShowLabels;
+        bool initialJoistAddEnd = seedJoistEnableDefaults
+            ? JoistTakeoffDefaults.AddEndJoist
+            : item.JoistAddEndJoist;
         joistEdit = new JoistTakeoffEdit(
             item.IsJoistArea,
             item.JoistType,
             item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16,
             item.JoistDirectionDegrees,
             item.JoistDirectionFollowsAreaRotation,
-            item.JoistAddEndJoist,
+            initialJoistAddEnd,
             JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
             initialJoistRounding,
             initialJoistShowLabels,
@@ -321,10 +324,10 @@ public partial class MainWindow
 
         var joistAddEndBox = new CheckBox
         {
-            Content = "Add end joist",
-            IsChecked = item.JoistAddEndJoist,
+            Content = "Default far-edge joist",
+            IsChecked = initialJoistAddEnd,
             Margin = new Thickness(0, 3, 0, 3),
-            ToolTip = "When on, add one joist at the far edge if the spacing pattern does not land there.",
+            ToolTip = "Default for new/unmodified Area segments. Selected segments can override both edge joists with the two viewport checkboxes.",
         };
         Grid.SetRow(joistAddEndBox, 6);
         Grid.SetColumn(joistAddEndBox, 1);

@@ -84,6 +84,12 @@ public static class SettingsPresetStore
     private static string JobExcelMacroExportPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "AI_Context", "settings", "excel_macro_export.json");
 
+    private static string GlobalBeamAnnotationPath() =>
+        Path.Combine(SmartContextStore.GlobalRoot, "presets", "beam_annotation.json");
+
+    private static string JobBeamAnnotationPath(OurPlanCoreJob job) =>
+        Path.Combine(job.RootPath, "AI_Context", "settings", "beam_annotation.json");
+
     private static T? LoadJson<T>(string path) where T : class
     {
         try
@@ -321,4 +327,56 @@ public static class SettingsPresetStore
 
     public static void InstallExcelMacroExportProvider(OurPlanCoreJob? job) =>
         ExcelMacroExportConfigProvider.Install(ResolveExcelMacroExport(job));
+
+    // Beam companion annotation: per-job override -> global -> off/red defaults.
+    public static BeamAnnotationConfig? LoadGlobalBeamAnnotation() =>
+        LoadJson<BeamAnnotationConfig>(GlobalBeamAnnotationPath()) is { } config
+            ? BeamAnnotationConfig.UpgradeForCurrentSchema(config)
+            : null;
+
+    public static void SaveGlobalBeamAnnotation(BeamAnnotationConfig config) =>
+        SaveJson(
+            GlobalBeamAnnotationPath(),
+            BeamAnnotationConfig.UpgradeForCurrentSchema(config));
+
+    public static BeamAnnotationConfig? LoadJobBeamAnnotationOverride(OurPlanCoreJob job) =>
+        LoadJson<BeamAnnotationConfig>(JobBeamAnnotationPath(job)) is { } config
+            ? BeamAnnotationConfig.UpgradeForCurrentSchema(config)
+            : null;
+
+    public static void SaveJobBeamAnnotationOverride(
+        OurPlanCoreJob job,
+        BeamAnnotationConfig config) =>
+        SaveJson(
+            JobBeamAnnotationPath(job),
+            BeamAnnotationConfig.UpgradeForCurrentSchema(config));
+
+    public static bool ClearJobBeamAnnotationOverride(OurPlanCoreJob job)
+    {
+        string path = JobBeamAnnotationPath(job);
+        if (File.Exists(path))
+            JobWriteAccess.Demand(path, "clear job Beam annotation override");
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+            return !File.Exists(path);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static BeamAnnotationConfig ResolveBeamAnnotation(OurPlanCoreJob? job)
+    {
+        if (job != null && LoadJobBeamAnnotationOverride(job) is { } jobConfig)
+            return jobConfig;
+        if (LoadGlobalBeamAnnotation() is { } globalConfig)
+            return globalConfig;
+        return BeamAnnotationConfig.BuildDefault();
+    }
+
+    public static void InstallBeamAnnotationProvider(OurPlanCoreJob? job) =>
+        BeamAnnotationConfigProvider.Install(ResolveBeamAnnotation(job));
 }

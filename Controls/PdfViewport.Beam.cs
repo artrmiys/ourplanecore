@@ -130,6 +130,27 @@ public sealed partial class PdfViewport
         return annotation;
     }
 
+    public PageAnnotation? AddBeamAnnotationLine(SKPoint start, SKPoint end, string color)
+    {
+        if (MeasurementGeometry.Distance(start, end) <= ViewportConstants.ZeroLengthEpsilon)
+            return null;
+
+        var annotation = new PageAnnotation
+        {
+            Kind = "line",
+            Points = [start, end],
+            Color = BeamAnnotationConfig.NormalizeColor(color),
+            StrokeWidth = ActiveAnnotationStrokeWidth,
+            PageFolder = _pageFolder,
+            ScaleMetersPerPt = ScaleMetersPerPt,
+        };
+        _annotations.Add(annotation);
+        PushAddedAnnotationsUndo([annotation], "remove added Beam line markup");
+        RequestRepaint();
+        PageAnnotationAdded?.Invoke(annotation);
+        return annotation;
+    }
+
     private SKPoint BeamCountPoint(SKPoint start, SKPoint end)
     {
         SKPoint labelPoint = SegmentLengthLabelPoint(start, end);

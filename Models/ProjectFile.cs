@@ -43,6 +43,9 @@ internal sealed class ProjectFile
         public bool         JoistDirectionLocked { get; set; }
         public bool         JoistDirectionFollowsAreaRotation { get; set; } = true;
         public bool         JoistAddEndJoist { get; set; } = true;
+        public bool         JoistStartEdgeEnabled { get; set; } = true;
+        public bool         JoistEndEdgeEnabled { get; set; }
+        public bool         JoistEdgeOverridesSet { get; set; }
         public List<ExtraJoistDto> ExtraJoists { get; set; } = [];
         public List<PtDto>  Points     { get; set; } = [];
         public List<List<PtDto>> Holes { get; set; } = [];
@@ -106,6 +109,9 @@ internal sealed class ProjectFile
                     JoistDirectionLocked = m.JoistDirectionLocked,
                     JoistDirectionFollowsAreaRotation = m.JoistDirectionFollowsAreaRotation,
                     JoistAddEndJoist = m.JoistAddEndJoist,
+                    JoistStartEdgeEnabled = m.JoistStartEdgeEnabled,
+                    JoistEndEdgeEnabled = m.JoistEndEdgeEnabled,
+                    JoistEdgeOverridesSet = m.JoistEdgeOverridesSet,
                     ExtraJoists = (m.ExtraJoists ?? [])
                         .Select(ToExtraJoistDto)
                         .ToList(),
@@ -178,6 +184,9 @@ internal sealed class ProjectFile
                     JoistDirectionLocked = md.JoistDirectionLocked,
                     JoistDirectionFollowsAreaRotation = md.JoistDirectionFollowsAreaRotation,
                     JoistAddEndJoist = md.JoistAddEndJoist,
+                    JoistStartEdgeEnabled = md.JoistStartEdgeEnabled,
+                    JoistEndEdgeEnabled = md.JoistEndEdgeEnabled,
+                    JoistEdgeOverridesSet = md.JoistEdgeOverridesSet,
                     ExtraJoists = (md.ExtraJoists ?? [])
                         .Select(ToExtraJoist)
                         .ToList(),

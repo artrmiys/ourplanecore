@@ -159,6 +159,11 @@ internal static class TakeoffStore
                 measurement.JoistDirectionDegrees = item.JoistDirectionDegrees;
             measurement.JoistDirectionFollowsAreaRotation = item.JoistDirectionFollowsAreaRotation;
             measurement.JoistAddEndJoist = item.JoistAddEndJoist;
+            if (!measurement.JoistEdgeOverridesSet)
+            {
+                measurement.JoistStartEdgeEnabled = true;
+                measurement.JoistEndEdgeEnabled = item.JoistAddEndJoist;
+            }
             measurement.JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch);
             measurement.JoistLengthRounding = rounding;
             measurement.JoistShowLabels = item.JoistShowLabels;
@@ -378,6 +383,9 @@ internal static class TakeoffStore
             JoistDirectionLocked = dto.JoistDirectionLocked,
             JoistDirectionFollowsAreaRotation = dto.JoistDirectionFollowsAreaRotation,
             JoistAddEndJoist = dto.JoistAddEndJoist,
+            JoistStartEdgeEnabled = dto.JoistStartEdgeEnabled,
+            JoistEndEdgeEnabled = dto.JoistEndEdgeEnabled,
+            JoistEdgeOverridesSet = dto.JoistEdgeOverridesSet,
             ExtraJoists = (dto.ExtraJoists ?? [])
                 .Select(ToExtraJoist)
                 .ToList(),
@@ -404,6 +412,9 @@ internal static class TakeoffStore
             JoistDirectionLocked = measurement.JoistDirectionLocked,
             JoistDirectionFollowsAreaRotation = measurement.JoistDirectionFollowsAreaRotation,
             JoistAddEndJoist = measurement.JoistAddEndJoist,
+            JoistStartEdgeEnabled = measurement.JoistStartEdgeEnabled,
+            JoistEndEdgeEnabled = measurement.JoistEndEdgeEnabled,
+            JoistEdgeOverridesSet = measurement.JoistEdgeOverridesSet,
             ExtraJoists = (measurement.ExtraJoists ?? [])
                 .Select(ToExtraJoistDto)
                 .ToList(),

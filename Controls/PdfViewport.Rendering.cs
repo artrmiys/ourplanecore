@@ -105,6 +105,8 @@ public sealed partial class PdfViewport
 
                 sectionStart = frameWatch.ElapsedMilliseconds;
                 IReadOnlyList<Measurement> visibleMeasurements = DrawMeasurements(canvas, visiblePdf, activeMeasurements);
+                DrawJoistEdgeControls(canvas);
+                DrawSelectedExtraJoistOverlay(canvas);
                 visibleMeasurementCount = visibleMeasurements.Count;
                 measurementMs += frameWatch.ElapsedMilliseconds - sectionStart;
 

@@ -318,6 +318,30 @@ internal static class SheetOverlayPropertiesRegressionTests
             "the shared gateway must try one viewport undo action before its non-live persistence fallback");
     }
 
+    public static void SheetOverlayPointFitWaitsForExactOverlayBinding()
+    {
+        string overlay = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string entry = SliceBetween(
+            overlay,
+            "private void BeginSheetOverlayPointEdit(PageInfo page)",
+            "private async void BeginSheetOverlayPointEditWhenReady(PageInfo page)");
+        string wait = SliceBetween(
+            overlay,
+            "private async void BeginSheetOverlayPointEditWhenReady(PageInfo page)",
+            "private void ClearPageOverlay(PageInfo page)");
+
+        AssertTrue(
+            entry.Contains("BeginSheetOverlayPointEditWhenReady(page)", StringComparison.Ordinal),
+            "every two-point overlay entry must use the async ready path");
+        AssertContainsAll(
+            wait,
+            "_viewport.HasSheetOverlayBinding(",
+            "latest.FolderPath",
+            "latest.OverlayPageFolder",
+            "latest.ActiveOverlayId",
+            "_viewport.BeginSheetOverlayPointEdit()");
+    }
+
     public static void SheetOverlayQualityRefreshFailureKeepsCurrentBitmap()
     {
         string overlay = ReadRepoFile("MainWindow.SheetOverlay.cs");

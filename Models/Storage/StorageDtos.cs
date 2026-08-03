@@ -62,6 +62,15 @@ internal sealed class MeasurementDto
     [JsonPropertyName("joist_add_end_joist")]
     public bool JoistAddEndJoist { get; set; } = true;
 
+    [JsonPropertyName("joist_start_edge_enabled")]
+    public bool JoistStartEdgeEnabled { get; set; } = true;
+
+    [JsonPropertyName("joist_end_edge_enabled")]
+    public bool JoistEndEdgeEnabled { get; set; }
+
+    [JsonPropertyName("joist_edge_overrides_set")]
+    public bool JoistEdgeOverridesSet { get; set; }
+
     [JsonPropertyName("extra_joists")]
     public List<JoistExtraSegmentDto> ExtraJoists { get; set; } = [];
 }

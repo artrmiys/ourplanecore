@@ -69,11 +69,13 @@ public partial class MainWindow
         SettingsPresetStore.InstallSheetMetadataProvider(_currentJob);
         SettingsPresetStore.InstallRasterDpiPresetProvider(_currentJob);
         SettingsPresetStore.InstallExcelMacroExportProvider(_currentJob);
+        SettingsPresetStore.InstallBeamAnnotationProvider(_currentJob);
         _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
         _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
         _rasterDpiPresetConfig = SettingsPresetStore.ResolveRasterDpiPresets(_currentJob).Clone();
         _excelMacroExportConfig = SettingsPresetStore.ResolveExcelMacroExport(_currentJob).Clone();
+        _beamAnnotationConfig = SettingsPresetStore.ResolveBeamAnnotation(_currentJob).Clone();
         LoadExcelFramingLegendForCurrentJob();
         _takeoffTemplateConfig = TakeoffTemplateStore.ResolveConfig(_currentJob).Clone();
         RefreshSheetManagerRasterPresetButtons();
@@ -90,6 +92,7 @@ public partial class MainWindow
         _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
         _rasterDpiPresetConfig = SettingsPresetStore.ResolveRasterDpiPresets(_currentJob).Clone();
         _excelMacroExportConfig = SettingsPresetStore.ResolveExcelMacroExport(_currentJob).Clone();
+        _beamAnnotationConfig = SettingsPresetStore.ResolveBeamAnnotation(_currentJob).Clone();
         string cat = (_settingsCategoryList?.SelectedItem as string) ?? SettingsCategories[0];
         ShowSettingsCategory(cat);
     }
@@ -639,6 +642,7 @@ public partial class MainWindow
         root.Children.Add(_defaultsAutoCleanRasterOnCloseBox);
 
         AppendRasterDpiPresetSettings(root);
+        AppendBeamAnnotationSettings(root);
 
         root.Children.Add(Header("Tree display"));
         root.Children.Add(new TextBlock
@@ -671,7 +675,12 @@ public partial class MainWindow
         row.Children.Add(MgrButton("Open Display defaults", (_, _) => SelectTopTab("Display")));
         row.Children.Add(MgrButton("Open PDF Output defaults", (_, _) => SelectTopTab("PDF Output")));
         root.Children.Add(row);
-        return root;
+        return new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
     }
 
     private void DefaultsZoomSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -710,6 +719,7 @@ public partial class MainWindow
         if (_defaultsAutoCleanRasterOnCloseBox != null)
             _defaultsAutoCleanRasterOnCloseBox.IsChecked = _settings.AutoCleanRasterCacheOnClose;
         BindRasterDpiPresetSettings();
+        BindBeamAnnotationSettings();
     }
 
     private void SetAutoCleanRasterCacheOnClose(bool enabled)

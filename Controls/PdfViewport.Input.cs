@@ -164,6 +164,18 @@ public sealed partial class PdfViewport
             {
                 bool hasInProgressInput = _drawPts.Count > 0 || _scalePts.Count > 0 || _rubberEnd.HasValue;
 
+                if (TryToggleJoistEdgeControl(pdf))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (TryBeginExtraJoistEdit(pdf))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
                 // Alt operates on the selected Line/Area object's vertices.
                 // Click or box toggles handles; empty Alt-click clears handles.
                 if (IsVertexModifierActive() && HasEditableMeasurementSelection())
@@ -353,6 +365,12 @@ public sealed partial class PdfViewport
         }
 
         if (TryUpdateSheetOverlayDrag(ScreenToPdf((float)pos.X, (float)pos.Y)))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (TryUpdateExtraJoistDrag(ScreenToPdf((float)pos.X, (float)pos.Y)))
         {
             e.Handled = true;
             return;
@@ -708,6 +726,12 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (e.ChangedButton == MouseButton.Left && FinishExtraJoistDrag())
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (_draggingTransformScale || _draggingTransformRotate || _draggingTransformMove)
         {
             FinishTransformDrag();
@@ -787,6 +811,7 @@ public sealed partial class PdfViewport
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
+        FinishExtraJoistDrag();
         FinishTransformDrag();
         FinishMeasurementDrag();
         FinishAnnotationDrag();

@@ -30,6 +30,7 @@ public static partial class JoistTakeoffCalculator
             ? measurement.ScaleMetersPerPt
             : fallbackScaleMetersPerPt;
 
+        (bool startEdgeEnabled, bool endEdgeEnabled) = ResolveEdgeJoists(measurement);
         JoistLayoutResult layout = Calculate(
             measurement.Points,
             measurement.Holes,
@@ -38,7 +39,8 @@ public static partial class JoistTakeoffCalculator
             measurement.JoistDirectionDegrees,
             measurement.JoistLengthRounding,
             measurement.JoistPitch,
-            measurement.JoistAddEndJoist);
+            startEdgeEnabled,
+            endEdgeEnabled);
         return IncludeExtraJoists(
             layout,
             measurement.ExtraJoists,
@@ -76,6 +78,29 @@ public static partial class JoistTakeoffCalculator
         string pitch = "",
         bool addEndJoist = true)
     {
+        return Calculate(
+            polygon,
+            holes,
+            scaleMetersPerPt,
+            spacingInches,
+            directionDegrees,
+            lengthRounding,
+            pitch,
+            startEdgeEnabled: true,
+            endEdgeEnabled: addEndJoist);
+    }
+
+    public static JoistLayoutResult Calculate(
+        IReadOnlyList<SKPoint> polygon,
+        IReadOnlyList<IReadOnlyList<SKPoint>> holes,
+        double scaleMetersPerPt,
+        double spacingInches,
+        double directionDegrees,
+        string lengthRounding,
+        string pitch,
+        bool startEdgeEnabled,
+        bool endEdgeEnabled)
+    {
         if (polygon.Count < 3 || scaleMetersPerPt <= 0 || spacingInches <= 0)
             return Empty;
 
@@ -107,7 +132,7 @@ public static partial class JoistTakeoffCalculator
 
         var segments = new List<JoistSegment>();
         string normalizedRounding = NormalizeLengthRounding(lengthRounding);
-        var offsets = JoistOffsets(min, max, spacingPt, addEndJoist);
+        var offsets = JoistOffsets(min, max, spacingPt, startEdgeEnabled, endEdgeEnabled);
         var contours = AreaContours(polygon, holes);
         foreach (double offset in offsets)
         {
@@ -156,7 +181,17 @@ public static partial class JoistTakeoffCalculator
             pitchFactor);
     }
 
-    private static IReadOnlyList<double> JoistOffsets(double min, double max, double spacingPt, bool addEndJoist)
+    public static (bool StartEdgeEnabled, bool EndEdgeEnabled) ResolveEdgeJoists(Measurement measurement) =>
+        measurement.JoistEdgeOverridesSet
+            ? (measurement.JoistStartEdgeEnabled, measurement.JoistEndEdgeEnabled)
+            : (true, measurement.JoistAddEndJoist);
+
+    private static IReadOnlyList<double> JoistOffsets(
+        double min,
+        double max,
+        double spacingPt,
+        bool startEdgeEnabled,
+        bool endEdgeEnabled)
     {
         var offsets = new List<double>();
         int maxLines = Math.Min(8000, (int)Math.Ceiling((max - min) / spacingPt) + 2);
@@ -165,10 +200,12 @@ public static partial class JoistTakeoffCalculator
             double offset = min + lineIndex * spacingPt;
             if (offset >= max - ProjectionEpsilon)
                 break;
+            if (lineIndex == 0 && !startEdgeEnabled)
+                continue;
             offsets.Add(offset);
         }
 
-        if (addEndJoist && (offsets.Count == 0 || Math.Abs(offsets[^1] - max) > ProjectionEpsilon))
+        if (endEdgeEnabled && (offsets.Count == 0 || Math.Abs(offsets[^1] - max) > ProjectionEpsilon))
             offsets.Add(max);
         return offsets;
     }

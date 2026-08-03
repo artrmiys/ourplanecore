@@ -197,6 +197,30 @@ internal static class JoistExtraModelTests
         AssertEqual(4, summary.Count, "each area receives its own far-edge joist");
     }
 
+    public static void PerAreaEdgeOverridesSurviveRefreshAndControlBothBoundaries()
+    {
+        TakeoffItem item = JoistItem();
+        item.JoistAddEndJoist = false;
+        Measurement area = Area(directionDegrees: 0);
+        area.JoistStartEdgeEnabled = false;
+        area.JoistEndEdgeEnabled = true;
+        area.JoistEdgeOverridesSet = true;
+        item.Measurements.Add(area);
+
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        (bool start, bool end) = JoistTakeoffCalculator.ResolveEdgeJoists(area);
+        AssertFalse(start, "local start-edge override survives refresh");
+        AssertTrue(end, "local end-edge override survives refresh");
+        AssertEqual(1, JoistTakeoffCalculator.Calculate(area, 0).Count, "far edge alone produces one boundary joist");
+
+        area.JoistStartEdgeEnabled = true;
+        AssertEqual(2, JoistTakeoffCalculator.Calculate(area, 0).Count, "both checked boundaries produce two joists");
+        area.JoistEndEdgeEnabled = false;
+        AssertEqual(1, JoistTakeoffCalculator.Calculate(area, 0).Count, "start edge alone is the default one-side layout");
+        area.JoistStartEdgeEnabled = false;
+        AssertEqual(0, JoistTakeoffCalculator.Calculate(area, 0).Count, "both unchecked boundaries remove both edge joists");
+    }
+
     public static void MeasurementsAndLegacyProjectFileRoundTripExtras()
     {
         WithTempFolder(root =>
@@ -204,11 +228,16 @@ internal static class JoistExtraModelTests
             string takeoffFolder = Path.Combine(root, "Takeoffs", "Joists");
             Directory.CreateDirectory(takeoffFolder);
             Measurement source = Area(directionDegrees: 0);
+            source.JoistStartEdgeEnabled = false;
+            source.JoistEndEdgeEnabled = true;
+            source.JoistEdgeOverridesSet = true;
             source.ExtraJoists.Add(Extra("stable-extra-id", 1, 2, 9, 2));
 
             TakeoffStore.SaveMeasurements(takeoffFolder, [source]);
             Measurement stored = TakeoffStore.LoadMeasurements(takeoffFolder).Single();
             AssertExtra(stored.ExtraJoists.Single(), "stable-extra-id", new SKPoint(1, 2), new SKPoint(9, 2), "measurements.json");
+            AssertFalse(stored.JoistStartEdgeEnabled, "measurements.json start-edge override");
+            AssertTrue(stored.JoistEndEdgeEnabled && stored.JoistEdgeOverridesSet, "measurements.json end-edge override");
 
             string pdfPath = Path.Combine(root, "plans.pdf");
             File.WriteAllText(pdfPath, "%PDF-1.4");
@@ -316,6 +345,34 @@ internal static class JoistExtraModelTests
         AssertTrue(
             viewportInput.Contains("case Key.D: ToolChanged?.Invoke(\"drawline\")", StringComparison.Ordinal),
             "D should remain the Draw Line fallback when no Joist Area segment is selected");
+    }
+
+    public static void ExtraJoistsAndAreaEdgesAreEditableInViewport()
+    {
+        string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
+        string rendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Rendering.cs"));
+        string extra = ReadRepoFile(Path.Combine("Controls", "PdfViewport.ExtraJoists.cs"));
+        string edges = ReadRepoFile(Path.Combine("Controls", "PdfViewport.JoistEdgeControls.cs"));
+        string selection = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SelectionState.cs"));
+
+        AssertTrue(
+            input.Contains("TryBeginExtraJoistEdit(pdf)", StringComparison.Ordinal) &&
+            input.Contains("TryUpdateExtraJoistDrag", StringComparison.Ordinal) &&
+            input.Contains("FinishExtraJoistDrag()", StringComparison.Ordinal),
+            "mouse input must select, drag, and finish an existing Extra Joist");
+        AssertTrue(
+            extra.Contains("TryDeleteSelectedExtraJoist", StringComparison.Ordinal) &&
+            extra.Contains("JoistTakeoffCalculator.TryClipExtraJoist(owner, pdf", StringComparison.Ordinal),
+            "selected Extra Joists must delete and stay clipped while moving");
+        AssertTrue(
+            selection.IndexOf("TryDeleteSelectedExtraJoist()", StringComparison.Ordinal) <
+            selection.IndexOf("TryDeleteSelectedCutRegions()", StringComparison.Ordinal),
+            "Delete must remove the selected Extra Joist before its owning Area");
+        AssertTrue(
+            input.Contains("TryToggleJoistEdgeControl(pdf)", StringComparison.Ordinal) &&
+            rendering.Contains("DrawJoistEdgeControls(canvas)", StringComparison.Ordinal) &&
+            edges.Contains("area.JoistEdgeOverridesSet = true", StringComparison.Ordinal),
+            "selected Joist Areas must expose persistent start/end viewport checkboxes");
     }
 
     private static TakeoffItem JoistItem(string name = "Joists") =>

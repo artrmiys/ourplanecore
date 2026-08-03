@@ -11,6 +11,11 @@ public sealed partial class PdfViewport
 {
     private Measurement? _extraJoistPlacementMeasurement;
     private JoistExtraSegment? _extraJoistPlacementPreview;
+    private Measurement? _selectedExtraJoistOwner;
+    private string _selectedExtraJoistId = "";
+    private bool _draggingExtraJoist;
+    private bool _dragExtraJoistChanged;
+    private List<JoistExtraSegment> _dragExtraJoistOriginals = [];
 
     private List<JoistExtraSegment> _dragMeasurementOriginalExtraJoists = [];
     private readonly Dictionary<Measurement, List<JoistExtraSegment>> _dragSelectionOriginalExtraJoists = [];
@@ -102,7 +107,13 @@ public sealed partial class PdfViewport
 
         CancelExtraJoistPlacement(postStatus: false);
         PushGeometryUndoSnapshot([areaMeasurement], [], "restore deleted Extra Joist", "extra-joist-delete");
+        string removedId = areaMeasurement.ExtraJoists[nearestIndex].Id;
         areaMeasurement.ExtraJoists.RemoveAt(nearestIndex);
+        if (ReferenceEquals(_selectedExtraJoistOwner, areaMeasurement) &&
+            string.Equals(_selectedExtraJoistId, removedId, StringComparison.Ordinal))
+        {
+            ClearSelectedExtraJoist();
+        }
         NotifyMeasurementsChanged([areaMeasurement]);
         PostStatus("Deleted Extra Joist. Ctrl+Z restores it.");
         RequestRepaint();
@@ -215,6 +226,179 @@ public sealed partial class PdfViewport
         };
         canvas.DrawLine(preview.Start, preview.End, halo);
         canvas.DrawLine(preview.Start, preview.End, highlight);
+    }
+
+    private bool TryBeginExtraJoistEdit(SKPoint pdf)
+    {
+        if (IsReadOnlyMode ||
+            IsSelectionModifierActive() ||
+            IsVertexModifierActive())
+        {
+            return false;
+        }
+
+        float tolerance = ScreenToPdfDistance(11f);
+        Measurement? owner = null;
+        JoistExtraSegment? hit = null;
+        float nearestDistance = float.MaxValue;
+        foreach (Measurement area in ActivePageMeasurements().Where(measurement =>
+                     measurement.JoistEnabled &&
+                     OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area"))
+        {
+            foreach (JoistExtraSegment extra in area.ExtraJoists)
+            {
+                float distance = DistanceToSegment(pdf, extra.Start, extra.End);
+                if (distance > tolerance || distance >= nearestDistance)
+                    continue;
+
+                nearestDistance = distance;
+                owner = area;
+                hit = extra;
+            }
+        }
+
+        if (owner == null || hit == null)
+            return false;
+
+        SelectMeasurement(owner, -1);
+        _selectedExtraJoistOwner = owner;
+        _selectedExtraJoistId = hit.Id;
+        _dragExtraJoistOriginals = CloneExtraJoists(owner.ExtraJoists);
+        _dragExtraJoistChanged = false;
+        _draggingExtraJoist = true;
+        CaptureMouse();
+        PostStatus("Extra Joist selected. Drag to move; Delete removes it; Ctrl+Z restores the change.");
+        RequestRepaint();
+        return true;
+    }
+
+    private bool TryUpdateExtraJoistDrag(SKPoint pdf)
+    {
+        if (!_draggingExtraJoist || _selectedExtraJoistOwner is not { } owner)
+            return false;
+
+        JoistExtraSegment? selected = owner.ExtraJoists.FirstOrDefault(extra =>
+            string.Equals(extra.Id, _selectedExtraJoistId, StringComparison.Ordinal));
+        if (selected == null)
+        {
+            FinishExtraJoistDrag();
+            return true;
+        }
+
+        if (!JoistTakeoffCalculator.TryClipExtraJoist(owner, pdf, out JoistExtraSegment moved))
+            return true;
+
+        moved.Id = selected.Id;
+        selected.Start = moved.Start;
+        selected.End = moved.End;
+        JoistExtraSegment? original = _dragExtraJoistOriginals.FirstOrDefault(extra =>
+            string.Equals(extra.Id, selected.Id, StringComparison.Ordinal));
+        _dragExtraJoistChanged = original == null ||
+            !SameExtraJoists([selected], [original]);
+        PostStatus("Moving Extra Joist. Release to keep the new position.");
+        RequestPointerMoveRepaint();
+        return true;
+    }
+
+    private bool FinishExtraJoistDrag()
+    {
+        if (!_draggingExtraJoist)
+            return false;
+
+        Measurement? owner = _selectedExtraJoistOwner;
+        bool changed = _dragExtraJoistChanged && owner != null && _measurementSet.Contains(owner);
+        _draggingExtraJoist = false;
+        _dragExtraJoistChanged = false;
+        if (changed && owner != null)
+        {
+            PushMeasurementUndoSnapshot(
+                owner,
+                owner.Points,
+                owner.Holes,
+                _dragExtraJoistOriginals,
+                "move Extra Joist",
+                "extra-joist-drag");
+            NotifyMeasurementsChanged([owner]);
+            PostStatus("Moved Extra Joist. Delete removes it; Ctrl+Z restores its previous position.");
+        }
+        _dragExtraJoistOriginals.Clear();
+        if (IsMouseCaptured)
+            ReleaseMouseCapture();
+        RequestRepaint();
+        return true;
+    }
+
+    private bool TryDeleteSelectedExtraJoist()
+    {
+        if (_selectedExtraJoistOwner is not { } owner ||
+            !_measurementSet.Contains(owner))
+        {
+            return false;
+        }
+
+        int index = owner.ExtraJoists.FindIndex(extra =>
+            string.Equals(extra.Id, _selectedExtraJoistId, StringComparison.Ordinal));
+        if (index < 0)
+            return false;
+
+        PushGeometryUndoSnapshot([owner], [], "restore deleted Extra Joist", "extra-joist-delete");
+        owner.ExtraJoists.RemoveAt(index);
+        ClearSelectedExtraJoist();
+        NotifyMeasurementsChanged([owner]);
+        PostStatus("Deleted selected Extra Joist. Ctrl+Z restores it.");
+        RequestRepaint();
+        return true;
+    }
+
+    private void ClearSelectedExtraJoist()
+    {
+        _selectedExtraJoistOwner = null;
+        _selectedExtraJoistId = "";
+        _draggingExtraJoist = false;
+        _dragExtraJoistChanged = false;
+        _dragExtraJoistOriginals.Clear();
+    }
+
+    private void DrawSelectedExtraJoistOverlay(SKCanvas canvas)
+    {
+        if (_selectedExtraJoistOwner is not { } owner ||
+            !IsMeasurementOnActivePage(owner))
+        {
+            return;
+        }
+
+        JoistExtraSegment? selected = owner.ExtraJoists.FirstOrDefault(extra =>
+            string.Equals(extra.Id, _selectedExtraJoistId, StringComparison.Ordinal));
+        if (selected == null)
+            return;
+
+        using var halo = new SKPaint
+        {
+            Color = SKColors.White.WithAlpha(235),
+            StrokeWidth = ScreenToPdfDistance(7f),
+            StrokeCap = SKStrokeCap.Round,
+            Style = SKPaintStyle.Stroke,
+            IsAntialias = true,
+        };
+        using var selectedStroke = new SKPaint
+        {
+            Color = new SKColor(0xF4, 0x9B, 0x24),
+            StrokeWidth = ScreenToPdfDistance(3.4f),
+            StrokeCap = SKStrokeCap.Round,
+            Style = SKPaintStyle.Stroke,
+            IsAntialias = true,
+        };
+        using var handleFill = new SKPaint
+        {
+            Color = new SKColor(0x21, 0x96, 0xF3),
+            Style = SKPaintStyle.Fill,
+            IsAntialias = true,
+        };
+        canvas.DrawLine(selected.Start, selected.End, halo);
+        canvas.DrawLine(selected.Start, selected.End, selectedStroke);
+        float handleRadius = ScreenToPdfDistance(4.5f);
+        canvas.DrawCircle(selected.Start, handleRadius, handleFill);
+        canvas.DrawCircle(selected.End, handleRadius, handleFill);
     }
 
     private static List<JoistExtraSegment> CloneExtraJoists(IEnumerable<JoistExtraSegment> source) =>

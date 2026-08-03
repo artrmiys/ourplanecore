@@ -19,6 +19,8 @@ public sealed class NewItemDialog : Window
     public string ItemType  { get; private set; } = "line";
     public string ItemCountSymbol { get; private set; } = CountDisplaySymbol.Circle;
     public bool MarkSimilarOnCurrentSheet { get; private set; }
+    public bool KeepBeamAnnotationLine { get; private set; }
+    public string BeamAnnotationLineColor { get; private set; } = "#FF0000";
     public IReadOnlyList<NewItemOffsetSpec> OffsetLines { get; private set; } = [];
 
     private static readonly (string Label, string Hex)[] Presets =
@@ -68,7 +70,10 @@ public sealed class NewItemDialog : Window
         bool showSimilarReviewOption = false,
         bool defaultSimilarReview = false,
         string similarReviewOptionText = "Review similar on this sheet",
-        UnitMode unitMode = UnitMode.Metric)
+        UnitMode unitMode = UnitMode.Metric,
+        bool showBeamAnnotationOption = false,
+        bool defaultKeepBeamAnnotationLine = false,
+        string defaultBeamAnnotationLineColor = "#FF0000")
     {
         Title                 = "New Takeoff Item";
         Width                 = 320;
@@ -188,6 +193,54 @@ public sealed class NewItemDialog : Window
         swatches[selectedIndex].BorderBrush = Brushes.White;   // default selection highlight
 
         panel.Children.Add(colorPanel);
+
+        CheckBox? beamAnnotationBox = null;
+        TextBox? beamAnnotationColorBox = null;
+        if (showBeamAnnotationOption)
+        {
+            panel.Children.Add(new Separator { Margin = new Thickness(0, 10, 0, 8) });
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Beam annotation line:",
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 4),
+            });
+            beamAnnotationBox = new CheckBox
+            {
+                Content = "Add a simple line along the measured Beam",
+                IsChecked = defaultKeepBeamAnnotationLine,
+                ToolTip = "The existing blue dimension stays. This adds a separate editable line annotation through the same two points.",
+            };
+            panel.Children.Add(beamAnnotationBox);
+
+            var beamColorRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 6, 0, 0),
+            };
+            beamColorRow.Children.Add(new TextBlock
+            {
+                Text = "Line color:",
+                Width = 86,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            beamAnnotationColorBox = new TextBox
+            {
+                Text = BeamAnnotationConfig.NormalizeColor(defaultBeamAnnotationLineColor),
+                Width = 90,
+                IsEnabled = defaultKeepBeamAnnotationLine,
+            };
+            beamAnnotationBox.Checked += (_, _) => beamAnnotationColorBox.IsEnabled = true;
+            beamAnnotationBox.Unchecked += (_, _) => beamAnnotationColorBox.IsEnabled = false;
+            beamColorRow.Children.Add(beamAnnotationColorBox);
+            beamColorRow.Children.Add(new TextBlock
+            {
+                Text = "  #RRGGBB",
+                Foreground = Brushes.Gray,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            panel.Children.Add(beamColorRow);
+        }
 
         // ── Multiline offsets (line items only, opt-in per call site) ────────
         string unitSuffix = unitMode == UnitMode.Imperial ? "ft" : "m";
@@ -320,6 +373,20 @@ public sealed class NewItemDialog : Window
                 showSimilarReviewOption &&
                 similarReviewBox?.IsChecked == true &&
                 string.Equals(ItemType, "point", System.StringComparison.OrdinalIgnoreCase);
+            KeepBeamAnnotationLine = showBeamAnnotationOption && beamAnnotationBox?.IsChecked == true;
+            if (showBeamAnnotationOption && beamAnnotationColorBox != null)
+            {
+                if (!BeamAnnotationConfig.TryNormalizeColor(beamAnnotationColorBox.Text, out string beamLineColor))
+                {
+                    MessageBox.Show(
+                        "Beam annotation color must use #RRGGBB, for example #FF0000.",
+                        "New Takeoff Item", MessageBoxButton.OK, MessageBoxImage.Information);
+                    beamAnnotationColorBox.Focus();
+                    beamAnnotationColorBox.SelectAll();
+                    return;
+                }
+                BeamAnnotationLineColor = beamLineColor;
+            }
 
             OffsetLines = [];
             if (showOffsetLines && offsetSection.Visibility == Visibility.Visible)

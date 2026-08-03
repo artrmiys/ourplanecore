@@ -184,27 +184,7 @@ public partial class MainWindow
         OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
 
     private void BeginSheetOverlayPointEdit(PageInfo page)
-    {
-        if (!RequireModule(ModuleId.SheetOverlay, "Edit Sheet Overlay"))
-            return;
-
-        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
-        {
-            TxtStatus.Text = "Set a sheet overlay before editing it.";
-            return;
-        }
-
-        if (_currentPage == null || !SameFolder(_currentPage.FolderPath, page.FolderPath))
-            OpenPageInActiveTab(page);
-
-        if (_currentPage == null || !SameFolder(_currentPage.FolderPath, page.FolderPath))
-        {
-            TxtStatus.Text = "Open the sheet before editing its overlay.";
-            return;
-        }
-
-        _viewport.BeginSheetOverlayPointEdit();
-    }
+        => BeginSheetOverlayPointEditWhenReady(page);
 
     private async void BeginSheetOverlayPointEditWhenReady(PageInfo page)
     {
@@ -229,7 +209,10 @@ public partial class MainWindow
             PageInfo? current = _currentPage;
             if (current != null &&
                 SameFolder(current.FolderPath, latest.FolderPath) &&
-                _viewport.HasSheetOverlay)
+                _viewport.HasSheetOverlayBinding(
+                    latest.FolderPath,
+                    latest.OverlayPageFolder,
+                    latest.ActiveOverlayId))
             {
                 _viewport.BeginSheetOverlayPointEdit();
                 return;

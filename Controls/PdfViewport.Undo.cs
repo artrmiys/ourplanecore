@@ -30,7 +30,10 @@ public sealed partial class PdfViewport
                 measurement.Points.ToList(),
                 CloneHoles(measurement.Holes),
                 measurement.JoistDirectionDegrees,
-                CloneExtraJoists(measurement.ExtraJoists)))
+                CloneExtraJoists(measurement.ExtraJoists),
+                measurement.JoistStartEdgeEnabled,
+                measurement.JoistEndEdgeEnabled,
+                measurement.JoistEdgeOverridesSet))
             .ToList();
         var annotationSnapshots = annotations
             .Where(annotation => _annotations.Contains(annotation))
@@ -96,7 +99,10 @@ public sealed partial class PdfViewport
                 beforePoints.ToList(),
                 CloneHoles(beforeHoles),
                 measurement.JoistDirectionDegrees,
-                CloneExtraJoists(beforeExtraJoists))],
+                CloneExtraJoists(beforeExtraJoists),
+                measurement.JoistStartEdgeEnabled,
+                measurement.JoistEndEdgeEnabled,
+                measurement.JoistEdgeOverridesSet)],
             [],
             [],
             [],
@@ -183,7 +189,10 @@ public sealed partial class PdfViewport
                 pair.Key.JoistDirectionDegrees,
                 beforeExtraJoists.TryGetValue(pair.Key, out var extraJoists)
                     ? CloneExtraJoists(extraJoists)
-                    : CloneExtraJoists(pair.Key.ExtraJoists)))
+                    : CloneExtraJoists(pair.Key.ExtraJoists),
+                pair.Key.JoistStartEdgeEnabled,
+                pair.Key.JoistEndEdgeEnabled,
+                pair.Key.JoistEdgeOverridesSet))
             .ToList();
         if (snapshots.Count == 0)
             return;
@@ -261,7 +270,10 @@ public sealed partial class PdfViewport
                     : pair.Key.JoistDirectionDegrees,
                 measurementBeforeExtraJoists.TryGetValue(pair.Key, out var extraJoists)
                     ? CloneExtraJoists(extraJoists)
-                    : CloneExtraJoists(pair.Key.ExtraJoists)))
+                    : CloneExtraJoists(pair.Key.ExtraJoists),
+                pair.Key.JoistStartEdgeEnabled,
+                pair.Key.JoistEndEdgeEnabled,
+                pair.Key.JoistEdgeOverridesSet))
             .ToList();
         var annotationSnapshots = annotationBeforePoints
             .Where(pair => _annotations.Contains(pair.Key))
@@ -413,7 +425,10 @@ public sealed partial class PdfViewport
                 pair.Key.JoistDirectionDegrees,
                 beforeExtraJoists.TryGetValue(pair.Key, out var extraJoists)
                     ? CloneExtraJoists(extraJoists)
-                    : CloneExtraJoists(pair.Key.ExtraJoists)))
+                    : CloneExtraJoists(pair.Key.ExtraJoists),
+                pair.Key.JoistStartEdgeEnabled,
+                pair.Key.JoistEndEdgeEnabled,
+                pair.Key.JoistEdgeOverridesSet))
             .ToList();
 
         var addedSnapshots = addedMeasurements
@@ -600,6 +615,9 @@ public sealed partial class PdfViewport
                 RestoreHoles(snapshot.Target.Holes, snapshot.Holes);
                 snapshot.Target.JoistDirectionDegrees = snapshot.JoistDirectionDegrees;
                 RestoreExtraJoists(snapshot.Target.ExtraJoists, snapshot.ExtraJoists);
+                snapshot.Target.JoistStartEdgeEnabled = snapshot.JoistStartEdgeEnabled;
+                snapshot.Target.JoistEndEdgeEnabled = snapshot.JoistEndEdgeEnabled;
+                snapshot.Target.JoistEdgeOverridesSet = snapshot.JoistEdgeOverridesSet;
                 PruneMeasurementVertexSelection(snapshot.Target);
                 PruneCutRegionSelection(snapshot.Target);
                 changedMeasurements.Add(snapshot.Target);
@@ -778,7 +796,10 @@ public sealed partial class PdfViewport
         List<SKPoint> Points,
         List<List<SKPoint>> Holes,
         double JoistDirectionDegrees,
-        List<JoistExtraSegment> ExtraJoists);
+        List<JoistExtraSegment> ExtraJoists,
+        bool JoistStartEdgeEnabled,
+        bool JoistEndEdgeEnabled,
+        bool JoistEdgeOverridesSet);
 
     private sealed record AnnotationPointUndo(PageAnnotation Target, List<SKPoint> Points, string Text);
 

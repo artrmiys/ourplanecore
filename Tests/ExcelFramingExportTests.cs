@@ -159,7 +159,7 @@ internal static class ExcelFramingExportTests
             IsJoistTakeoff = true,
             JoistSpacingInches = 16,
         };
-        joist.Measurements.Add(new Measurement
+        var area = new Measurement
         {
             MType = "area",
             JoistEnabled = true,
@@ -175,7 +175,14 @@ internal static class ExcelFramingExportTests
                 new SKPoint(12, 8),
                 new SKPoint(0, 8),
             ],
+        };
+        area.ExtraJoists.Add(new JoistExtraSegment
+        {
+            Id = "excel-extra",
+            Start = new SKPoint(0, 4),
+            End = new SKPoint(6, 4),
         });
+        joist.Measurements.Add(area);
 
         ExcelFramingExportPlan plan = ExcelFramingExportPlanner.Build(
             job,
@@ -188,12 +195,18 @@ internal static class ExcelFramingExportTests
         ExcelFramingCategoryPlan category =
             plan.FramingTargets.Single().Categories.Single();
         True(!category.UseSum, "joist plan skips Sum");
-        True(category.Rows.Count >= 2, "joist plan has pair rows and a closing name");
+        List<ExcelFramingInputRow> rows = category.Rows.ToList();
+        int regularName = rows.FindIndex(row => row.Name == "2x10 16\"");
+        int extraName = rows.FindIndex(row => row.Name == "Extra 2x10 16\"");
+        True(regularName > 0, "regular joist pair rows precede the normal closing name");
+        True(extraName > regularName + 1, "extra joist pair rows form a separate block");
         True(
-            category.Rows.Take(category.Rows.Count - 1)
+            category.Rows.Take(regularName).All(row => row.Name.StartsWith("(", StringComparison.Ordinal)),
+            "regular joist rows stay inside the normal block");
+        True(
+            category.Rows.Skip(regularName + 1).Take(extraName - regularName - 1)
                 .All(row => row.Name.StartsWith("(", StringComparison.Ordinal)),
-            "all joist pair rows precede the name");
-        Equal("2x10 16\"", category.Rows[^1].Name, "name and spacing close the group");
+            "extra pair rows precede the Extra closing name");
     }
 
     public static void AllScopeRecognizesFramingAsOneHouse()

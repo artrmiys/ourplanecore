@@ -157,6 +157,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay live transform bypasses static frame cache", SheetOverlayPropertiesRegressionTests.SheetOverlayLiveTransformBypassesStaticFrameCache),
     ("sheet overlay live preview survives bitmap replacement", SheetOverlayPropertiesRegressionTests.SheetOverlayLivePreviewSurvivesQualityBitmapReplacement),
     ("sheet overlay auto fit uses undoable transform gateway", SheetOverlayPropertiesRegressionTests.SheetOverlayAutoFitUsesUndoableTransformGateway),
+    ("sheet overlay point fit waits for exact binding", SheetOverlayPropertiesRegressionTests.SheetOverlayPointFitWaitsForExactOverlayBinding),
     ("sheet overlay quality refresh failure keeps current bitmap", SheetOverlayPropertiesRegressionTests.SheetOverlayQualityRefreshFailureKeepsCurrentBitmap),
     ("sheet overlay frame honors read-only page and module lifecycle", SheetOverlayPropertiesRegressionTests.SheetOverlayFrameHonorsReadOnlyPageAndModuleLifecycle),
     ("sheet overlay layers share viewport export tree and detached rendering", SheetOverlayPropertiesRegressionTests.SheetOverlayLayersShareViewportExportTreeAndDetachedRendering),
@@ -237,6 +238,8 @@ var tests = new List<(string Name, Action Run)>
     ("point split UI captures markers and stops Record", PointMeasurementSplitServiceTests.MainWindowPointSplitWiringCapturesMarkersAndStopsRecordBeforeMutation),
     ("beam length rounds up below and above eight feet", BeamLengthRoundsUpBelowAndAboveEightFeet),
     ("beam default name keeps size suffix outside selection", BeamDefaultNameKeepsSizeSuffixOutsideSelection),
+    ("beam annotation defaults stay off and red", BeamAnnotationConfigTests.DefaultsStayOffAndRedUntilEnabled),
+    ("beam dialog and Settings wire companion line", BeamAnnotationConfigTests.BeamDialogAndSettingsWireTheCompanionLine),
     ("opening size formats one decimal", OpeningSizeFormatsOneDecimal),
     ("opening default name is size only", OpeningDefaultNameIsSizeOnly),
     ("takeoff creation policy chooses safe parents", TakeoffCreationPolicyChoosesSafeParents),
@@ -557,9 +560,11 @@ var tests = new List<(string Name, Action Run)>
     ("extra joist uses area pitch and rounding", JoistExtraModelTests.ExtraJoistUsesTheAreaPitchAndOrderRounding),
     ("joist export places one extra block after regular blocks", JoistExtraModelTests.PlanSwiftExportPlacesAllRegularBlocksBeforeOneExtraBlock),
     ("end joist applies per area without overwriting directions", JoistExtraModelTests.AddEndJoistAppliesPerAreaWithoutOverwritingDirections),
+    ("per-area joist edge overrides survive refresh", JoistExtraModelTests.PerAreaEdgeOverridesSurviveRefreshAndControlBothBoundaries),
     ("extra joists persist through current and legacy storage", JoistExtraModelTests.MeasurementsAndLegacyProjectFileRoundTripExtras),
     ("area coalesce preserves and deduplicates extra joists", JoistExtraModelTests.AreaCoalescePreservesAndDeduplicatesExtras),
     ("Extra Joists mode stays active until D or Esc", JoistExtraModelTests.ExtraJoistModeContinuesUntilDOrEscapeAndRegularJoistsStayDistinct),
+    ("Extra Joists and area edges edit in viewport", JoistExtraModelTests.ExtraJoistsAndAreaEdgesAreEditableInViewport),
     ("joist pitch length applies slope factor", JoistPitchLengthAppliesSlopeFactor),
     ("joist pitch rounding applies per segment", JoistPitchRoundingAppliesPerSegment),
     ("joist pitch label shows indicator", JoistPitchLabelShowsIndicator),
@@ -4196,7 +4201,7 @@ static void JoistAreaDefaultsUseCompactLabelsAndFootRounding()
     AssertFalse(item.JoistShowLabels, "joist default hides per-segment labels");
     AssertFalse(item.JoistDetailedLabels, "joist default area label");
     AssertTrue(item.JoistDirectionFollowsAreaRotation, "joist default rotate direction");
-    AssertTrue(item.JoistAddEndJoist, "joist default end joist");
+    AssertFalse(item.JoistAddEndJoist, "new joist default keeps only the start edge");
 }
 
 static void LegacyJoistItemWithoutLabelFlagShowsLabels()

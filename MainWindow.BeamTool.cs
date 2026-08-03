@@ -50,7 +50,10 @@ public partial class MainWindow
             defaultCountSymbol: _newCountSymbol,
             initialNameSelectionLength: editablePrefixLength,
             showSimilarReviewOption: true,
-            similarReviewOptionText: "Review similar Beam marks on this sheet")
+            similarReviewOptionText: "Review similar Beam marks on this sheet",
+            showBeamAnnotationOption: true,
+            defaultKeepBeamAnnotationLine: _beamAnnotationConfig.KeepLineAnnotation,
+            defaultBeamAnnotationLineColor: _beamAnnotationConfig.LineColor)
         {
             Owner = this,
         };
@@ -62,6 +65,11 @@ public partial class MainWindow
         }
 
         RememberNewCountSymbol(dialog.ItemCountSymbol);
+        bool beamLineAdded = dialog.KeepBeamAnnotationLine &&
+                             _viewport.AddBeamAnnotationLine(
+                                 request.StartPdf,
+                                 request.EndPdf,
+                                 dialog.BeamAnnotationLineColor) != null;
 
         TakeoffItem item = CreateUniqueTakeoffItem(dialog.ItemName, dialog.ItemColor, "point", parentFolder);
         ApplyTakeoffFolderDefaultsToNewItem(item, parentFolder);
@@ -85,7 +93,10 @@ public partial class MainWindow
         UpdateToolStatus();
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
-        TxtStatus.Text = $"Beam Count created: {item.Name}. Ruler {request.LengthFeet:0.##} ft, order size {request.OrderLengthText}. Use Similar to add reviewed matches to this Beam item.";
+        string lineStatus = beamLineAdded
+            ? $" Companion line {dialog.BeamAnnotationLineColor} added."
+            : "";
+        TxtStatus.Text = $"Beam Count created: {item.Name}. Ruler {request.LengthFeet:0.##} ft, order size {request.OrderLengthText}.{lineStatus} Use Similar to add reviewed matches to this Beam item.";
         if (dialog.MarkSimilarOnCurrentSheet)
             StartSimilarCountReview(BuildBeamSimilarCountRequest(request));
     }
