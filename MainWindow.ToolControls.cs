@@ -289,14 +289,8 @@ public partial class MainWindow
 
     private static IEnumerable<(string Label, string Hex)> AnnotationColorPresets()
     {
-        yield return ("Red", "#FF4444");
-        yield return ("Blue", "#2196F3");
-        yield return ("Green", "#4CAF50");
-        yield return ("Orange", "#FF9800");
-        yield return ("Purple", "#9C27B0");
-        yield return ("Cyan", "#00BCD4");
-        yield return ("Yellow", "#FFC107");
-        yield return ("Black", "#212121");
+        foreach (AnnotationColorChoice choice in AnnotationColorPalette.Presets)
+            yield return (choice.Label, choice.Hex);
     }
 
     private static FrameworkElement CreateAnnotationColorHeader(string label, string hex)

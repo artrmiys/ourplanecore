@@ -132,8 +132,19 @@ public static partial class JoistTakeoffCalculator
 
         var segments = new List<JoistSegment>();
         string normalizedRounding = NormalizeLengthRounding(lengthRounding);
-        var offsets = JoistOffsets(min, max, spacingPt, startEdgeEnabled, endEdgeEnabled);
         var contours = AreaContours(polygon, holes);
+        var offsets = JoistOffsets(
+            polygon,
+            contours,
+            min,
+            max,
+            spacingPt,
+            dirX,
+            dirY,
+            normalX,
+            normalY,
+            startEdgeEnabled,
+            endEdgeEnabled);
         foreach (double offset in offsets)
         {
             var intersections = LineAreaIntersections(contours, offset, dirX, dirY, normalX, normalY);
@@ -185,30 +196,6 @@ public static partial class JoistTakeoffCalculator
         measurement.JoistEdgeOverridesSet
             ? (measurement.JoistStartEdgeEnabled, measurement.JoistEndEdgeEnabled)
             : (true, measurement.JoistAddEndJoist);
-
-    private static IReadOnlyList<double> JoistOffsets(
-        double min,
-        double max,
-        double spacingPt,
-        bool startEdgeEnabled,
-        bool endEdgeEnabled)
-    {
-        var offsets = new List<double>();
-        int maxLines = Math.Min(8000, (int)Math.Ceiling((max - min) / spacingPt) + 2);
-        for (int lineIndex = 0; lineIndex < maxLines; lineIndex++)
-        {
-            double offset = min + lineIndex * spacingPt;
-            if (offset >= max - ProjectionEpsilon)
-                break;
-            if (lineIndex == 0 && !startEdgeEnabled)
-                continue;
-            offsets.Add(offset);
-        }
-
-        if (endEdgeEnabled && (offsets.Count == 0 || Math.Abs(offsets[^1] - max) > ProjectionEpsilon))
-            offsets.Add(max);
-        return offsets;
-    }
 
     public static JoistLayoutSummary Summarize(
         IEnumerable<Measurement> measurements,

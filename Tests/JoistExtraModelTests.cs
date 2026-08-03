@@ -221,6 +221,33 @@ internal static class JoistExtraModelTests
         AssertEqual(0, JoistTakeoffCalculator.Calculate(area, 0).Count, "both unchecked boundaries remove both edge joists");
     }
 
+    public static void SlightlySkewedAreaEdgesStillProduceBoundaryJoists()
+    {
+        Measurement area = Area(directionDegrees: 0);
+        area.Points =
+        [
+            new SKPoint(0, 0),
+            new SKPoint(20, 0),
+            new SKPoint(20, 10.2f),
+            new SKPoint(0, 10),
+        ];
+        area.JoistEdgeOverridesSet = true;
+
+        area.JoistStartEdgeEnabled = false;
+        area.JoistEndEdgeEnabled = false;
+        int regularCount = JoistTakeoffCalculator.Calculate(area, 0).Count;
+
+        area.JoistStartEdgeEnabled = true;
+        AssertEqual(regularCount + 1, JoistTakeoffCalculator.Calculate(area, 0).Count, "flat start boundary remains usable");
+
+        area.JoistStartEdgeEnabled = false;
+        area.JoistEndEdgeEnabled = true;
+        AssertEqual(regularCount + 1, JoistTakeoffCalculator.Calculate(area, 0).Count, "slightly skewed far boundary anchors a full joist");
+
+        area.JoistStartEdgeEnabled = true;
+        AssertEqual(regularCount + 2, JoistTakeoffCalculator.Calculate(area, 0).Count, "both skewed Area edge options remain independent");
+    }
+
     public static void MeasurementsAndLegacyProjectFileRoundTripExtras()
     {
         WithTempFolder(root =>
@@ -351,6 +378,7 @@ internal static class JoistExtraModelTests
     {
         string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
         string rendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Rendering.cs"));
+        string joistRendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.JoistRendering.cs"));
         string extra = ReadRepoFile(Path.Combine("Controls", "PdfViewport.ExtraJoists.cs"));
         string edges = ReadRepoFile(Path.Combine("Controls", "PdfViewport.JoistEdgeControls.cs"));
         string selection = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SelectionState.cs"));
@@ -371,8 +399,14 @@ internal static class JoistExtraModelTests
         AssertTrue(
             input.Contains("TryToggleJoistEdgeControl(pdf)", StringComparison.Ordinal) &&
             rendering.Contains("DrawJoistEdgeControls(canvas)", StringComparison.Ordinal) &&
-            edges.Contains("area.JoistEdgeOverridesSet = true", StringComparison.Ordinal),
+            edges.Contains("area.JoistEdgeOverridesSet = true", StringComparison.Ordinal) &&
+            edges.Contains("RawMeasurementBounds(area)", StringComparison.Ordinal) &&
+            edges.Contains("JoistEdgeControlFitsArea", StringComparison.Ordinal),
             "selected Joist Areas must expose persistent start/end viewport checkboxes");
+        AssertTrue(
+            joistRendering.Contains("segment.IsExtra && !selectedExtra", StringComparison.Ordinal) &&
+            joistRendering.Contains("extraGlow", StringComparison.Ordinal),
+            "unselected Extra Joists must retain a subtle distinguishing glow");
     }
 
     private static TakeoffItem JoistItem(string name = "Joists") =>

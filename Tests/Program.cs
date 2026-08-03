@@ -561,6 +561,7 @@ var tests = new List<(string Name, Action Run)>
     ("joist export places one extra block after regular blocks", JoistExtraModelTests.PlanSwiftExportPlacesAllRegularBlocksBeforeOneExtraBlock),
     ("end joist applies per area without overwriting directions", JoistExtraModelTests.AddEndJoistAppliesPerAreaWithoutOverwritingDirections),
     ("per-area joist edge overrides survive refresh", JoistExtraModelTests.PerAreaEdgeOverridesSurviveRefreshAndControlBothBoundaries),
+    ("skewed area edges still produce boundary joists", JoistExtraModelTests.SlightlySkewedAreaEdgesStillProduceBoundaryJoists),
     ("extra joists persist through current and legacy storage", JoistExtraModelTests.MeasurementsAndLegacyProjectFileRoundTripExtras),
     ("area coalesce preserves and deduplicates extra joists", JoistExtraModelTests.AreaCoalescePreservesAndDeduplicatesExtras),
     ("Extra Joists mode stays active until D or Esc", JoistExtraModelTests.ExtraJoistModeContinuesUntilDOrEscapeAndRegularJoistsStayDistinct),

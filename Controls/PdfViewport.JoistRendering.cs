@@ -40,14 +40,42 @@ public sealed partial class PdfViewport
             Style = SKPaintStyle.Stroke,
             StrokeCap = SKStrokeCap.Round,
         };
-        foreach (JoistSegment segment in layout.Segments)
+        SKPaint? extraGlow = null;
+        try
         {
-            canvas.DrawLine(segment.Start, segment.End, joistStroke);
+            foreach (JoistSegment segment in layout.Segments)
+            {
+                bool selectedExtra = segment.IsExtra &&
+                                     ReferenceEquals(_selectedExtraJoistOwner, m) &&
+                                     string.Equals(segment.ExtraId, _selectedExtraJoistId, StringComparison.Ordinal);
+                if (segment.IsExtra && !selectedExtra)
+                {
+                    extraGlow ??= CreateExtraJoistGlowPaint();
+                    canvas.DrawLine(segment.Start, segment.End, extraGlow);
+                }
+                canvas.DrawLine(segment.Start, segment.End, joistStroke);
+            }
+        }
+        finally
+        {
+            extraGlow?.Dispose();
         }
 
         if (drawLabels)
             DrawJoistLayoutLabels(canvas, m, layout, GetVisiblePdfRect());
     }
+
+    private SKPaint CreateExtraJoistGlowPaint() => new()
+    {
+        Color = new SKColor(0xF4, 0x9B, 0x24, 115),
+        StrokeWidth = ScreenToPdfDistance(4.2f * MeasurementStrokeScaleFactor()),
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeCap = SKStrokeCap.Round,
+        MaskFilter = SKMaskFilter.CreateBlur(
+            SKBlurStyle.Normal,
+            ScreenToPdfDistance(1.8f)),
+    };
 
     private void DrawJoistLayoutLabels(SKCanvas canvas, Measurement measurement, SKRect visiblePdf)
     {

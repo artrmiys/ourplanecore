@@ -195,7 +195,7 @@ public sealed class NewItemDialog : Window
         panel.Children.Add(colorPanel);
 
         CheckBox? beamAnnotationBox = null;
-        TextBox? beamAnnotationColorBox = null;
+        ColorSwatchPicker? beamAnnotationColorPicker = null;
         if (showBeamAnnotationOption)
         {
             panel.Children.Add(new Separator { Margin = new Thickness(0, 10, 0, 8) });
@@ -215,30 +215,21 @@ public sealed class NewItemDialog : Window
 
             var beamColorRow = new StackPanel
             {
-                Orientation = Orientation.Horizontal,
+                Orientation = Orientation.Vertical,
                 Margin = new Thickness(0, 6, 0, 0),
             };
             beamColorRow.Children.Add(new TextBlock
             {
                 Text = "Line color:",
-                Width = 86,
-                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 2),
             });
-            beamAnnotationColorBox = new TextBox
+            beamAnnotationColorPicker = new ColorSwatchPicker(defaultBeamAnnotationLineColor)
             {
-                Text = BeamAnnotationConfig.NormalizeColor(defaultBeamAnnotationLineColor),
-                Width = 90,
                 IsEnabled = defaultKeepBeamAnnotationLine,
             };
-            beamAnnotationBox.Checked += (_, _) => beamAnnotationColorBox.IsEnabled = true;
-            beamAnnotationBox.Unchecked += (_, _) => beamAnnotationColorBox.IsEnabled = false;
-            beamColorRow.Children.Add(beamAnnotationColorBox);
-            beamColorRow.Children.Add(new TextBlock
-            {
-                Text = "  #RRGGBB",
-                Foreground = Brushes.Gray,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
+            beamAnnotationBox.Checked += (_, _) => beamAnnotationColorPicker.IsEnabled = true;
+            beamAnnotationBox.Unchecked += (_, _) => beamAnnotationColorPicker.IsEnabled = false;
+            beamColorRow.Children.Add(beamAnnotationColorPicker);
             panel.Children.Add(beamColorRow);
         }
 
@@ -374,19 +365,8 @@ public sealed class NewItemDialog : Window
                 similarReviewBox?.IsChecked == true &&
                 string.Equals(ItemType, "point", System.StringComparison.OrdinalIgnoreCase);
             KeepBeamAnnotationLine = showBeamAnnotationOption && beamAnnotationBox?.IsChecked == true;
-            if (showBeamAnnotationOption && beamAnnotationColorBox != null)
-            {
-                if (!BeamAnnotationConfig.TryNormalizeColor(beamAnnotationColorBox.Text, out string beamLineColor))
-                {
-                    MessageBox.Show(
-                        "Beam annotation color must use #RRGGBB, for example #FF0000.",
-                        "New Takeoff Item", MessageBoxButton.OK, MessageBoxImage.Information);
-                    beamAnnotationColorBox.Focus();
-                    beamAnnotationColorBox.SelectAll();
-                    return;
-                }
-                BeamAnnotationLineColor = beamLineColor;
-            }
+            if (showBeamAnnotationOption && beamAnnotationColorPicker != null)
+                BeamAnnotationLineColor = beamAnnotationColorPicker.SelectedColor;
 
             OffsetLines = [];
             if (showOffsetLines && offsetSection.Visibility == Visibility.Visible)

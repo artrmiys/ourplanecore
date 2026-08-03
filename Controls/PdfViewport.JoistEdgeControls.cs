@@ -124,8 +124,9 @@ public sealed partial class PdfViewport
 
     private (SKPoint StartCenter, SKPoint EndCenter) JoistEdgeControlCenters(Measurement area)
     {
-        SKRect bounds = MeasurementBounds(area);
+        SKRect bounds = RawMeasurementBounds(area);
         float inset = ScreenToPdfDistance(JoistEdgeControlInsetPx);
+        float half = ScreenToPdfDistance(JoistEdgeControlSizePx / 2f + 2f);
         float y = bounds.Top + inset;
         float left = bounds.Left + inset;
         float right = bounds.Right - inset;
@@ -135,7 +136,72 @@ public sealed partial class PdfViewport
             left = center - inset;
             right = center + inset;
         }
-        return (new SKPoint(left, y), new SKPoint(right, y));
+
+        SKPoint interior = FindJoistEdgeControlInterior(area, bounds);
+        SKPoint start = MoveJoistEdgeControlInside(area, new SKPoint(left, y), interior, half);
+        SKPoint end = MoveJoistEdgeControlInside(area, new SKPoint(right, y), interior, half);
+        return (start, end);
+    }
+
+    private static SKPoint FindJoistEdgeControlInterior(Measurement area, SKRect bounds)
+    {
+        var boundsCenter = new SKPoint(
+            (bounds.Left + bounds.Right) / 2f,
+            (bounds.Top + bounds.Bottom) / 2f);
+        if (PointInMeasurementFill(area, boundsCenter))
+            return boundsCenter;
+
+        SKPoint centroid = Centroid(area.Points);
+        if (PointInMeasurementFill(area, centroid))
+            return centroid;
+
+        const int samples = 9;
+        for (int row = 1; row < samples; row++)
+        {
+            float y = bounds.Top + bounds.Height * row / samples;
+            for (int column = 1; column < samples; column++)
+            {
+                float x = bounds.Left + bounds.Width * column / samples;
+                var candidate = new SKPoint(x, y);
+                if (PointInMeasurementFill(area, candidate))
+                    return candidate;
+            }
+        }
+
+        return area.Points[0];
+    }
+
+    private static SKPoint MoveJoistEdgeControlInside(
+        Measurement area,
+        SKPoint target,
+        SKPoint interior,
+        float half)
+    {
+        if (JoistEdgeControlFitsArea(area, target, half))
+            return target;
+
+        const int steps = 32;
+        for (int step = 1; step <= steps; step++)
+        {
+            float progress = step / (float)steps;
+            var candidate = new SKPoint(
+                target.X + (interior.X - target.X) * progress,
+                target.Y + (interior.Y - target.Y) * progress);
+            if (JoistEdgeControlFitsArea(area, candidate, half))
+                return candidate;
+        }
+
+        return PointInMeasurementFill(area, interior) ? interior : target;
+    }
+
+    private static bool JoistEdgeControlFitsArea(Measurement area, SKPoint center, float half)
+    {
+        float sample = half * 0.92f;
+        return PointInMeasurementFill(area, center) &&
+               PointInMeasurementFill(area, new SKPoint(center.X - sample, center.Y - sample)) &&
+               PointInMeasurementFill(area, new SKPoint(center.X + sample, center.Y - sample)) &&
+               PointInMeasurementFill(area, new SKPoint(center.X - sample, center.Y + sample)) &&
+               PointInMeasurementFill(area, new SKPoint(center.X + sample, center.Y + sample));
     }
 
     private static bool IsJoistEdgeControlTarget(Measurement measurement) =>

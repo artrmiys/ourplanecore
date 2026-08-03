@@ -32,6 +32,8 @@ internal static class BeamAnnotationConfigTests
         string dialog = ReadRepoFile(Path.Combine("Dialogs", "NewItemDialog.cs"));
         string settings = ReadRepoFile("MainWindow.SettingsManager.BeamAnnotation.cs");
         string manager = ReadRepoFile("MainWindow.SettingsManager.cs");
+        string picker = ReadRepoFile(Path.Combine("Controls", "ColorSwatchPicker.cs"));
+        string toolControls = ReadRepoFile("MainWindow.ToolControls.cs");
 
         AssertContainsAll(
             beam,
@@ -47,13 +49,27 @@ internal static class BeamAnnotationConfigTests
             dialog,
             "KeepBeamAnnotationLine",
             "BeamAnnotationLineColor",
-            "The existing blue dimension stays");
+            "The existing blue dimension stays",
+            "ColorSwatchPicker");
         AssertContainsAll(
             settings,
             "Save global default",
             "Save as this job",
             "Clear job override",
-            "Reset");
+            "Reset",
+            "ColorSwatchPicker");
+        AssertFalse(
+            dialog.Contains("#RRGGBB", StringComparison.Ordinal) ||
+            settings.Contains("Line color (hex)", StringComparison.Ordinal),
+            "Beam color UI must use visual swatches instead of visible hex input");
+        AssertContainsAll(
+            picker,
+            "AnnotationColorPalette.Presets",
+            "Saved color",
+            "SelectedColorChanged");
+        AssertContainsAll(
+            toolControls,
+            "AnnotationColorPalette.Presets");
         AssertContainsAll(
             manager,
             "SettingsPresetStore.InstallBeamAnnotationProvider(_currentJob)",

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using OurPlanCore.Controls;
 
 namespace OurPlanCore;
 
@@ -8,7 +9,7 @@ public partial class MainWindow
 {
     private BeamAnnotationConfig _beamAnnotationConfig = BeamAnnotationConfig.BuildDefault();
     private CheckBox? _beamAnnotationKeepLineBox;
-    private TextBox? _beamAnnotationColorBox;
+    private ColorSwatchPicker? _beamAnnotationColorPicker;
     private TextBlock? _beamAnnotationStatus;
     private bool _beamAnnotationBinding;
 
@@ -30,22 +31,21 @@ public partial class MainWindow
             Margin = new Thickness(0, 0, 0, 6),
             FontSize = 12,
         };
+        _beamAnnotationKeepLineBox.Checked += (_, _) => SetBeamAnnotationColorPickerEnabled(true);
+        _beamAnnotationKeepLineBox.Unchecked += (_, _) => SetBeamAnnotationColorPickerEnabled(false);
         root.Children.Add(_beamAnnotationKeepLineBox);
 
         var colorRow = HBar();
         colorRow.Children.Add(new TextBlock
         {
-            Text = "Line color (hex):",
+            Text = "Line color:",
             Width = 130,
             VerticalAlignment = VerticalAlignment.Center,
             FontSize = 12,
         });
-        _beamAnnotationColorBox = new TextBox
-        {
-            Width = 100,
-            Text = "#FF0000",
-        };
-        colorRow.Children.Add(_beamAnnotationColorBox);
+        _beamAnnotationColorPicker = new ColorSwatchPicker(BeamAnnotationConfig.BuildDefault().LineColor);
+        _beamAnnotationColorPicker.SelectedColorChanged += _ => RefreshBeamAnnotationColorStatus();
+        colorRow.Children.Add(_beamAnnotationColorPicker);
         root.Children.Add(colorRow);
 
         _beamAnnotationStatus = StatusLine();
@@ -56,7 +56,7 @@ public partial class MainWindow
         actions.Children.Add(MgrButton("Reset", (_, _) =>
         {
             SetBeamAnnotationEditor(BeamAnnotationConfig.BuildDefault());
-            SetBeamAnnotationStatus("Built-in default loaded: off, red #FF0000. Click Apply or save it.");
+            SetBeamAnnotationStatus("Built-in default loaded: off, red. Click Apply or save it.");
         }));
         actions.Children.Add(MgrButton("Save global default", (_, _) => SaveGlobalBeamAnnotationDraft()));
         actions.Children.Add(MgrButton("Save as this job", (_, _) => SaveJobBeamAnnotationDraft()));
@@ -68,7 +68,7 @@ public partial class MainWindow
 
     private void BindBeamAnnotationSettings()
     {
-        if (_beamAnnotationKeepLineBox == null || _beamAnnotationColorBox == null)
+        if (_beamAnnotationKeepLineBox == null || _beamAnnotationColorPicker == null)
             return;
 
         SetBeamAnnotationEditor(_beamAnnotationConfig);
@@ -83,14 +83,15 @@ public partial class MainWindow
 
     private void SetBeamAnnotationEditor(BeamAnnotationConfig config)
     {
-        if (_beamAnnotationKeepLineBox == null || _beamAnnotationColorBox == null)
+        if (_beamAnnotationKeepLineBox == null || _beamAnnotationColorPicker == null)
             return;
 
         _beamAnnotationBinding = true;
         try
         {
             _beamAnnotationKeepLineBox.IsChecked = config.KeepLineAnnotation;
-            _beamAnnotationColorBox.Text = BeamAnnotationConfig.NormalizeColor(config.LineColor);
+            _beamAnnotationColorPicker.SetSelectedColor(config.LineColor);
+            _beamAnnotationColorPicker.IsEnabled = config.KeepLineAnnotation;
         }
         finally
         {
@@ -103,23 +104,15 @@ public partial class MainWindow
         config = BeamAnnotationConfig.BuildDefault();
         if (_beamAnnotationBinding ||
             _beamAnnotationKeepLineBox == null ||
-            _beamAnnotationColorBox == null)
+            _beamAnnotationColorPicker == null)
         {
-            return false;
-        }
-
-        if (!BeamAnnotationConfig.TryNormalizeColor(_beamAnnotationColorBox.Text, out string color))
-        {
-            SetBeamAnnotationStatus("Enter a color as #RRGGBB, for example #FF0000.");
-            _beamAnnotationColorBox.Focus();
-            _beamAnnotationColorBox.SelectAll();
             return false;
         }
 
         config = new BeamAnnotationConfig
         {
             KeepLineAnnotation = _beamAnnotationKeepLineBox.IsChecked == true,
-            LineColor = color,
+            LineColor = _beamAnnotationColorPicker.SelectedColor,
         };
         return true;
     }
@@ -132,7 +125,7 @@ public partial class MainWindow
         _beamAnnotationConfig = config.Clone();
         BeamAnnotationConfigProvider.Install(_beamAnnotationConfig);
         SetBeamAnnotationStatus(
-            $"Applied now: line {(_beamAnnotationConfig.KeepLineAnnotation ? "on" : "off")}, {_beamAnnotationConfig.LineColor}.");
+            $"Applied now: line {(_beamAnnotationConfig.KeepLineAnnotation ? "on" : "off")}, {AnnotationColorPalette.DisplayName(_beamAnnotationConfig.LineColor)}.");
         TxtStatus.Text = "Beam annotation default applied for this app session.";
     }
 
@@ -194,5 +187,19 @@ public partial class MainWindow
     {
         if (_beamAnnotationStatus != null)
             _beamAnnotationStatus.Text = text;
+    }
+
+    private void SetBeamAnnotationColorPickerEnabled(bool enabled)
+    {
+        if (!_beamAnnotationBinding && _beamAnnotationColorPicker != null)
+            _beamAnnotationColorPicker.IsEnabled = enabled;
+    }
+
+    private void RefreshBeamAnnotationColorStatus()
+    {
+        if (_beamAnnotationBinding || _beamAnnotationColorPicker == null)
+            return;
+
+        SetBeamAnnotationStatus($"Selected line color: {AnnotationColorPalette.DisplayName(_beamAnnotationColorPicker.SelectedColor)}.");
     }
 }
