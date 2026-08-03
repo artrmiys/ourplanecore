@@ -145,12 +145,15 @@ public static partial class JoistTakeoffCalculator
             normalY,
             startEdgeEnabled,
             endEdgeEnabled);
-        foreach (double offset in offsets)
+        foreach (JoistOffsetPlacement placement in offsets)
         {
-            var intersections = LineAreaIntersections(contours, offset, dirX, dirY, normalX, normalY);
+            double sourceOffset = placement.CopyFromOffset ?? placement.Offset;
+            var intersections = LineAreaIntersections(
+                contours, sourceOffset, dirX, dirY, normalX, normalY);
             if (intersections.Count < 2)
                 continue;
 
+            double shift = placement.Offset - sourceOffset;
             for (int i = 0; i + 1 < intersections.Count; i += 2)
             {
                 LineIntersection a = intersections[i];
@@ -164,8 +167,8 @@ public static partial class JoistTakeoffCalculator
                 double rawFeet = rawMeters / MetersPerFoot;
                 double orderFeet = RoundLengthFeet(rawFeet, normalizedRounding);
                 segments.Add(new JoistSegment(
-                    a.Point,
-                    b.Point,
+                    ShiftJoistPoint(a.Point, shift, normalX, normalY),
+                    ShiftJoistPoint(b.Point, shift, normalX, normalY),
                     flatMeters,
                     rawMeters,
                     orderFeet * MetersPerFoot,

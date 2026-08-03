@@ -235,14 +235,25 @@ internal static class JoistExtraModelTests
 
         area.JoistStartEdgeEnabled = false;
         area.JoistEndEdgeEnabled = false;
-        int regularCount = JoistTakeoffCalculator.Calculate(area, 0).Count;
+        JoistLayoutResult regularLayout = JoistTakeoffCalculator.Calculate(area, 0);
+        int regularCount = regularLayout.Count;
 
         area.JoistStartEdgeEnabled = true;
-        AssertEqual(regularCount + 1, JoistTakeoffCalculator.Calculate(area, 0).Count, "flat start boundary remains usable");
+        JoistLayoutResult startLayout = JoistTakeoffCalculator.Calculate(area, 0);
+        AssertEqual(regularCount + 1, startLayout.Count, "flat start boundary remains usable");
+        AssertClose(
+            regularLayout.Segments[0].FlatLengthMeters,
+            startLayout.Segments[0].FlatLengthMeters,
+            "start boundary copies the nearest regular joist length");
 
         area.JoistStartEdgeEnabled = false;
         area.JoistEndEdgeEnabled = true;
-        AssertEqual(regularCount + 1, JoistTakeoffCalculator.Calculate(area, 0).Count, "slightly skewed far boundary anchors a full joist");
+        JoistLayoutResult endLayout = JoistTakeoffCalculator.Calculate(area, 0);
+        AssertEqual(regularCount + 1, endLayout.Count, "slightly skewed far boundary anchors a full joist");
+        AssertClose(
+            regularLayout.Segments[^1].FlatLengthMeters,
+            endLayout.Segments[^1].FlatLengthMeters,
+            "far boundary copies the nearest regular joist length");
 
         area.JoistStartEdgeEnabled = true;
         AssertEqual(regularCount + 2, JoistTakeoffCalculator.Calculate(area, 0).Count, "both skewed Area edge options remain independent");

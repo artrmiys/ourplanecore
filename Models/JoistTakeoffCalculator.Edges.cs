@@ -9,7 +9,7 @@ public static partial class JoistTakeoffCalculator
 {
     private const double EdgeParallelToleranceDegrees = 2.0;
 
-    private static IReadOnlyList<double> JoistOffsets(
+    private static IReadOnlyList<JoistOffsetPlacement> JoistOffsets(
         IReadOnlyList<SKPoint> polygon,
         IReadOnlyList<IReadOnlyList<SKPoint>> contours,
         double min,
@@ -22,21 +22,27 @@ public static partial class JoistTakeoffCalculator
         bool startEdgeEnabled,
         bool endEdgeEnabled)
     {
-        var offsets = new List<double>();
-        double startOffset = startEdgeEnabled
-            ? ResolveBoundaryJoistOffset(
-                polygon, contours, min, max, spacingPt,
-                dirX, dirY, normalX, normalY, startBoundary: true)
-            : min;
+        var regularOffsets = new List<double>();
         int maxLines = Math.Min(8000, (int)Math.Ceiling((max - min) / spacingPt) + 2);
-        for (int lineIndex = 0; lineIndex < maxLines; lineIndex++)
+        for (int lineIndex = 1; lineIndex < maxLines; lineIndex++)
         {
             double offset = min + lineIndex * spacingPt;
             if (offset >= max - ProjectionEpsilon)
                 break;
-            if (lineIndex == 0 && !startEdgeEnabled)
-                continue;
-            AddUniqueOffset(offsets, lineIndex == 0 ? startOffset : offset);
+            regularOffsets.Add(offset);
+        }
+
+        var offsets = regularOffsets
+            .Select(offset => new JoistOffsetPlacement(offset, null))
+            .ToList();
+        if (startEdgeEnabled)
+        {
+            double startOffset = ResolveBoundaryJoistOffset(
+                polygon, contours, min, max, spacingPt,
+                dirX, dirY, normalX, normalY, startBoundary: true);
+            double? copyFrom = FindNearestUsableRegularOffset(
+                regularOffsets, contours, dirX, dirY, normalX, normalY, fromStart: true);
+            AddUniqueOffset(offsets, new JoistOffsetPlacement(startOffset, copyFrom));
         }
 
         if (endEdgeEnabled)
@@ -44,11 +50,39 @@ public static partial class JoistTakeoffCalculator
             double endOffset = ResolveBoundaryJoistOffset(
                 polygon, contours, min, max, spacingPt,
                 dirX, dirY, normalX, normalY, startBoundary: false);
-            AddUniqueOffset(offsets, endOffset);
+            double? copyFrom = FindNearestUsableRegularOffset(
+                regularOffsets, contours, dirX, dirY, normalX, normalY, fromStart: false);
+            AddUniqueOffset(offsets, new JoistOffsetPlacement(endOffset, copyFrom));
         }
 
-        offsets.Sort();
+        offsets.Sort((left, right) => left.Offset.CompareTo(right.Offset));
         return offsets;
+    }
+
+    private static double? FindNearestUsableRegularOffset(
+        IReadOnlyList<double> regularOffsets,
+        IReadOnlyList<IReadOnlyList<SKPoint>> contours,
+        double dirX,
+        double dirY,
+        double normalX,
+        double normalY,
+        bool fromStart)
+    {
+        for (int index = 0; index < regularOffsets.Count; index++)
+        {
+            int candidateIndex = fromStart ? index : regularOffsets.Count - 1 - index;
+            double candidate = regularOffsets[candidateIndex];
+            List<LineIntersection> intersections = LineAreaIntersections(
+                contours, candidate, dirX, dirY, normalX, normalY);
+            if (intersections.Count < 2)
+                continue;
+
+            bool isSingleJoist = intersections.Count == 2 &&
+                                 intersections[1].T - intersections[0].T > ProjectionEpsilon;
+            return isSingleJoist ? candidate : null;
+        }
+
+        return null;
     }
 
     private static double ResolveBoundaryJoistOffset(
@@ -169,9 +203,22 @@ public static partial class JoistTakeoffCalculator
         return length;
     }
 
-    private static void AddUniqueOffset(List<double> offsets, double offset)
+    private static SKPoint ShiftJoistPoint(
+        SKPoint point,
+        double shift,
+        double normalX,
+        double normalY) =>
+        new(
+            (float)(point.X + normalX * shift),
+            (float)(point.Y + normalY * shift));
+
+    private static void AddUniqueOffset(
+        List<JoistOffsetPlacement> offsets,
+        JoistOffsetPlacement placement)
     {
-        if (offsets.All(existing => Math.Abs(existing - offset) > ProjectionEpsilon))
-            offsets.Add(offset);
+        if (offsets.All(existing => Math.Abs(existing.Offset - placement.Offset) > ProjectionEpsilon))
+            offsets.Add(placement);
     }
+
+    private readonly record struct JoistOffsetPlacement(double Offset, double? CopyFromOffset);
 }
