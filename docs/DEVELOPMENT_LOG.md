@@ -1,5 +1,57 @@
 ﻿# Development Log
 
+## 2026-08-03 Joist Edges, Extra Joists, Beam Line, and Overlay Point Fit
+
+- Added two persistent edge controls for every selected Joist Area Segment.
+  Both controls stay inside the orange selection frame at the same fixed
+  14-screen-pixel inset from its left edge and are vertically aligned at the
+  upper-left and lower-left corners for every segment.
+- The upper control always changes the visually upper boundary (or left
+  boundary for near-vertical joists); the lower control changes the opposite
+  boundary. The saved `JoistStartEdgeEnabled`, `JoistEndEdgeEnabled`, and
+  `JoistEdgeOverridesSet` values remain independent per Area Segment and are
+  undoable.
+- Boundary joists are placed at the selected Area edge but copy the flat
+  length of the nearest usable regular joist on that side. Slightly skewed
+  boundaries therefore keep the same full shape/length instead of producing a
+  short diagonal edge piece.
+- Existing Extra Joists can be selected directly in the viewport, dragged,
+  deleted with `Delete`, and restored with undo. Dragged extras remain clipped
+  to their owning Area Segment.
+- Extra Joists have an adjustable `Viewport > LINES & AREA > Extra` glow from
+  0 to 100 percent. The setting is persisted, updates main and detached sheets
+  live, defaults to the prior alpha `145/255`, and never changes regular joist
+  rendering.
+- Added `PDF Output > INCLUDE > Extra glow`, on by default. PDF output uses the
+  same shared intensity and applies the halo only to Extra Joist segments.
+- Framing Excel output now emits regular joist groups first and Extra Joists in
+  a separate block closed by `Extra <joist name> <spacing>`, instead of merging
+  their quantities/lengths into the regular block.
+- Beam creation can optionally retain a companion line annotation through the
+  same two measured points. It is off by default, defaults to red, preserves
+  the existing blue Beam dimension, and uses visible annotation-style color
+  swatches rather than a user-facing hex field. The default is editable under
+  `8 Settings` with Reset, global default, per-job override, and clear-override
+  actions; each Beam dialog can override it for that Beam.
+- Overlay `Fit by two points` now enters through the asynchronous ready path
+  and waits for the exact target/overlay/active-overlay binding before starting
+  point selection, fixing the command that previously appeared not to launch.
+- Implementation commits: `1c08f64`, `32540d8`, `18ee96e`, `56f77cc`,
+  `5ca7f2e`, `b86a374`, and `aa1215e`.
+- Verification: `dotnet build .\ourplancore.sln` completed with 0 warnings and
+  0 errors; the full regression harness completed `667/667` tests.
+- Installed compressed self-contained single-file EXE:
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`, size
+  `174,463,146` bytes, SHA-256
+  `19885FAF05925380ECC9F130FC0EFE9E8912E74A345E0B60D0FF755C2BF3CE70`.
+  The Desktop shortcut targets that package. The fresh runtime segment starting
+  at `2026-08-03T22:10:46-03:00` stayed alive and responsive, loaded takeoffs
+  and the viewport, and contained 0 `ERROR` entries.
+- Rollback:
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe.bak-20260803-2156-pre-aa1215e`.
+- Canonical implementation/operation reference:
+  `docs/30-takeoffs-measurements/JOIST_ADD_AND_EXTRA_JOISTS_HANDOFF_2026_07_22.md`.
+
 ## 2026-07-30 Framing Excel Macro Export
 
 - Extended the right-side Excel workflow with a job-specific `LG` legend
