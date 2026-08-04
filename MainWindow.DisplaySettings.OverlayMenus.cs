@@ -298,6 +298,7 @@ public partial class MainWindow
         _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
         _viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
         _viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
+        _viewport.ExtraJoistGlowIntensity = _settings.ExtraJoistGlowIntensity;
         SyncDisplaySettingsControls();
         RefreshSheetLegend();
         _viewport.InvalidateVisual();

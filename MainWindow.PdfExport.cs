@@ -138,7 +138,9 @@ public partial class MainWindow
             _settings.PdfExportShowJoistLabels,
             _settings.PdfExportAreaEdgeScale,
             _settings.PdfExportAreaFillOpacity,
-            _settings.ViewportRulerStrokeWidth);
+            _settings.ViewportRulerStrokeWidth,
+            _settings.PdfExportShowExtraJoistGlow,
+            _settings.ExtraJoistGlowIntensity);
 
     private async Task ExportPagesToPdfCoreAsync(
         IReadOnlyList<PageInfo> pages,

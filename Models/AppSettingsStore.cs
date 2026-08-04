@@ -56,6 +56,7 @@ public sealed class AppSettings
     public double ViewportZoomWheelFactor { get; set; } = AppSettingsStore.ViewportZoomWheelFactorDefault;
     public double ViewportAreaEdgeScale { get; set; } = 0.25;
     public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
+    public double ExtraJoistGlowIntensity { get; set; } = AppSettingsStore.ExtraJoistGlowIntensityDefault;
     public int SimilarCountSettingsVersion { get; set; }
     public double SimilarCountThreshold { get; set; } = AppSettingsStore.SimilarCountThresholdDefault;
     public bool SimilarCountRotations { get; set; }
@@ -73,6 +74,7 @@ public sealed class AppSettings
     public bool PdfExportShowAreaLabels { get; set; }
     public bool PdfExportShowJoistLabels { get; set; } = true;
     public bool PdfExportShowCountLabels { get; set; }
+    public bool PdfExportShowExtraJoistGlow { get; set; } = true;
     public double PdfExportMeasurementStrokeScale { get; set; } = 3.5;
     public double PdfExportPointSizeScale { get; set; } = 3.5;
     public double PdfExportAreaEdgeScale { get; set; } = 0.25;
@@ -137,6 +139,7 @@ public static class AppSettingsStore
     public const double ViewportZoomWheelFactorDefault = 2.0;
     public const double ViewportZoomWheelFactorMin = 1.05;
     public const double ViewportZoomWheelFactorMax = 2.5;
+    public const double ExtraJoistGlowIntensityDefault = 145.0 / 255.0;
     public const int StaticPageRenderDpiDefault = 150;
     public const int StaticPageRenderDpiMin = 72;
     public const int StaticPageRenderDpiMax = 300;
@@ -479,6 +482,8 @@ public static class AppSettingsStore
             double.IsNaN(settings.ViewportAreaFillOpacity) || double.IsInfinity(settings.ViewportAreaFillOpacity)
                 ? 0.2826086956521738
                 : Math.Clamp(settings.ViewportAreaFillOpacity, 0.0, 1.0);
+        settings.ExtraJoistGlowIntensity = NormalizeExtraJoistGlowIntensity(
+            settings.ExtraJoistGlowIntensity);
         settings.PdfExportMeasurementStrokeScale = NormalizeScale(
             settings.PdfExportMeasurementStrokeScale,
             fallback: 3.5,
@@ -513,6 +518,14 @@ public static class AppSettingsStore
             fallback: 1.2,
             min: 0.25,
             max: PdfExportScaleMax);
+    }
+
+    public static double NormalizeExtraJoistGlowIntensity(double intensity)
+    {
+        if (double.IsNaN(intensity) || double.IsInfinity(intensity))
+            return ExtraJoistGlowIntensityDefault;
+
+        return Math.Clamp(intensity, 0.0, 1.0);
     }
 
     public static void NormalizeTakeoffDefaults(AppSettings settings)

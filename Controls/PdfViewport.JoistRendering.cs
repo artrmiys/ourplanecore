@@ -48,7 +48,9 @@ public sealed partial class PdfViewport
                 bool selectedExtra = segment.IsExtra &&
                                      ReferenceEquals(_selectedExtraJoistOwner, m) &&
                                      string.Equals(segment.ExtraId, _selectedExtraJoistId, StringComparison.Ordinal);
-                if (segment.IsExtra && !selectedExtra)
+                if (segment.IsExtra &&
+                    !selectedExtra &&
+                    AppSettingsStore.NormalizeExtraJoistGlowIntensity(ExtraJoistGlowIntensity) > 0)
                 {
                     extraGlow ??= CreateExtraJoistGlowPaint();
                     canvas.DrawLine(segment.Start, segment.End, extraGlow);
@@ -67,7 +69,12 @@ public sealed partial class PdfViewport
 
     private SKPaint CreateExtraJoistGlowPaint() => new()
     {
-        Color = new SKColor(0xF4, 0x9B, 0x24, 145),
+        Color = new SKColor(
+            0xF4,
+            0x9B,
+            0x24,
+            (byte)Math.Round(
+                AppSettingsStore.NormalizeExtraJoistGlowIntensity(ExtraJoistGlowIntensity) * 255.0)),
         StrokeWidth = ScreenToPdfDistance(4.6f * MeasurementStrokeScaleFactor()),
         IsAntialias = true,
         Style = SKPaintStyle.Stroke,

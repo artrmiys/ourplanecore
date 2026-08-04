@@ -376,6 +376,7 @@ public partial class MainWindow : Window
         BtnAreaCut.ToolTip = $"Area cut ({KeyboardShortcutKeys.EnglishLayoutDisplay("x")})";
         SetupRecordButton();
         SetupEstimateTable();
+        InstallExtraJoistGlowSettings();
         InstallOutputSettingsTab();
         InitializeBookmarksTab();
         InitializeTemplatesTab();

@@ -341,8 +341,13 @@ public static partial class PdfExporter
                 StrokeWidth = 0.85f * ExportStrokeScale(options),
                 StrokeCap = SKStrokeCap.Round,
             };
+            using SKPaint? extraJoistGlow = CreateExportExtraJoistGlowPaint(options);
             foreach (JoistSegment segment in layout.Segments)
+            {
+                if (segment.IsExtra && extraJoistGlow != null)
+                    canvas.DrawLine(segment.Start, segment.End, extraJoistGlow);
                 canvas.DrawLine(segment.Start, segment.End, joistStroke);
+            }
         }
 
         if (!drawLabels || !ShouldExportJoistLabels(options) || !measurement.JoistShowLabels || layout.Count > 180)
@@ -380,6 +385,32 @@ public static partial class PdfExporter
             canvas.DrawText(label, bg.Left + joistPad, bg.Bottom - joistPad, labelPaint);
             occupiedBoxes.Add(ExpandRect(bg, collisionPad));
         }
+    }
+
+    private static SKPaint? CreateExportExtraJoistGlowPaint(PdfExportOptions options)
+    {
+        byte alpha = ExportExtraJoistGlowAlpha(options);
+        if (alpha == 0)
+            return null;
+
+        return new SKPaint
+        {
+            IsAntialias = true,
+            Color = new SKColor(0xF4, 0x9B, 0x24, alpha),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 3.4f * ExportStrokeScale(options),
+            StrokeCap = SKStrokeCap.Round,
+        };
+    }
+
+    private static byte ExportExtraJoistGlowAlpha(PdfExportOptions options)
+    {
+        if (!options.ShowExtraJoistGlow)
+            return 0;
+
+        double intensity = AppSettingsStore.NormalizeExtraJoistGlowIntensity(
+            options.ExtraJoistGlowIntensity);
+        return (byte)Math.Round(intensity * 255.0);
     }
 
     private static SKColor ParseSkColor(string value, SKColor fallback)

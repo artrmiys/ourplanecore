@@ -18,6 +18,7 @@ public partial class MainWindow
     private CheckBox? _chkOutputPdfAreaLabels;
     private CheckBox? _chkOutputPdfJoistLabels;
     private CheckBox? _chkOutputPdfCountLabels;
+    private CheckBox? _chkOutputPdfExtraJoistGlow;
     private TextBox? _txtOutputPdfStroke;
     private TextBox? _txtOutputPdfPoint;
     private TextBox? _txtOutputPdfLabel;
@@ -85,6 +86,9 @@ public partial class MainWindow
         _chkOutputPdfAreaLabels = OutputCheckBox("Area", "Show exported area labels.");
         _chkOutputPdfJoistLabels = OutputCheckBox("Joist", "Show exported joist segment labels (separate from the Area label).");
         _chkOutputPdfCountLabels = OutputCheckBox("Count", "Show exported count labels.");
+        _chkOutputPdfExtraJoistGlow = OutputCheckBox(
+            "Extra glow",
+            "Show the Extra Joist glow in exported PDFs using the Viewport intensity.");
 
         _txtOutputPdfStroke = OutputScaleBox("pdfStroke", "PDF export line thickness multiplier.");
         _txtOutputPdfPoint = OutputScaleBox("pdfPoint", "PDF export point marker size multiplier.");
@@ -143,6 +147,7 @@ public partial class MainWindow
         incRow1.Children.Add(_chkOutputPdfMarkups);
         var incRow2 = OutputHRow();
         incRow2.Children.Add(_chkOutputPdfLegend);
+        incRow2.Children.Add(_chkOutputPdfExtraJoistGlow);
         var include = new StackPanel { Orientation = Orientation.Vertical };
         include.Children.Add(incRow1);
         include.Children.Add(incRow2);
@@ -327,6 +332,7 @@ public partial class MainWindow
         _settings.PdfExportShowAreaLabels = _chkOutputPdfAreaLabels?.IsChecked == true;
         _settings.PdfExportShowJoistLabels = _chkOutputPdfJoistLabels?.IsChecked == true;
         _settings.PdfExportShowCountLabels = _chkOutputPdfCountLabels?.IsChecked == true;
+        _settings.PdfExportShowExtraJoistGlow = _chkOutputPdfExtraJoistGlow?.IsChecked == true;
         NormalizeOutputLabelGroupSettings();
 
         ApplyOutputSettings();
@@ -499,6 +505,7 @@ public partial class MainWindow
             _chkOutputPdfAreaLabels!.IsChecked = _settings.PdfExportShowAreaLabels;
             _chkOutputPdfJoistLabels!.IsChecked = _settings.PdfExportShowJoistLabels;
             _chkOutputPdfCountLabels!.IsChecked = _settings.PdfExportShowCountLabels;
+            _chkOutputPdfExtraJoistGlow!.IsChecked = _settings.PdfExportShowExtraJoistGlow;
             SetScaleText(_txtOutputPdfStroke, _settings.PdfExportMeasurementStrokeScale);
             SetScaleText(_txtOutputPdfPoint, _settings.PdfExportPointSizeScale);
             SetScaleText(_txtOutputPdfAreaEdge, _settings.PdfExportAreaEdgeScale);

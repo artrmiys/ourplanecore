@@ -180,6 +180,7 @@ public partial class MainWindow
             viewport.RulerStrokeWidth = _settings.ViewportRulerStrokeWidth;
             viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
             viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
+            viewport.ExtraJoistGlowIntensity = _settings.ExtraJoistGlowIntensity;
             viewport.PdfSnapBridgeToleranceScreenPx = _settings.ViewportPdfSnapBridgeTolerancePx;
             viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
             viewport.InvalidateVisual();

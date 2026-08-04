@@ -393,6 +393,10 @@ internal static class JoistExtraModelTests
         string extra = ReadRepoFile(Path.Combine("Controls", "PdfViewport.ExtraJoists.cs"));
         string edges = ReadRepoFile(Path.Combine("Controls", "PdfViewport.JoistEdgeControls.cs"));
         string selection = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SelectionState.cs"));
+        string glowSettings = ReadRepoFile("MainWindow.DisplaySettings.ExtraJoistGlow.cs");
+        string outputSettings = ReadRepoFile("MainWindow.OutputSettings.cs");
+        string pdfExport = ReadRepoFile("MainWindow.PdfExport.cs");
+        string pdfRendering = ReadRepoFile(Path.Combine("Models", "PdfExporter.Measurements.cs"));
 
         AssertTrue(
             input.Contains("TryBeginExtraJoistEdit(pdf)", StringComparison.Ordinal) &&
@@ -419,9 +423,26 @@ internal static class JoistExtraModelTests
             edges.Contains("OppositeEdgeControlSide(topSide)", StringComparison.Ordinal),
             "every selected Joist Area must use fixed left checkboxes mapped to the visual top/left and bottom/right edges");
         AssertTrue(
-            joistRendering.Contains("segment.IsExtra && !selectedExtra", StringComparison.Ordinal) &&
-            joistRendering.Contains("extraGlow", StringComparison.Ordinal),
-            "unselected Extra Joists must retain a subtle distinguishing glow");
+            joistRendering.Contains("if (segment.IsExtra &&", StringComparison.Ordinal) &&
+            joistRendering.Contains("!selectedExtra &&", StringComparison.Ordinal) &&
+            joistRendering.Contains("ExtraJoistGlowIntensity", StringComparison.Ordinal) &&
+            joistRendering.Contains("NormalizeExtraJoistGlowIntensity", StringComparison.Ordinal),
+            "unselected Extra Joists must use the shared adjustable distinguishing glow");
+        AssertTrue(
+            glowSettings.Contains("Minimum = 0", StringComparison.Ordinal) &&
+            glowSettings.Contains("Maximum = 100", StringComparison.Ordinal) &&
+            glowSettings.Contains("ApplyLiveDisplayScalesToDetachedSheets()", StringComparison.Ordinal),
+            "Viewport settings must expose a live 0-100 Extra Joist glow intensity for main and detached sheets");
+        AssertTrue(
+            outputSettings.Contains("PdfExportShowExtraJoistGlow", StringComparison.Ordinal) &&
+            outputSettings.Contains("Extra glow", StringComparison.Ordinal) &&
+            pdfExport.Contains("_settings.PdfExportShowExtraJoistGlow", StringComparison.Ordinal) &&
+            pdfExport.Contains("_settings.ExtraJoistGlowIntensity", StringComparison.Ordinal),
+            "PDF Output INCLUDE must save Extra glow visibility and pass the shared intensity to export");
+        AssertTrue(
+            pdfRendering.Contains("segment.IsExtra && extraJoistGlow != null", StringComparison.Ordinal) &&
+            pdfRendering.Contains("CreateExportExtraJoistGlowPaint(options)", StringComparison.Ordinal),
+            "PDF export must apply the halo only to Extra Joist segments");
     }
 
     private static TakeoffItem JoistItem(string name = "Joists") =>

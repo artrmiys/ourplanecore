@@ -337,7 +337,7 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                             <StackPanel Orientation="Horizontal">
-                                <StackPanel Orientation="Vertical" Margin="0,0,10,0">
+                                <StackPanel x:Name="ViewportLinesAreaColumnA" Orientation="Vertical" Margin="0,0,10,0">
                                     <Grid Margin="0,1">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="Line" Style="{StaticResource RibbonRowLabel}"/>

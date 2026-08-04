@@ -118,6 +118,7 @@ public sealed class DetachedSheetWindow : Window
         _viewport.PointSizeScale = ClampScale(settings.ViewportPointSizeScale);
         _viewport.AreaEdgeScale = settings.ViewportAreaEdgeScale;
         _viewport.AreaFillOpacity = settings.ViewportAreaFillOpacity;
+        _viewport.ExtraJoistGlowIntensity = settings.ExtraJoistGlowIntensity;
         _viewport.ZoomWheelFactor = settings.ViewportZoomWheelFactor;
         _viewport.SheetLegendAnchor = settings.SheetLegendAnchor;
         _viewport.SheetLegendScale = ClampScale(settings.SheetLegendScale);

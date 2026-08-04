@@ -231,6 +231,7 @@ public sealed partial class PdfViewport : SKElement
     public  double   MeasurementStrokeScale { get; set; } = 1.0;
     public  double   AreaEdgeScale { get; set; } = 1.0;
     public  double   AreaFillOpacity { get; set; } = 0.24;
+    public  double   ExtraJoistGlowIntensity { get; set; } = AppSettingsStore.ExtraJoistGlowIntensityDefault;
     public  double   PointSizeScale { get; set; } = 1.0;
     // Mouse-wheel zoom step (multiplier per notch). Set from settings.
     public  double   ZoomWheelFactor { get; set; } = 2.0;

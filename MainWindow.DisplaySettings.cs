@@ -225,6 +225,7 @@ public partial class MainWindow
         _viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
         _viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
         _viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
+        _viewport.ExtraJoistGlowIntensity = _settings.ExtraJoistGlowIntensity;
         _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
         _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
         _viewport.SimplifyNavigationRendering = _settings.SimplifyViewportNavigation;
@@ -269,6 +270,7 @@ public partial class MainWindow
             TxtZoomWheelFactor.Text = _settings.ViewportZoomWheelFactor.ToString("0.##", CultureInfo.InvariantCulture);
             TxtAreaEdgeScale.Text = _settings.ViewportAreaEdgeScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtAreaFillOpacity.Text = Math.Round(_settings.ViewportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
+            SyncExtraJoistGlowControls();
             SldLabelScale.Value = _settings.MeasurementLabelScale;
             SldLineThickness.Value = _settings.ViewportMeasurementStrokeScale;
             SldRulerThickness.Value = _settings.ViewportRulerStrokeWidth;

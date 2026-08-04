@@ -28,7 +28,9 @@ public sealed record PdfExportOptions(
     bool ShowJoistLabels = true,
     double AreaEdgeScale = 1.0,
     double AreaFillOpacity = 0.15,
-    double RulerStrokeWidth = 1.0);
+    double RulerStrokeWidth = 1.0,
+    bool ShowExtraJoistGlow = true,
+    double ExtraJoistGlowIntensity = AppSettingsStore.ExtraJoistGlowIntensityDefault);
 
 public sealed record PdfExportPageInput(
     PageInfo Page,

@@ -67,6 +67,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
     ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
     ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
+    ("pdf export Extra Joist glow honors visibility and intensity", PdfExportExtraJoistGlowHonorsVisibilityAndIntensity),
     ("pdf export label categories work without all", PdfExportLabelCategoriesWorkWithoutAll),
     ("pdf export joist summary ignores area label toggle", PdfExportJoistSummaryIgnoresAreaLabelToggle),
     ("pdf export writes selected sheets", PdfExportWritesSelectedSheets),
@@ -1334,10 +1335,12 @@ static void OutputSettingsDefaultExportAppearance()
     AssertClose(2.0, settings.ViewportPointSizeScale, "viewport point size should default to the current size");
     AssertClose(0.25, settings.ViewportAreaEdgeScale, "viewport area edge should default to the current size");
     AssertClose(0.2826086956521738, settings.ViewportAreaFillOpacity, "viewport area fill should default to the current opacity");
+    AssertClose(AppSettingsStore.ExtraJoistGlowIntensityDefault, settings.ExtraJoistGlowIntensity, "Extra Joist glow should default to the current viewport intensity");
     AssertClose(2.0, settings.ViewportZoomWheelFactor, "mouse-wheel zoom step should default to 2x per notch");
     AssertFalse(settings.PdfExportIncludeAnnotations, "PDF annotations should default to the current export profile");
     AssertFalse(settings.PdfExportShowLineLabels, "PDF line labels should default to the current export profile");
     AssertFalse(settings.PdfExportShowAreaLabels, "PDF area labels should default to the current export profile");
+    AssertTrue(settings.PdfExportShowExtraJoistGlow, "PDF Extra Joist glow should default on");
     AssertClose(3.5, settings.PdfExportMeasurementStrokeScale, "PDF stroke should default to the current export profile");
     AssertClose(3.5, settings.PdfExportPointSizeScale, "PDF point size should default to the current export profile");
     AssertClose(0.25, settings.PdfExportAreaEdgeScale, "PDF area edge should default to the current export profile");
@@ -1373,6 +1376,18 @@ static void OutputSettingsDefaultExportAppearance()
     AppSettingsStore.NormalizeOutputSettings(settings);
     AssertClose(2.0, settings.ViewportZoomWheelFactor, "wheel zoom step should recover invalid values to the default");
 
+    settings.ExtraJoistGlowIntensity = -1.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(0.0, settings.ExtraJoistGlowIntensity, "Extra Joist glow should clamp at zero");
+
+    settings.ExtraJoistGlowIntensity = 2.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(1.0, settings.ExtraJoistGlowIntensity, "Extra Joist glow should clamp at full intensity");
+
+    settings.ExtraJoistGlowIntensity = double.NaN;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(AppSettingsStore.ExtraJoistGlowIntensityDefault, settings.ExtraJoistGlowIntensity, "invalid Extra Joist glow should recover the current default");
+
     settings.PdfExportMeasurementStrokeScale = 12.0;
     settings.PdfExportPointSizeScale = 12.0;
     settings.PdfExportMeasurementLabelScale = 12.0;
@@ -1384,6 +1399,38 @@ static void OutputSettingsDefaultExportAppearance()
     AssertClose(10.0, settings.PdfExportMeasurementLabelScale, "PDF label should clamp at the export maximum");
     AssertClose(10.0, settings.PdfExportSheetLegendScale, "PDF legend should clamp at the export maximum");
     AssertClose(10.0, settings.PdfExportSheetHeaderScale, "PDF header should clamp at the export maximum");
+}
+
+static void PdfExportExtraJoistGlowHonorsVisibilityAndIntensity()
+{
+    MethodInfo method = typeof(PdfExporter).GetMethod(
+        "ExportExtraJoistGlowAlpha",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException("PdfExporter.ExportExtraJoistGlowAlpha");
+
+    var options = new PdfExportOptions(
+        IncludeMeasurements: true,
+        IncludeAnnotations: false,
+        IncludeLegend: false,
+        UnitMode: UnitMode.Imperial,
+        LegendAnchor: "TopLeft",
+        LegendScale: 1,
+        HeaderScale: 1,
+        ShowMeasurementLabels: false,
+        ShowLineLabels: false,
+        ShowAreaLabels: false,
+        ShowCountLabels: false,
+        MeasurementStrokeScale: 1,
+        PointSizeScale: 1,
+        MeasurementLabelScale: 1);
+
+    AssertEqual("145", Alpha(options).ToString(CultureInfo.InvariantCulture), "PDF Extra Joist glow should keep the previous default intensity");
+    AssertEqual("0", Alpha(options with { ShowExtraJoistGlow = false }).ToString(CultureInfo.InvariantCulture), "PDF Extra Joist glow visibility should disable the halo");
+    AssertEqual("255", Alpha(options with { ExtraJoistGlowIntensity = 1.0 }).ToString(CultureInfo.InvariantCulture), "PDF Extra Joist glow should support full intensity");
+    AssertEqual("0", Alpha(options with { ExtraJoistGlowIntensity = 0.0 }).ToString(CultureInfo.InvariantCulture), "PDF Extra Joist glow should support zero intensity");
+
+    byte Alpha(PdfExportOptions value) =>
+        (byte)(method.Invoke(null, [value]) ?? throw new InvalidOperationException("PDF Extra Joist glow alpha returned null."));
 }
 
 static void PdfExportJoistSummaryIgnoresAreaLabelToggle()
