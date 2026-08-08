@@ -1,5 +1,50 @@
 ﻿# Development Log
 
+## 2026-08-08 Sharp Sheet Open, Pitch, Value Export, and Viewport Layout
+
+- Changed image-backed sheet opening so the viewport applies the full native
+  raster immediately instead of first displaying the lower-resolution
+  overview and replacing it several seconds later. Overview generation and
+  prefetch can still maintain caches, but it cannot replace a full sheet that
+  is already displayed.
+- Added the `Pitch` roof tool beside `Ruler`. Two points create a persistent
+  blue pitch annotation with a `rise:12` label and angle status. It uses the
+  geometry of the drawn line, does not depend on sheet scale, participates in
+  undo/persistence, renders in detached sheets, and exports to PDF.
+- Added `Value` beside the active-Excel button. It uses the same current
+  Takeoffs selection, folder/group expansion, ordering, active workbook, and
+  starting cell as `Excel`, but writes only the item values as one vertical
+  column without names, group headers, units, or formatting rows.
+- Moved live line feedback controls into `Viewport > LIVE LFT / PITCH`.
+  Label size is editable from `8-24 px`; opacity is editable from `15-100%`.
+  Slider and typed input changes persist and update the main and detached
+  viewports.
+- Rebuilt the Viewport ribbon into four compact groups:
+  `LINES & AREA` with exactly two rows, `LIVE LFT / PITCH`, a combined
+  two-row `RULER / EXTRA`, and `PDF SNAP`. `PDF Output` and `Viewport` now use
+  matching margins, group-body height, compact slider width, and shared
+  `54 x 22` numeric fields so the controls remain visible at laptop widths.
+- Corrected the bottom tool/export strip so `Box`, `Value`, and `Excel` do not
+  drift into isolated or offset rows at narrower window sizes.
+- Implementation commits: `a70db69` (`Add sharp sheets pitch and value
+  export`) and `e2a2fc0` (`Align viewport display settings`).
+- Verification: `dotnet build .\ourplancore.sln` completed with 0 warnings and
+  0 errors; the full regression harness completed `670/670` tests. The
+  installed package stayed alive and responsive, loaded 286 takeoff items,
+  logged a full-raster viewport cache hit, and had 0 `ERROR` entries after the
+  final `Application startup.` marker.
+- Installed compressed self-contained single-file EXE:
+  `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`, size
+  `174,469,025` bytes, SHA-256
+  `6C09B0F93963B0CF657C16B6CEB87C8AE8FA197312793F03882CFF2479443575`.
+  The Desktop shortcut targets this EXE and uses the update folder as its
+  working directory.
+- Rollback copies: the existing `ourplancore.exe.bak` was not overwritten;
+  the immediately preceding package is preserved as
+  `ourplancore.exe.pre-viewport-20260808.bak`.
+- Canonical implementation and verification reference:
+  `docs/30-takeoffs-measurements/SHARP_SHEETS_PITCH_VALUE_VIEWPORT_HANDOFF_2026_08_08.md`.
+
 ## 2026-08-03 Joist Edges, Extra Joists, Beam Line, and Overlay Point Fit
 
 - Added two persistent edge controls for every selected Joist Area Segment.
