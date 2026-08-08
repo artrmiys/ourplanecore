@@ -329,23 +329,25 @@
                 </ScrollViewer>
             </TabItem>
             <TabItem Header="Viewport">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Disabled">
-                    <StackPanel Orientation="Horizontal" Margin="6,1">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto"
+                              MaxHeight="176">
+                    <WrapPanel Orientation="Horizontal" Margin="6,1">
 
-                        <!-- GROUP: LINES & AREA  (2 columns x 2 rows) -->
+                        <!-- GROUP: LINES & AREA -->
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                             <StackPanel Orientation="Horizontal">
-                                <StackPanel x:Name="ViewportLinesAreaColumnA" Orientation="Vertical" Margin="0,0,10,0">
+                                <StackPanel Orientation="Vertical" Margin="0,0,10,0">
                                     <Grid Margin="0,1">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="Line" Style="{StaticResource RibbonRowLabel}"/>
                                         <Slider Grid.Column="1" x:Name="SldLineThickness" Minimum="0.25" Maximum="4" SmallChange="0.25" LargeChange="0.5"
+                                                Width="76"
                                                 Style="{StaticResource RibbonSlider}"
                                                 ValueChanged="SldLineThickness_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
                                                 ToolTip="Line measurement thickness 0.25 - 4.0"/>
-                                        <TextBox Grid.Column="2" x:Name="TxtMeasurementStrokeScale" Text="1.0" Style="{StaticResource RibbonValue}"
+                                        <TextBox Grid.Column="2" x:Name="TxtMeasurementStrokeScale" Text="1.0" Style="{StaticResource RibbonNumericValue}"
                                                  KeyDown="TxtMeasurementStrokeScale_KeyDown" LostFocus="TxtMeasurementStrokeScale_LostFocus"
                                                  ToolTip="Type a line thickness 0.25 - 4.0 and press Enter"/>
                                     </Grid>
@@ -353,10 +355,11 @@
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="Point" Style="{StaticResource RibbonRowLabel}"/>
                                         <Slider Grid.Column="1" x:Name="SldPointSize" Minimum="0.25" Maximum="4" SmallChange="0.25" LargeChange="0.5"
+                                                Width="76"
                                                 Style="{StaticResource RibbonSlider}"
                                                 ValueChanged="SldPointSize_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
                                                 ToolTip="Count marker size 0.25 - 4.0"/>
-                                        <TextBox Grid.Column="2" x:Name="TxtMeasurementPointScale" Text="1.0" Style="{StaticResource RibbonValue}"
+                                        <TextBox Grid.Column="2" x:Name="TxtMeasurementPointScale" Text="1.0" Style="{StaticResource RibbonNumericValue}"
                                                  KeyDown="TxtMeasurementPointScale_KeyDown" LostFocus="TxtMeasurementPointScale_LostFocus"
                                                  ToolTip="Type a point size 0.25 - 4.0 and press Enter"/>
                                     </Grid>
@@ -366,10 +369,11 @@
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="Edge" Style="{StaticResource RibbonRowLabel}"/>
                                         <Slider Grid.Column="1" x:Name="SldAreaEdge" Minimum="0.25" Maximum="4" SmallChange="0.25" LargeChange="0.5"
+                                                Width="76"
                                                 Style="{StaticResource RibbonSlider}"
                                                 ValueChanged="SldAreaEdge_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
                                                 ToolTip="Area boundary thickness 0.25 - 4.0"/>
-                                        <TextBox Grid.Column="2" x:Name="TxtAreaEdgeScale" Text="1.0" Style="{StaticResource RibbonValue}"
+                                        <TextBox Grid.Column="2" x:Name="TxtAreaEdgeScale" Text="1.0" Style="{StaticResource RibbonNumericValue}"
                                                  KeyDown="TxtAreaEdgeScale_KeyDown" LostFocus="TxtAreaEdgeScale_LostFocus"
                                                  ToolTip="Type an area edge thickness 0.25 - 4.0 and press Enter"/>
                                     </Grid>
@@ -377,10 +381,11 @@
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="Fill" Style="{StaticResource RibbonRowLabel}"/>
                                         <Slider Grid.Column="1" x:Name="SldAreaFill" Minimum="0" Maximum="100" SmallChange="5" LargeChange="10"
+                                                Width="76"
                                                 Style="{StaticResource RibbonSlider}"
                                                 ValueChanged="SldAreaFill_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
                                                 ToolTip="Area fill opacity 0 - 100 %"/>
-                                        <TextBox Grid.Column="2" x:Name="TxtAreaFillOpacity" Text="24" Style="{StaticResource RibbonValue}"
+                                        <TextBox Grid.Column="2" x:Name="TxtAreaFillOpacity" Text="24" Style="{StaticResource RibbonNumericValue}"
                                                  KeyDown="TxtAreaFillOpacity_KeyDown" LostFocus="TxtAreaFillOpacity_LostFocus"
                                                  ToolTip="Type an area fill opacity 0 - 100 % and press Enter"/>
                                     </Grid>
@@ -394,23 +399,36 @@
 
                         <Border Style="{StaticResource RibbonGroupSep}"/>
 
-                        <!-- GROUP: RULER -->
+                        <controls:LiveInputRibbonSettings x:Name="ViewportLiveInputSettings"
+                                                          SizeValueChanged="SldLiveInputLabelSize_ValueChanged"
+                                                          OpacityValueChanged="SldLiveInputLabelOpacity_ValueChanged"
+                                                          SliderCommit="Slider_CommitSave"
+                                                          SizeTextKeyDown="TxtLiveInputLabelSizeValue_KeyDown"
+                                                          SizeTextLostFocus="TxtLiveInputLabelSizeValue_LostFocus"
+                                                          OpacityTextKeyDown="TxtLiveInputLabelOpacityValue_KeyDown"
+                                                          OpacityTextLostFocus="TxtLiveInputLabelOpacityValue_LostFocus"/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: RULER / EXTRA -->
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <Grid Margin="0,1">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="44"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Ruler" Style="{StaticResource RibbonRowLabel}"/>
                                     <Slider Grid.Column="1" x:Name="SldRulerThickness" Minimum="0.5" Maximum="6" SmallChange="0.25" LargeChange="0.5"
+                                            Width="76"
                                             Style="{StaticResource RibbonSlider}"
                                             ValueChanged="SldRulerThickness_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
                                             ToolTip="Ruler screen thickness 0.5 - 6 px"/>
-                                    <TextBox Grid.Column="2" x:Name="TxtRulerStrokeWidth" Text="1.0" Style="{StaticResource RibbonValue}"
+                                    <TextBox Grid.Column="2" x:Name="TxtRulerStrokeWidth" Text="1.0" Style="{StaticResource RibbonNumericValue}"
                                              KeyDown="TxtRulerStrokeWidth_KeyDown" LostFocus="TxtRulerStrokeWidth_LostFocus"
                                              ToolTip="Type ruler thickness 0.5 - 6 px and press Enter"/>
                                 </Grid>
+                                <StackPanel x:Name="ViewportExtraJoistSettingsHost"/>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
-                                <TextBlock Text="RULER" Style="{StaticResource RibbonGroupLabel}"/>
+                                <TextBlock Text="RULER / EXTRA" Style="{StaticResource RibbonGroupLabel}"/>
                             </Border>
                         </StackPanel>
 
@@ -423,10 +441,11 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="44"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Bridge" Style="{StaticResource RibbonRowLabel}"/>
                                     <Slider Grid.Column="1" x:Name="SldPdfSnapBridgeTolerance" Minimum="4" Maximum="96" SmallChange="2" LargeChange="8"
+                                            Width="76"
                                             Style="{StaticResource RibbonSlider}"
                                             ValueChanged="SldPdfSnapBridgeTolerance_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
                                             ToolTip="PDF Snap Tab continuation radius 4 - 96 screen px"/>
-                                    <TextBox Grid.Column="2" x:Name="TxtPdfSnapBridgeTolerance" Text="36" Style="{StaticResource RibbonValue}"
+                                    <TextBox Grid.Column="2" x:Name="TxtPdfSnapBridgeTolerance" Text="36" Style="{StaticResource RibbonNumericValue}"
                                              KeyDown="TxtPdfSnapBridgeTolerance_KeyDown" LostFocus="TxtPdfSnapBridgeTolerance_LostFocus"
                                              ToolTip="Type PDF Snap continuation radius 4 - 96 screen px and press Enter"/>
                                 </Grid>
@@ -436,7 +455,7 @@
                             </Border>
                         </StackPanel>
 
-                    </StackPanel>
+                    </WrapPanel>
                 </ScrollViewer>
             </TabItem>
             <TabItem Header="Display">
@@ -476,33 +495,6 @@
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
                                 <TextBlock Text="LABELS" Style="{StaticResource RibbonGroupLabel}"/>
-                            </Border>
-                        </StackPanel>
-
-                        <Border Style="{StaticResource RibbonGroupSep}"/>
-
-                        <!-- GROUP: LIVE INPUT -->
-                        <StackPanel Style="{StaticResource RibbonGroup}">
-                            <StackPanel Style="{StaticResource RibbonGroupBody}">
-                                <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <TextBlock Text="Size" Style="{StaticResource RibbonRowLabel}"/>
-                                    <Slider x:Name="SldLiveInputLabelSize" Minimum="8" Maximum="24" SmallChange="1" LargeChange="2"
-                                            Width="112" Style="{StaticResource RibbonSlider}"
-                                            ValueChanged="SldLiveInputLabelSize_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
-                                            ToolTip="Live length and pitch label size in screen pixels"/>
-                                    <TextBlock x:Name="TxtLiveInputLabelSizeValue" Text="12 px" Width="42" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <TextBlock Text="Opacity" Style="{StaticResource RibbonRowLabel}"/>
-                                    <Slider x:Name="SldLiveInputLabelOpacity" Minimum="15" Maximum="100" SmallChange="5" LargeChange="10"
-                                            Width="112" Style="{StaticResource RibbonSlider}"
-                                            ValueChanged="SldLiveInputLabelOpacity_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
-                                            ToolTip="Live length and pitch label opacity"/>
-                                    <TextBlock x:Name="TxtLiveInputLabelOpacityValue" Text="75%" Width="42" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </StackPanel>
-                            <Border Style="{StaticResource RibbonGroupCap}">
-                                <TextBlock Text="LIVE INPUT" Style="{StaticResource RibbonGroupLabel}"/>
                             </Border>
                         </StackPanel>
 

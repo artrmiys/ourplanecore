@@ -1655,6 +1655,63 @@ internal static class TakeoffsTreeRegressionTests
             "Detached sheet display settings must include every label visibility flag");
     }
 
+    public static void ViewportLiveInputSettingsAreVisibleAndEditable()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string handlers = ReadRepoFile("MainWindow.DisplaySettings.LiveInput.cs");
+        string liveInputControl = ReadRepoFile("Controls/LiveInputRibbonSettings.xaml");
+        string extraJoist = ReadRepoFile("MainWindow.DisplaySettings.ExtraJoistGlow.cs");
+        string output = ReadRepoFile("MainWindow.OutputSettings.cs");
+        string numericResources = ReadRepoFile("Resources/RibbonNumericResources.xaml");
+        int viewportStart = xaml.IndexOf("<TabItem Header=\"Viewport\">", StringComparison.Ordinal);
+        int displayStart = xaml.IndexOf("<TabItem Header=\"Display\">", StringComparison.Ordinal);
+        AssertTrue(
+            viewportStart >= 0 && displayStart > viewportStart,
+            "Viewport and Display ribbon tabs must remain in their expected order");
+
+        string viewportTab = xaml[viewportStart..displayStart];
+        string displayTab = xaml[displayStart..];
+        AssertTrue(
+            viewportTab.Contains("<WrapPanel Orientation=\"Horizontal\"", StringComparison.Ordinal) &&
+            viewportTab.Contains("MaxHeight=\"176\"", StringComparison.Ordinal) &&
+            viewportTab.Contains("<controls:LiveInputRibbonSettings x:Name=\"ViewportLiveInputSettings\"", StringComparison.Ordinal) &&
+            viewportTab.Contains("x:Name=\"ViewportExtraJoistSettingsHost\"", StringComparison.Ordinal) &&
+            viewportTab.Contains("Text=\"RULER / EXTRA\"", StringComparison.Ordinal) &&
+            viewportTab.Contains("Style=\"{StaticResource RibbonNumericValue}\"", StringComparison.Ordinal),
+            "Viewport must wrap on narrow screens and expose editable LFT/pitch plus line/area values");
+        AssertFalse(
+            displayTab.Contains("ViewportLiveInputSettings", StringComparison.Ordinal),
+            "Live LFT/pitch controls must not remain hidden in Display");
+        AssertTrue(
+            liveInputControl.Contains("Text=\"LIVE LFT / PITCH\"", StringComparison.Ordinal) &&
+            liveInputControl.Contains("x:Name=\"SizeTextBox\"", StringComparison.Ordinal) &&
+            liveInputControl.Contains("x:Name=\"OpacityTextBox\"", StringComparison.Ordinal) &&
+            liveInputControl.Contains("Width=\"76\" Style=\"{StaticResource RibbonSlider}\"", StringComparison.Ordinal) &&
+            liveInputControl.Contains("Style=\"{StaticResource RibbonNumericValue}\"", StringComparison.Ordinal),
+            "The focused live input control must expose editable size and opacity values");
+        AssertTrue(
+            handlers.Contains("ApplyLiveInputLabelSizeFromText", StringComparison.Ordinal) &&
+            handlers.Contains("ApplyLiveInputLabelOpacityFromText", StringComparison.Ordinal) &&
+            handlers.Contains("SaveAppSettings();", StringComparison.Ordinal),
+            "Editable live LFT/pitch values must validate and persist typed input");
+        AssertTrue(
+            extraJoist.Contains("ViewportExtraJoistSettingsHost.Children.Add(", StringComparison.Ordinal) &&
+            !extraJoist.Contains("RibbonGroupContainer(\"EXTRA JOIST\", row)", StringComparison.Ordinal) &&
+            !extraJoist.Contains("ViewportLinesAreaColumnA", StringComparison.Ordinal) &&
+            extraJoist.Contains("TryFindResource(\"RibbonNumericValue\")", StringComparison.Ordinal),
+            "Extra Joist glow must share the two-row Ruler group instead of a clipped third Lines & Area row");
+        AssertTrue(
+            output.Contains("HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled", StringComparison.Ordinal) &&
+            output.Contains("VerticalScrollBarVisibility = ScrollBarVisibility.Auto", StringComparison.Ordinal) &&
+            output.Contains("MaxHeight = 176", StringComparison.Ordinal) &&
+            output.Contains("var root = new WrapPanel", StringComparison.Ordinal) &&
+            output.Contains("Width = 76", StringComparison.Ordinal) &&
+            output.Contains("TryFindResource(\"RibbonNumericValue\")", StringComparison.Ordinal) &&
+            numericResources.Contains("Width\" Value=\"54\"", StringComparison.Ordinal) &&
+            numericResources.Contains("Height\" Value=\"22\"", StringComparison.Ordinal),
+            "PDF Output and Viewport must share wrapping, group height, padding, and numeric input sizing");
+    }
+
     public static void PageTakeoffSelectionSyncsTakeoffsTree()
     {
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");

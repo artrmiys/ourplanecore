@@ -22,6 +22,7 @@ public partial class MainWindow
             Maximum = 100,
             SmallChange = 5,
             LargeChange = 10,
+            Width = 76,
             Style = TryFindResource("RibbonSlider") as Style,
             ToolTip = "Extra Joist glow intensity 0 - 100 %",
         };
@@ -31,7 +32,7 @@ public partial class MainWindow
 
         _txtExtraJoistGlowIntensity = new TextBox
         {
-            Style = TryFindResource("RibbonValue") as Style,
+            Style = TryFindResource("RibbonNumericValue") as Style,
             ToolTip = "Type Extra Joist glow intensity 0 - 100 % and press Enter",
         };
         _txtExtraJoistGlowIntensity.KeyDown += TxtExtraJoistGlowIntensity_KeyDown;
@@ -52,7 +53,7 @@ public partial class MainWindow
         row.Children.Add(label);
         row.Children.Add(_sldExtraJoistGlow);
         row.Children.Add(_txtExtraJoistGlowIntensity);
-        ViewportLinesAreaColumnA.Children.Add(row);
+        ViewportExtraJoistSettingsHost.Children.Add(row);
 
         SyncExtraJoistGlowControls();
     }

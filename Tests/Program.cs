@@ -411,6 +411,7 @@ var tests = new List<(string Name, Action Run)>
     ("output label toggles support independent categories", TakeoffsTreeRegressionTests.OutputLabelTogglesSupportIndependentCategories),
     ("viewport takeoff properties are type aware", TakeoffsTreeRegressionTests.ViewportTakeoffPropertiesAreTypeAware),
     ("display label toggles refresh detached sheets", TakeoffsTreeRegressionTests.DisplayLabelTogglesRefreshDetachedSheets),
+    ("viewport live input settings are visible and editable", TakeoffsTreeRegressionTests.ViewportLiveInputSettingsAreVisibleAndEditable),
     ("page takeoff selection syncs takeoffs tree", TakeoffsTreeRegressionTests.PageTakeoffSelectionSyncsTakeoffsTree),
     ("takeoff tree section rows default hidden and setting wired", TakeoffsTreeRegressionTests.TakeoffTreeSectionRowsDefaultHiddenAndSettingWired),
     ("page measurement visibility toggle is wired", TakeoffsTreeRegressionTests.PageMeasurementVisibilityToggleIsWired),

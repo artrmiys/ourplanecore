@@ -43,18 +43,12 @@ public partial class MainWindow
         _outputSettingsTab = tab;
         var scroll = new ScrollViewer
         {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        };
-        var panel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(6, 1, 6, 1),
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            MaxHeight = 176,
         };
 
-        panel.Children.Add(BuildPdfOutputGroup());
-
-        scroll.Content = panel;
+        scroll.Content = BuildPdfOutputGroup();
         tab.Content = scroll;
         TopMainTabs.Items.Insert(Math.Min(TopMainTabs.Items.Count, 3), tab);
         SyncOutputSettingsControls();
@@ -76,7 +70,11 @@ public partial class MainWindow
     private FrameworkElement BuildPdfOutputGroup()
     {
         double max = AppSettingsStore.PdfExportScaleMax;
-        var root = new StackPanel { Orientation = Orientation.Horizontal };
+        var root = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(6, 1, 6, 1),
+        };
 
         _chkOutputPdfMeasurements = OutputCheckBox("Meas", "Default: include measurements in PDF export.");
         _chkOutputPdfMarkups = OutputCheckBox("Markups", "Default: include markups in PDF export.");
@@ -167,7 +165,10 @@ public partial class MainWindow
             Margin = new Thickness(0, 0, 4, 0),
             VerticalAlignment = VerticalAlignment.Top,
         };
-        var body = new StackPanel { Style = TryFindResource("RibbonGroupBody") as Style };
+        var body = new StackPanel
+        {
+            Style = TryFindResource("RibbonGroupBody") as Style,
+        };
         body.Children.Add(content);
         sp.Children.Add(body);
         var border = new Border
@@ -212,6 +213,7 @@ public partial class MainWindow
             Maximum = max,
             SmallChange = 0.25,
             LargeChange = 0.5,
+            Width = 76,
             Tag = key,
             ToolTip = tooltip,
             Style = TryFindResource("RibbonSlider") as Style,
@@ -297,7 +299,7 @@ public partial class MainWindow
         {
             Tag = key,
             ToolTip = tooltip,
-            Style = TryFindResource("RibbonValue") as Style,
+            Style = TryFindResource("RibbonNumericValue") as Style,
         };
         box.KeyDown += OutputScaleBox_KeyDown;
         box.LostFocus += OutputScaleBox_LostFocus;

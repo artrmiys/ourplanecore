@@ -267,8 +267,8 @@ public partial class MainWindow
             TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtMeasurementStrokeScale.Text = _settings.ViewportMeasurementStrokeScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtRulerStrokeWidth.Text = _settings.ViewportRulerStrokeWidth.ToString("0.##", CultureInfo.InvariantCulture);
-            TxtLiveInputLabelSizeValue.Text = $"{_settings.ViewportLiveInputLabelSizePx:0.#} px";
-            TxtLiveInputLabelOpacityValue.Text = $"{_settings.ViewportLiveInputLabelOpacity * 100.0:0}%";
+            ViewportLiveInputSettings.SizeText = _settings.ViewportLiveInputLabelSizePx.ToString("0.#", CultureInfo.InvariantCulture);
+            ViewportLiveInputSettings.OpacityText = (_settings.ViewportLiveInputLabelOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
             TxtPdfSnapBridgeTolerance.Text = _settings.ViewportPdfSnapBridgeTolerancePx.ToString("0.#", CultureInfo.InvariantCulture);
             TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtZoomWheelFactor.Text = _settings.ViewportZoomWheelFactor.ToString("0.##", CultureInfo.InvariantCulture);
@@ -278,8 +278,8 @@ public partial class MainWindow
             SldLabelScale.Value = _settings.MeasurementLabelScale;
             SldLineThickness.Value = _settings.ViewportMeasurementStrokeScale;
             SldRulerThickness.Value = _settings.ViewportRulerStrokeWidth;
-            SldLiveInputLabelSize.Value = _settings.ViewportLiveInputLabelSizePx;
-            SldLiveInputLabelOpacity.Value = _settings.ViewportLiveInputLabelOpacity * 100.0;
+            ViewportLiveInputSettings.SizeValue = _settings.ViewportLiveInputLabelSizePx;
+            ViewportLiveInputSettings.OpacityValue = _settings.ViewportLiveInputLabelOpacity * 100.0;
             SldPdfSnapBridgeTolerance.Value = _settings.ViewportPdfSnapBridgeTolerancePx;
             SldPointSize.Value = _settings.ViewportPointSizeScale;
             SldZoomWheelFactor.Value = _settings.ViewportZoomWheelFactor;
