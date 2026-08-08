@@ -170,7 +170,10 @@ public sealed partial class PdfViewport
         bool skipOversizedRasterSheetForOpen =
             responsiveRasterDpiForOpen &&
             ShouldSkipOversizedRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
-        bool preferRasterOverviewForOpen = ShouldUseRasterSheetOverviewForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
+        // Never put the low-resolution source-image overview on screen. A cold
+        // sheet keeps the previous sharp frame until its full bitmap is ready;
+        // nearby sheets are warmed ahead of navigation.
+        const bool preferRasterOverviewForOpen = false;
         if (shouldUseRasterSheetForOpen)
         {
             QueueRasterSheetWorkZoomWarmupForPageOpen(
@@ -265,14 +268,17 @@ public sealed partial class PdfViewport
         }
 
         float previewScale = PageSwitchPreviewRenderScale(restoreView, fitAfter: !restoreView.HasValue);
-        bool previewCacheHit = TryApplyPersistedPreviewRender(
+        bool preserveSharpSourceFrame =
+            shouldUseRasterSheetForOpen &&
+            RasterSheetCacheService.IsSourceImageRaster(rasterSheet);
+        bool previewCacheHit = !preserveSharpSourceFrame && TryApplyPersistedPreviewRender(
             pdfPath,
             pageIndex,
             previewScale,
             restoreView,
             fitAfter: !restoreView.HasValue,
             allowDiskRead: false);
-        if (!previewCacheHit)
+        if (!previewCacheHit && !preserveSharpSourceFrame)
         {
             QueuePersistedPreviewRenderAfterFirstRepaint(
                 pdfPath,

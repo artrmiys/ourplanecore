@@ -587,7 +587,7 @@ public sealed partial class PdfViewport
 
         SKPoint rawPointerPdf = pointerPdf;
         if (_pageBitmap != null &&
-            _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut &&
+            _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.Pitch or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut &&
             !IsMissingScaleForLinearArea())
         {
             pointerPdf = ResolveDigitizerPoint(
@@ -607,7 +607,7 @@ public sealed partial class PdfViewport
         }
 
         // Rubber-band
-        if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.AreaCut)
+        if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Pitch or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.AreaCut)
         {
             _rubberEnd = pointerPdf;
         }

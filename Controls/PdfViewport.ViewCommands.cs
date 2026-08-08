@@ -24,6 +24,7 @@ public sealed partial class PdfViewport
             "select" => ViewerTool.Select,
             "scale" => ViewerTool.Scale,
             "ruler" => ViewerTool.Ruler,
+            "pitch" => ViewerTool.Pitch,
             "beam" => ViewerTool.Beam,
             "openings" => ViewerTool.Openings,
             "drawhighlight" => ViewerTool.DrawHighlight,
@@ -48,7 +49,7 @@ public sealed partial class PdfViewport
 
         CancelExtraJoistPlacement(postStatus: false);
         _tool = requestedTool;
-        if (requestedTool is ViewerTool.Ruler or ViewerTool.DrawHighlight or ViewerTool.DrawLine or
+        if (requestedTool is ViewerTool.Ruler or ViewerTool.Pitch or ViewerTool.DrawHighlight or ViewerTool.DrawLine or
             ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or
             ViewerTool.Note)
         {

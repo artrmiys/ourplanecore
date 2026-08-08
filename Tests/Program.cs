@@ -610,6 +610,8 @@ var tests = new List<(string Name, Action Run)>
     ("pdf import source finder finds nested pdf files", PdfImportSourceFinderFindsNestedPdfFiles),
     ("raster sheet cache builds working image and strict snap manifest", RasterSheetCacheTests.BuildsWorkingImageAndStrictSnapManifest),
     ("active excel export matrix keeps numbers", ActiveExcelExportMatrixKeepsNumbers),
+    ("active excel values export keeps only item values", ActiveExcelValuesExportKeepsOnlyItemValues),
+    ("roof pitch uses rise per twelve without sheet scale", RoofPitchUsesRisePerTwelveWithoutSheetScale),
     ("excel macro defaults match TemplateCom contract", ExcelMacroExportTests.DefaultsMatchTemplateComContract),
     ("excel macro walls build numeric floor groups", ExcelMacroExportTests.WallsBuildNumericFloorGroupsAndImperialValues),
     ("excel macro openings use floors one through five", ExcelMacroExportTests.OpeningsUseConfiguredFloorsOneThroughFive),
@@ -5941,6 +5943,37 @@ static void ViewportPastedBatchUndoRemovesManyMeasurementsInOneCallback()
         AssertEqual(pastedCount.ToString(), batchRemovedCount.ToString(), "batch undo callback count");
         AssertEqual(existingCount.ToString(), LoadedViewportMeasurementCount(viewport).ToString(), "undo should keep pre-existing measurements");
     });
+}
+
+static void ActiveExcelValuesExportKeepsOnlyItemValues()
+{
+    PlanSwiftExportRow[] rows =
+    [
+        new(PlanSwiftExportRowKind.Header, "Framing"),
+        new(PlanSwiftExportRowKind.Item, "First", "12,5", "FT"),
+        new(PlanSwiftExportRowKind.Note, "Do not export"),
+        new(PlanSwiftExportRowKind.Blank, ""),
+        new(PlanSwiftExportRowKind.Item, "Second", "7", "EA"),
+    ];
+
+    object[,] values = ActiveExcelTakeoffExportService.BuildValuesMatrix(rows);
+
+    AssertEqual("2", values.GetLength(0).ToString(), "only item values are exported");
+    AssertEqual("1", values.GetLength(1).ToString(), "values use one Excel column");
+    AssertTrue(values[0, 0] is double first && Math.Abs(first - 12.5) < 0.0001, "first value stays numeric");
+    AssertTrue(values[1, 0] is double second && Math.Abs(second - 7) < 0.0001, "second value stays numeric");
+}
+
+static void RoofPitchUsesRisePerTwelveWithoutSheetScale()
+{
+    AssertTrue(
+        RoofPitchGeometry.TryMeasure(new SKPoint(0, 0), new SKPoint(24, 12), out RoofPitchResult pitch),
+        "pitch line is measurable");
+    AssertEqual("6:12", pitch.Label, "pitch label uses rise per twelve");
+    AssertTrue(Math.Abs(pitch.AngleDegrees - 26.565) < 0.01, "pitch angle is calculated");
+    AssertEqual("0:12", RoofPitchGeometry.Label(new SKPoint(0, 5), new SKPoint(30, 5)), "horizontal pitch");
+    AssertEqual("∞:12", RoofPitchGeometry.Label(new SKPoint(5, 0), new SKPoint(5, 30)), "vertical pitch");
+    AssertEqual("pitch", OurPlanCoreJobStore.NormalizePageAnnotationKind("roofpitch"), "pitch kind persists");
 }
 
 static void ViewportOverlayUndoRestoresTransformInSharedHistory()

@@ -47,13 +47,13 @@ public partial class MainWindow
             "pages.detach" or "pages.tileM2" => ModuleId.DetachedSheets,
             "sheet.overlay" or "sheet.overlayPoints" => ModuleId.SheetOverlay,
             "layers.allOn" or "layers.allOff" or "layers.clearHighlight" => ModuleId.PdfLayers,
-            "tool.ruler" or "tool.highlight" or "tool.drawLine" or "tool.drawBox" or "tool.note" => ModuleId.Annotations,
+            "tool.ruler" or "tool.pitch" or "tool.highlight" or "tool.drawLine" or "tool.drawBox" or "tool.note" => ModuleId.Annotations,
             "tool.similar" or "tool.pointAlongLine" or "tool.joistArea" or "tool.beam" or
                 "tool.openings" or "tool.areaCut" or "edit.mergeMeasurements" or
                 "edit.splitMeasurements" or "edit.combineUnion" or "edit.combineSubtract" or
                 "edit.combineIntersect" or "edit.combineRemoveOverlap" or "edit.combineDivide" => ModuleId.AdvancedTakeoffTools,
             "pages.autoFolders" or "takeoffs.autoTree" or "takeoffs.fromPages" => ModuleId.TakeoffAutomation,
-            "file.exportExcel" or "file.exportCurrentExcel" or
+            "file.exportExcel" or "file.exportCurrentExcel" or "file.exportCurrentExcelValues" or
                 "file.excelMacroSqft" or "file.excelMacroWalls" or
                 "file.excelMacroOpenings" or "file.excelMacroGables" or
                 "file.excelMacroTrussHeel" or "file.excelMacroParapet" or
@@ -71,13 +71,13 @@ public partial class MainWindow
             "view.quickCalc" or "sheet.overlay" or "sheet.overlayPoints" or
             "pages.detach" or "pages.tileM2" or
             "layers.allOn" or "layers.allOff" or "layers.clearHighlight" or
-            "tool.ruler" or "tool.highlight" or "tool.drawLine" or "tool.drawBox" or "tool.note" or
+            "tool.ruler" or "tool.pitch" or "tool.highlight" or "tool.drawLine" or "tool.drawBox" or "tool.note" or
             "tool.similar" or "tool.pointAlongLine" or "tool.joistArea" or "tool.beam" or
             "tool.openings" or "tool.areaCut" or "edit.mergeMeasurements" or
             "edit.splitMeasurements" or "edit.combineUnion" or "edit.combineSubtract" or
             "edit.combineIntersect" or "edit.combineRemoveOverlap" or "edit.combineDivide" or
             "pages.autoFolders" or "takeoffs.autoTree" or "takeoffs.fromPages" or
-            "file.exportExcel" or "file.exportCurrentExcel" or
+            "file.exportExcel" or "file.exportCurrentExcel" or "file.exportCurrentExcelValues" or
             "file.excelMacroSqft" or "file.excelMacroWalls" or
             "file.excelMacroOpenings" or "file.excelMacroGables" or
             "file.excelMacroTrussHeel" or "file.excelMacroParapet" or
@@ -224,6 +224,7 @@ public partial class MainWindow
         SetVisible(BtnOpenAiSettings, aiEnabled);
         SetVisible(BtnTakeoffManagerOpenEstimating, IsModuleEnabled(ModuleId.Estimating));
         SetVisible(BtnExportCurrentExcelCell, IsModuleEnabled(ModuleId.ExcelIntegration));
+        SetVisible(BtnExportCurrentExcelValues, IsModuleEnabled(ModuleId.ExcelIntegration));
         SetVisible(BtnTakeoffManagerExportExcel, IsModuleEnabled(ModuleId.ExcelIntegration));
         SetVisible(BtnTakeoffManagerCurrentExcel, IsModuleEnabled(ModuleId.ExcelIntegration));
         bool excelIntegrationEnabled = IsModuleEnabled(ModuleId.ExcelIntegration);
@@ -276,6 +277,7 @@ public partial class MainWindow
         bool advanced = IsModuleEnabled(ModuleId.AdvancedTakeoffTools);
         _viewport.SetAnnotationsModuleEnabled(annotations);
         SetVisible(BtnRuler, annotations);
+        SetVisible(BtnPitch, annotations);
         SetVisible(_chkOutputPdfMarkups, annotations);
         SetVisible(BtnSimilarCount, advanced);
         SetVisible(BtnPointAlongLine, advanced);
@@ -292,7 +294,7 @@ public partial class MainWindow
 
     private bool IsToolAllowedByModules(string tool)
     {
-        if (tool is "ruler" or "drawhighlight" or "drawline" or "drawarrow" or
+        if (tool is "ruler" or "pitch" or "drawhighlight" or "drawline" or "drawarrow" or
             "drawrect" or "drawcloud" or "drawarea" or "note")
         {
             return IsModuleEnabled(ModuleId.Annotations);

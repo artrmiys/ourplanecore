@@ -32,6 +32,7 @@ public partial class MainWindow
             "select" => "Select",
             "scale" => "Scale",
             "ruler" => "Ruler",
+            "pitch" => "Pitch",
             "drawhighlight" => "Highlighter",
             "drawline" => "Draw Line",
             "drawarrow" => "Arrow",

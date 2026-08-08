@@ -87,7 +87,7 @@ public sealed record OpeningMeasurementRequest(
 
 // в”Ђв”Ђ Tool enum в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-public enum ViewerTool { Pan, Select, Scale, Ruler, Beam, Openings, DrawHighlight, DrawLine, DrawArrow, DrawRect, DrawCloud, DrawArea, Note, Point, Line, Area, AreaCut }
+public enum ViewerTool { Pan, Select, Scale, Ruler, Pitch, Beam, Openings, DrawHighlight, DrawLine, DrawArrow, DrawRect, DrawCloud, DrawArea, Note, Point, Line, Area, AreaCut }
 public enum PdfLayerTraceMode { Full, Edge, Point, AllEdges }
 public enum ViewportOverlayHitKind { None, SheetLegend, SheetHeader }
 
@@ -172,6 +172,8 @@ public sealed partial class PdfViewport : SKElement
     public  string   ActiveAnnotationColor { get; set; } = "#FF4444";
     public  double   ActiveAnnotationStrokeWidth { get; set; } = 5.0;
     public  double   RulerStrokeWidth { get; set; } = 1.0;
+    public  double   LiveInputLabelSizePx { get; set; } = AppSettingsStore.LiveInputLabelSizeDefaultPx;
+    public  double   LiveInputLabelOpacity { get; set; } = AppSettingsStore.LiveInputLabelOpacityDefault;
     private double _pdfSnapBridgeToleranceScreenPx = AppSettingsStore.ViewportPdfSnapBridgeToleranceDefaultPx;
     public double PdfSnapBridgeToleranceScreenPx
     {

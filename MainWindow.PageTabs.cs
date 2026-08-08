@@ -821,6 +821,8 @@ public partial class MainWindow
                 Math.Max(forwardReadableRadius, backwardReadableRadius),
                 ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius));
 
+        QueueImmediateSharpRasterPrefetch(pages, activeIndex, direction);
+
         for (int offset = 1; offset <= maxOffset; offset++)
         {
             if (offset <= forwardPreviewRadius)
@@ -985,6 +987,28 @@ public partial class MainWindow
 
         if (includeRasterSheetRefresh)
             PdfViewport.PrefetchRasterSheetRefresh(page);
+    }
+
+    private static void QueueSharpRasterPrefetchAt(IReadOnlyList<PageInfo> pages, int index)
+    {
+        if (index < 0 || index >= pages.Count)
+            return;
+
+        PdfViewport.PrefetchFullRasterSheetBitmap(pages[index]);
+    }
+
+    private static void QueueImmediateSharpRasterPrefetch(
+        IReadOnlyList<PageInfo> pages,
+        int activeIndex,
+        int direction)
+    {
+        int preferredDirection = direction < 0 ? -1 : 1;
+        if (ViewportRenderPolicy.HasSpareRenderCapacity)
+            QueueSharpRasterPrefetchAt(pages, activeIndex - preferredDirection);
+
+        // Queue the likely next sheet last so it remains the newest bitmap when
+        // a laptop-sized cache cannot retain both neighbours plus the current page.
+        QueueSharpRasterPrefetchAt(pages, activeIndex + preferredDirection);
     }
 
     private static void QueueReadableBasePrefetchAt(IReadOnlyList<PageInfo> pages, int index)

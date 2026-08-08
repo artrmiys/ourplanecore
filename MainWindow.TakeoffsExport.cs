@@ -71,7 +71,18 @@ public partial class MainWindow
 
     private async void BtnExportCurrentExcel_Click(object sender, RoutedEventArgs e)
     {
-        if (!RequireModule(ModuleId.ExcelIntegration, "Export to Current Excel"))
+        await ExportCurrentExcelAsync(valuesOnly: false);
+    }
+
+    private async void BtnExportCurrentExcelValues_Click(object sender, RoutedEventArgs e)
+    {
+        await ExportCurrentExcelAsync(valuesOnly: true);
+    }
+
+    private async Task ExportCurrentExcelAsync(bool valuesOnly)
+    {
+        string operation = valuesOnly ? "Export Values to Current Excel" : "Export to Current Excel";
+        if (!RequireModule(ModuleId.ExcelIntegration, operation))
             return;
 
         if (_currentJob == null)
@@ -88,7 +99,7 @@ public partial class MainWindow
         }
 
         IReadOnlyList<PlanSwiftExportRow> rows;
-        using (ShowBusyOverlay("Preparing active Excel export..."))
+        using (ShowBusyOverlay(valuesOnly ? "Preparing Excel values..." : "Preparing active Excel export..."))
         {
             await WaitForBusyOverlayRenderAsync();
             SaveCurrentPageScale();
@@ -104,12 +115,14 @@ public partial class MainWindow
         using (ShowBusyOverlay("Writing to active Excel..."))
         {
             await WaitForBusyOverlayRenderAsync();
-            result = ActiveExcelTakeoffExportService.ExportRows(rows);
+            result = valuesOnly
+                ? ActiveExcelTakeoffExportService.ExportValues(rows)
+                : ActiveExcelTakeoffExportService.ExportRows(rows);
         }
         TxtStatus.Text = result.Message;
         if (!result.Success)
         {
-            MessageBox.Show(result.Message, "Export to Current Excel", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(result.Message, operation, MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 

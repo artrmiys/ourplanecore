@@ -178,6 +178,8 @@ public partial class MainWindow
             viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
             viewport.PointSizeScale = _settings.ViewportPointSizeScale;
             viewport.RulerStrokeWidth = _settings.ViewportRulerStrokeWidth;
+            viewport.LiveInputLabelSizePx = _settings.ViewportLiveInputLabelSizePx;
+            viewport.LiveInputLabelOpacity = _settings.ViewportLiveInputLabelOpacity;
             viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
             viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
             viewport.ExtraJoistGlowIntensity = _settings.ExtraJoistGlowIntensity;

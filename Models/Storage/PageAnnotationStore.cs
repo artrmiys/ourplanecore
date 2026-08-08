@@ -88,6 +88,7 @@ internal static class PageAnnotationStore
         return clean switch
         {
             "dimension" or "ruler" => "dimension",
+            "pitch" or "slope" or "roofpitch" => "pitch",
             "arrow" => "arrow",
             "rectangle" or "rect" or "box" => "rectangle",
             "cloud" or "calloutcloud" or "callout_cloud" => "cloud",

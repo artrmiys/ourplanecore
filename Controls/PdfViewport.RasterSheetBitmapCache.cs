@@ -209,7 +209,7 @@ public sealed partial class PdfViewport
             return true;
 
         if (RasterSheetCacheService.IsSourceImageRaster(rasterSheet))
-            return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
+            return allowLowZoomFullRaster;
 
         return allowLowZoomFullRaster &&
                RasterSheetCacheService.RenderScaleToDpi(rasterSheet.RenderScale) <=
@@ -239,17 +239,13 @@ public sealed partial class PdfViewport
                 logFailure: false);
         }
 
-        if (!RasterSheetCacheService.IsSourceImageRaster(source) ||
-            !RasterSheetCacheService.HasSourceImageOverview(source))
-        {
-            warmed |= TryWarmRasterSheetBitmapCache(
-                page.FolderPath,
-                page.PdfPath,
-                source,
-                preferOverview: false,
-                action: "warmed",
-                logFailure: true);
-        }
+        warmed |= TryWarmRasterSheetBitmapCache(
+            page.FolderPath,
+            page.PdfPath,
+            source,
+            preferOverview: false,
+            action: "warmed",
+            logFailure: true);
 
         return warmed;
     }

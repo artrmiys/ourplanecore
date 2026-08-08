@@ -1356,6 +1356,7 @@ internal static class TakeoffsTreeRegressionTests
     {
         string xaml = ReadRepoFile("MainWindow.xaml");
         string mainWindow = ReadRepoFile("MainWindow.xaml.cs");
+        string toolButtonSetup = ReadRepoFile("MainWindow.ToolButtonSetup.cs");
         string toolControls = ReadRepoFile("MainWindow.ToolControls.cs");
         string viewCommands = ReadRepoFile("Controls/PdfViewport.ViewCommands.cs");
         string viewport = ReadRepoFile("Controls/PdfViewport.cs");
@@ -1370,7 +1371,8 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("Tag=\"drawhighlight\"", StringComparison.Ordinal),
             "Annotation ribbon tab should expose a visible Highlighter tool");
         AssertTrue(
-            mainWindow.Contains("[\"drawhighlight\"] = BtnHighlight", StringComparison.Ordinal) &&
+            (mainWindow.Contains("[\"drawhighlight\"] = BtnHighlight", StringComparison.Ordinal) ||
+             toolButtonSetup.Contains("[\"drawhighlight\"] = BtnHighlight", StringComparison.Ordinal)) &&
             toolControls.Contains("AddAnnotationToolItem(menu, \"Highlighter\", \"drawhighlight\")", StringComparison.Ordinal),
             "MainWindow should include Highlighter in tool button and annotation menu wiring");
         AssertTrue(
@@ -2214,6 +2216,8 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("ResolveRasterSheetBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
             renderCache.Contains("ResolveViewportRamBudget(256_000_000L, 768_000_000L, 0.012)", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
+            renderCache.Contains("PrefetchFullRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
+            renderCache.Contains("interactivePriority: true", StringComparison.Ordinal) &&
             renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
             renderCache.Contains("if (!RasterSheetCacheService.IsSourceImageRaster(source))", StringComparison.Ordinal) &&
             renderCache.Contains("return RasterSheetCacheService.UseAsPageOpenRaster(source);", StringComparison.Ordinal) &&
@@ -2227,7 +2231,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetBitmapCache.Contains("preparedBitmap.Bitmap.Dispose()", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("ShouldApplyWarmedRasterSheetBitmap", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("if (ShouldUseRasterSheetForCurrentZoom())", StringComparison.Ordinal) &&
-            rasterSheetBitmapCache.Contains("return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("return allowLowZoomFullRaster;", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("return false;", StringComparison.Ordinal) &&
             !rasterSheetBitmapCache.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("RasterSheetBitmapCacheWarmingReason", StringComparison.Ordinal) &&
@@ -2240,7 +2244,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("TryBuildRasterSheetBitmapCacheKey", StringComparison.Ordinal) &&
             layers.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
             layers.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal),
-            "raster sheet opens should apply decoded bitmaps from RAM, warm cold bitmaps off the UI thread, and prefetch nearby readable rasters as ready page bitmaps only when Raster First is enabled");
+            "raster sheet opens should apply decoded bitmaps from RAM, warm cold full-source bitmaps off the UI thread, and prefetch immediate neighbours at interactive priority");
         AssertTrue(
             pageTabs.Contains("viewportPage.OverlayVisible && !string.IsNullOrWhiteSpace(viewportPage.OverlayPageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("bool hasSheetOverlayConfigured = false", StringComparison.Ordinal) &&
@@ -2454,12 +2458,15 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("estimatedPixels <= SourceImageFastOpenMaxPixels", StringComparison.Ordinal) &&
             raster.Contains("NeedsSourceImageOverview", StringComparison.Ordinal) &&
             pageApi.Contains("ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView", StringComparison.Ordinal) &&
+            pageApi.Contains("const bool preferRasterOverviewForOpen = false;", StringComparison.Ordinal) &&
+            pageApi.Contains("bool preserveSharpSourceFrame", StringComparison.Ordinal) &&
+            pageApi.Contains("bool previewCacheHit = !preserveSharpSourceFrame", StringComparison.Ordinal) &&
+            pageApi.Contains("if (!previewCacheHit && !preserveSharpSourceFrame)", StringComparison.Ordinal) &&
             pageApi.Contains("QueueRasterSheetSelfHealIfNeeded(", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen(RasterSheetSource? rasterSheet", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("ShouldUseRasterSheetOverviewForPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("IsLowZoomRasterSheetPageOpen", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("ShouldUseSourceImageRasterForFastOpen(rasterSheet)", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("!RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("if (RasterSheetCacheService.IsSourceImageRaster(rasterSheet))", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("return true;", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldKeepRasterSheetAtLowZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("HasSourceImageOverview(_rasterSheetSource)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("preferOverview: true", StringComparison.Ordinal) &&
@@ -2479,7 +2486,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetViewport.Contains("mode='{(overviewOnly ? \"overview\" : \"full\")}'", StringComparison.Ordinal) &&
             rendering.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource)", StringComparison.Ordinal) &&
             rendering.Contains("!_renderNavigationFastFrame", StringComparison.Ordinal),
-            "image-backed PlanSwift PNG/TIF raster sheets should use full source pixels when they are fast enough, reserve overview rasters for oversized low-zoom opens, background-upgrade old caches, switch to full source pixels on zoom, and get sharper still-frame sampling");
+            "image-backed PlanSwift PNG/TIF sheets should never show a low-resolution overview during page open, should warm and apply the full native source raster, and should retain sharper still-frame sampling");
         AssertTrue(
             rasterSheetReadySourceCache.Contains("RasterSheetReadySourceCache", StringComparison.Ordinal) &&
             rasterSheetReadySourceCache.Contains("RememberReadyRasterSheetSource", StringComparison.Ordinal) &&

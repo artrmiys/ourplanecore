@@ -116,9 +116,10 @@ public sealed partial class PdfViewport
             return;
         }
 
-        if (kind == "dimension" && !_renderNavigationFastFrame)
+        if (kind is "dimension" or "pitch" && !_renderNavigationFastFrame)
         {
-            AnnotationGlyphRenderer.DrawDimensionTicks(canvas, start, end, stroke, ScreenToPdfDistance(6f));
+            if (kind == "dimension")
+                AnnotationGlyphRenderer.DrawDimensionTicks(canvas, start, end, stroke, ScreenToPdfDistance(6f));
             DrawScreenTextBox(
                 canvas,
                 new SKPoint((start.X + end.X) / 2f, (start.Y + end.Y) / 2f),
@@ -134,7 +135,8 @@ public sealed partial class PdfViewport
 
     private float AnnotationStrokeWidth(PageAnnotation annotation, bool selected)
     {
-        if (IsRulerAnnotation(annotation))
+        if (IsRulerAnnotation(annotation) ||
+            string.Equals(OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind), "pitch", StringComparison.OrdinalIgnoreCase))
             return ScreenToPdfDistance(RulerStrokeWidthPx());
 
         double value = annotation.StrokeWidth is >= 0.75 and <= 12.0
@@ -364,6 +366,14 @@ public sealed partial class PdfViewport
 
         SKPoint start = annotation.Points[0];
         SKPoint end = annotation.Points[1];
+        if (string.Equals(
+                OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind),
+                "pitch",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return RoofPitchGeometry.Label(start, end);
+        }
+
         float lengthPt = MeasurementGeometry.Distance(start, end);
         double scale = AnnotationGlyphRenderer.ResolveDimensionScale(
             ScaleMetersPerPt,

@@ -688,6 +688,19 @@ public sealed partial class PdfViewport
             QueueRasterSheetBitmapPrefetch(page, preferOverview: false);
     }
 
+    public static void PrefetchFullRasterSheetBitmap(PageInfo page)
+    {
+        if (page.RasterSheet?.Enabled != true ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            string.IsNullOrWhiteSpace(page.PdfPath) ||
+            page.PdfPage < 0)
+        {
+            return;
+        }
+
+        QueueRasterSheetBitmapPrefetch(page, preferOverview: false, interactivePriority: true);
+    }
+
     public static void PrefetchRasterSheetWorkZoomBitmaps(
         PageInfo page,
         bool buildMissingDpis = false,
@@ -730,7 +743,10 @@ public sealed partial class PdfViewport
                !RasterSheetCacheService.HasSourceImageOverview(source);
     }
 
-    private static void QueueRasterSheetBitmapPrefetch(PageInfo page, bool preferOverview)
+    private static void QueueRasterSheetBitmapPrefetch(
+        PageInfo page,
+        bool preferOverview,
+        bool interactivePriority = false)
     {
         if (!TryBuildRasterSheetBitmapCacheKey(
                 page.FolderPath,
@@ -757,7 +773,8 @@ public sealed partial class PdfViewport
             page.PdfPath,
             page.RasterSheet!.Clone(),
             preferOverview,
-            cacheKey);
+            cacheKey,
+            interactivePriority);
     }
 
     public static void PrefetchRasterSheetRefresh(PageInfo page)
@@ -801,13 +818,17 @@ public sealed partial class PdfViewport
         string pdfPath,
         RasterSheetSource rasterSheet,
         bool preferOverview,
-        string cacheKey)
+        string cacheKey,
+        bool interactivePriority)
     {
         RasterSheetBitmapResult result = new(new SKBitmap(), 0, 0, 0, "");
         try
         {
-            await Task.Delay(250).ConfigureAwait(false);
-            await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+            if (!interactivePriority)
+            {
+                await Task.Delay(250).ConfigureAwait(false);
+                await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+            }
             await RasterSheetBitmapPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {

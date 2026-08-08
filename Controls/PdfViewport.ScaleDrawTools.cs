@@ -157,12 +157,12 @@ public sealed partial class PdfViewport
         {
             Kind = normalizedKind,
             Points = points,
-            Color = normalizedKind == "dimension"
+            Color = normalizedKind is "dimension" or "pitch"
                 ? "#1565C0"
                 : normalizedKind == "highlight"
                     ? "#FFC107"
                     : ActiveAnnotationColor,
-            StrokeWidth = normalizedKind == "dimension" ? RulerStrokeWidthPx() : ActiveAnnotationStrokeWidth,
+            StrokeWidth = normalizedKind is "dimension" or "pitch" ? RulerStrokeWidthPx() : ActiveAnnotationStrokeWidth,
             PageFolder = _pageFolder,
             ScaleMetersPerPt = ScaleMetersPerPt,
         };
@@ -172,9 +172,13 @@ public sealed partial class PdfViewport
         _rubberEnd = null;
         SetSnapPreview(null);
         RequestRepaint();
-        PostStatus(normalizedKind == "dimension"
-            ? $"Added dimension markup: {AnnotationLabel(annotation)}."
-            : $"Added {ToolTitle(normalizedKind)} markup.");
+        PostStatus(normalizedKind switch
+        {
+            "dimension" => $"Added dimension markup: {AnnotationLabel(annotation)}.",
+            "pitch" when RoofPitchGeometry.TryMeasure(points[0], points[1], out RoofPitchResult pitch) =>
+                $"Added roof pitch: {pitch.Status}.",
+            _ => $"Added {ToolTitle(normalizedKind)} markup.",
+        });
         PageAnnotationAdded?.Invoke(annotation);
         PostRecordPrompt();
     }

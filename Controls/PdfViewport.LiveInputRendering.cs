@@ -216,6 +216,12 @@ public sealed partial class PdfViewport
 
     private void DrawLiveRecordLengthLabels(SKCanvas canvas)
     {
+        if (_tool == ViewerTool.Pitch)
+        {
+            DrawLivePitchLabel(canvas);
+            return;
+        }
+
         if (_tool is ViewerTool.Ruler or ViewerTool.Beam)
         {
             DrawLiveRulerLengthLabel(canvas);
@@ -259,6 +265,19 @@ public sealed partial class PdfViewport
         SKPoint anchor = points[^1];
         float offset = ScreenToPdfDistance(10f);
         DrawLiveRecordText(canvas, new SKPoint(anchor.X + offset, anchor.Y - offset), $"total {FormatLiveFeet(totalMeters)}", centered: false);
+    }
+
+    private void DrawLivePitchLabel(SKCanvas canvas)
+    {
+        if (_drawPts.Count == 0 || !_rubberEnd.HasValue)
+            return;
+
+        SKPoint start = _drawPts[0];
+        SKPoint end = _rubberEnd.Value;
+        if (!RoofPitchGeometry.TryMeasure(start, end, out RoofPitchResult pitch))
+            return;
+
+        DrawLiveRecordText(canvas, SegmentLengthLabelPoint(start, end), pitch.Status, centered: true);
     }
 
     private void DrawLiveRulerLengthLabel(SKCanvas canvas)
@@ -311,10 +330,19 @@ public sealed partial class PdfViewport
     private void DrawLiveRecordText(SKCanvas canvas, SKPoint pos, string text, bool centered)
     {
         float safeZoom = Math.Max(_zoom, 0.001f);
+        SKColor paper = SKColor.Parse(ViewportBackgroundPolicy.NormalizeColor(PageBackgroundColor));
+        double luminance = (0.2126 * paper.Red + 0.7152 * paper.Green + 0.0722 * paper.Blue) / 255.0;
+        byte alpha = (byte)Math.Clamp(
+            Math.Round(AppSettingsStore.NormalizeLiveInputLabelOpacity(LiveInputLabelOpacity) * 255.0),
+            0,
+            255);
+        SKColor textColor = luminance < 0.48
+            ? SKColors.White.WithAlpha(alpha)
+            : SKColors.Black.WithAlpha(alpha);
         using var textPaint = new SKPaint
         {
-            Color = new SKColor(0, 0, 0, 76),
-            TextSize = 9f / safeZoom,
+            Color = textColor,
+            TextSize = (float)AppSettingsStore.NormalizeLiveInputLabelSize(LiveInputLabelSizePx) / safeZoom,
             IsAntialias = true,
             Typeface = LabelTypeface,
         };

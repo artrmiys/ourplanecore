@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.CSharp.RuntimeBinder;
 
@@ -16,10 +17,20 @@ public static class ActiveExcelTakeoffExportService
 {
     private const int ColumnCount = 3;
 
-    public static ActiveExcelExportResult ExportRows(IReadOnlyList<PlanSwiftExportRow> rows)
+    public static ActiveExcelExportResult ExportRows(IReadOnlyList<PlanSwiftExportRow> rows) =>
+        ExportRowsCore(rows, valuesOnly: false);
+
+    public static ActiveExcelExportResult ExportValues(IReadOnlyList<PlanSwiftExportRow> rows) =>
+        ExportRowsCore(
+            rows.Where(row => row.Kind == PlanSwiftExportRowKind.Item).ToList(),
+            valuesOnly: true);
+
+    private static ActiveExcelExportResult ExportRowsCore(
+        IReadOnlyList<PlanSwiftExportRow> rows,
+        bool valuesOnly)
     {
         if (rows.Count == 0)
-            return Failure("No takeoff rows to export.");
+            return Failure(valuesOnly ? "No measured values to export." : "No takeoff rows to export.");
 
         if (!TryGetRunningExcel(out object? excelObject, out string error))
             return Failure(error);
@@ -40,22 +51,26 @@ public static class ActiveExcelTakeoffExportService
             int startRow = Convert.ToInt32(activeCell.Row, CultureInfo.InvariantCulture);
             int startColumn = Convert.ToInt32(activeCell.Column, CultureInfo.InvariantCulture);
             int endRow = startRow + rows.Count - 1;
-            int endColumn = startColumn + ColumnCount - 1;
+            int columnCount = valuesOnly ? 1 : ColumnCount;
+            int endColumn = startColumn + columnCount - 1;
 
-            object[,] values = BuildValueMatrix(rows);
+            object[,] values = valuesOnly ? BuildValuesMatrix(rows) : BuildValueMatrix(rows);
             dynamic firstCell = sheet.Cells[startRow, startColumn];
             dynamic lastCell = sheet.Cells[endRow, endColumn];
             dynamic targetRange = sheet.Range[firstCell, lastCell];
             targetRange.Value2 = values;
-            ApplyHeaderFormatting(sheet, rows, startRow, startColumn, endColumn);
+            if (!valuesOnly)
+                ApplyHeaderFormatting(sheet, rows, startRow, startColumn, endColumn);
 
             string startAddress = CellAddress(startRow, startColumn);
             string endAddress = CellAddress(endRow, endColumn);
             return new ActiveExcelExportResult(
                 true,
-                $"Exported {rows.Count} row(s) to active Excel range {startAddress}:{endAddress}.",
+                valuesOnly
+                    ? $"Exported {rows.Count} value(s) to active Excel range {startAddress}:{endAddress}."
+                    : $"Exported {rows.Count} row(s) to active Excel range {startAddress}:{endAddress}.",
                 rows.Count,
-                ColumnCount,
+                columnCount,
                 startAddress,
                 endAddress);
         }
@@ -99,6 +114,18 @@ public static class ActiveExcelTakeoffExportService
                     break;
             }
         }
+
+        return values;
+    }
+
+    public static object[,] BuildValuesMatrix(IReadOnlyList<PlanSwiftExportRow> rows)
+    {
+        IReadOnlyList<PlanSwiftExportRow> items = rows
+            .Where(row => row.Kind == PlanSwiftExportRowKind.Item)
+            .ToList();
+        object[,] values = new object[items.Count, 1];
+        for (int rowIndex = 0; rowIndex < items.Count; rowIndex++)
+            values[rowIndex, 0] = ExcelValue(items[rowIndex].Value);
 
         return values;
     }

@@ -139,6 +139,11 @@ public sealed partial class PdfViewport
                     ? $"Ruler: click the first endpoint.{modes}"
                     : $"Ruler: click the second endpoint to place the dimension label.{modes}");
                 break;
+            case ViewerTool.Pitch:
+                PostStatus(_drawPts.Count == 0
+                    ? $"Pitch: click the first roof-slope point.{modes}"
+                    : $"Pitch: click the second point to place the rise:12 label.{modes}");
+                break;
             case ViewerTool.Beam:
                 if (IsMissingScaleForLinearArea())
                 {
@@ -229,6 +234,7 @@ public sealed partial class PdfViewport
             "area" => "Area",
             "areacut" => "Cut",
             "dimension" => "Ruler",
+            "pitch" => "Pitch",
             "beam" => "Beam",
             "openings" => "Openings",
             "highlight" => "Highlighter",

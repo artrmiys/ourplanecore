@@ -114,14 +114,17 @@ public static partial class PdfExporter
                 continue;
             }
 
-            if (kind == "dimension")
+            if (kind is "dimension" or "pitch")
             {
-                AnnotationGlyphRenderer.DrawDimensionTicks(canvas, start, end, stroke, 5.5f);
+                if (kind == "dimension")
+                    AnnotationGlyphRenderer.DrawDimensionTicks(canvas, start, end, stroke, 5.5f);
                 double scale = AnnotationGlyphRenderer.ResolveDimensionScale(
                     pageScaleMetersPerPt,
                     annotation.ScaleMetersPerPt);
                 string label = string.IsNullOrWhiteSpace(annotation.Text)
-                    ? FormatAnnotationLength(start, end, scale, options.UnitMode)
+                    ? kind == "pitch"
+                        ? RoofPitchGeometry.Label(start, end)
+                        : FormatAnnotationLength(start, end, scale, options.UnitMode)
                     : annotation.Text;
                 DrawMeasurementLabel(
                     canvas,
@@ -139,7 +142,7 @@ public static partial class PdfExporter
         string kind,
         PdfExportOptions options)
     {
-        if (string.Equals(kind, "dimension", StringComparison.OrdinalIgnoreCase))
+        if (kind is "dimension" or "pitch")
             return (float)Math.Clamp(options.RulerStrokeWidth, 0.5, 6.0);
 
         double value = annotation.StrokeWidth is >= 0.75 and <= 12.0

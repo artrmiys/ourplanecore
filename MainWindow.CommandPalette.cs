@@ -67,6 +67,7 @@ public partial class MainWindow
         Add("file.exportTxt", "Export TXT", "File", "", "Export selected/all takeoffs in PlanSwift text format.", hasJob, "Open or create a job first.");
         Add("file.exportExcel", "Export Excel", "File", "", "Export selected/all takeoffs to .xlsx columns J/K/L from J10.", hasJob, "Open or create a job first.");
         Add("file.exportCurrentExcel", "Export to Current Excel", "File", "", "Write selected takeoff folder/item rows to the active cell in an open Excel workbook.", hasJob, "Open or create a job first.");
+        Add("file.exportCurrentExcelValues", "Export Values to Current Excel", "File", "", "Write only the Value column for the same selected takeoff scope.", hasJob, "Open or create a job first.");
         Add("file.excelMacroSqft", "Excel Macro: SQFT", "File", "", "Append selected SQFT rows to TemplateCom and run A2_SQFT_calc.", hasJob, "Open a job and select a Takeoffs scope first.");
         Add("file.excelMacroWalls", "Excel Macro: Walls", "File", "", "Append selected wall rows with numeric floor groups and run A3_Walls_Calc_AllGroup.", hasJob, "Open a job and select a Takeoffs scope first.");
         Add("file.excelMacroOpenings", "Excel Macro: Openings", "File", "", "Append openings from Z158, group near window values per floor, then run A5_Openings.", hasJob, "Open a job and select a Takeoffs scope first.");
@@ -99,6 +100,7 @@ public partial class MainWindow
         Add("tool.pan", "Pan Tool", "Tools", Shortcut("v"), "Use left-button panning; right-button pan still works.");
         Add("tool.scale", "Scale Tool", "Tools", Shortcut("s"), "Draw a calibration line for sheet scale.");
         Add("tool.ruler", "Ruler Tool", "Tools", Shortcut("r"), "Measure a temporary distance without creating a takeoff.");
+        Add("tool.pitch", "Pitch Tool", "Tools", "", "Draw a two-point roof-slope line and show its rise per 12.");
         Add("tool.highlight", "Highlighter Tool", "Tools", Shortcut("h"), "Draw a transparent highlighter markup.");
         Add("tool.drawLine", "Draw Line / Extra Joists", "Tools", Shortcut("d"), "D toggles continuous Extra Joists for one selected Joist Area segment; otherwise it selects Draw Line.");
         Add("tool.drawBox", "Draw Box Tool", "Tools", "", "Draw a page annotation box.");
@@ -209,6 +211,7 @@ public partial class MainWindow
             case "file.exportTxt": BtnExportTxt_Click(this, new RoutedEventArgs()); break;
             case "file.exportExcel": BtnExportExcel_Click(this, new RoutedEventArgs()); break;
             case "file.exportCurrentExcel": BtnExportCurrentExcel_Click(this, new RoutedEventArgs()); break;
+            case "file.exportCurrentExcelValues": BtnExportCurrentExcelValues_Click(this, new RoutedEventArgs()); break;
             case "file.excelMacroSqft": BtnExcelMacroSqft_Click(this, new RoutedEventArgs()); break;
             case "file.excelMacroWalls": BtnExcelMacroWalls_Click(this, new RoutedEventArgs()); break;
             case "file.excelMacroOpenings": BtnExcelMacroOpenings_Click(this, new RoutedEventArgs()); break;
@@ -247,6 +250,7 @@ public partial class MainWindow
             case "tool.pan": SetTool("pan"); break;
             case "tool.scale": SetTool("scale"); break;
             case "tool.ruler": SetTool("ruler"); break;
+            case "tool.pitch": SetTool("pitch"); break;
             case "tool.highlight": SetTool("drawhighlight"); break;
             case "tool.drawLine": SetTool("drawline"); break;
             case "tool.drawBox": SetTool("drawrect"); break;

@@ -440,9 +440,10 @@
                 </ScrollViewer>
             </TabItem>
             <TabItem Header="Display">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Disabled">
-                    <StackPanel Orientation="Horizontal" Margin="6,1">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto"
+                              MaxHeight="176">
+                    <WrapPanel Orientation="Horizontal" Margin="6,1">
 
                         <!-- GROUP: LABELS -->
                         <StackPanel Style="{StaticResource RibbonGroup}">
@@ -480,6 +481,33 @@
 
                         <Border Style="{StaticResource RibbonGroupSep}"/>
 
+                        <!-- GROUP: LIVE INPUT -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <TextBlock Text="Size" Style="{StaticResource RibbonRowLabel}"/>
+                                    <Slider x:Name="SldLiveInputLabelSize" Minimum="8" Maximum="24" SmallChange="1" LargeChange="2"
+                                            Width="112" Style="{StaticResource RibbonSlider}"
+                                            ValueChanged="SldLiveInputLabelSize_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
+                                            ToolTip="Live length and pitch label size in screen pixels"/>
+                                    <TextBlock x:Name="TxtLiveInputLabelSizeValue" Text="12 px" Width="42" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <TextBlock Text="Opacity" Style="{StaticResource RibbonRowLabel}"/>
+                                    <Slider x:Name="SldLiveInputLabelOpacity" Minimum="15" Maximum="100" SmallChange="5" LargeChange="10"
+                                            Width="112" Style="{StaticResource RibbonSlider}"
+                                            ValueChanged="SldLiveInputLabelOpacity_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
+                                            ToolTip="Live length and pitch label opacity"/>
+                                    <TextBlock x:Name="TxtLiveInputLabelOpacityValue" Text="75%" Width="42" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="LIVE INPUT" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
+                        </StackPanel>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
                         <!-- GROUP: OVERLAYS -->
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
@@ -494,7 +522,7 @@
                                 <CheckBox x:Name="ChkDisplayLegendScaleWithPage" Content="w/page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Off (default): legend keeps a fixed screen size when zooming. On: legend grows/shrinks with page zoom."/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                            <WrapPanel Orientation="Horizontal" Margin="0,1" Width="560">
                                 <TextBlock Text="Header" Style="{StaticResource RibbonRowLabel}"/>
                                 <Button Content="Size" Click="BtnScaleHeaderSizeMenu_Click" Style="{StaticResource TopCommandButton}"
                                         ToolTip="Pick header size preset"/>
@@ -516,10 +544,10 @@
                                 <TextBox x:Name="TxtStaticRasterDpi" Text="150" Style="{StaticResource RibbonValue}"
                                          KeyDown="TxtStaticRasterDpi_KeyDown" LostFocus="TxtStaticRasterDpi_LostFocus"
                                          ToolTip="Resolution the static page image is rendered at (72–300 DPI). Default 150. Higher stays sharper when zoomed in but uses more memory and disk; the page is rebuilt once and cached."/>
-                            </StackPanel>
+                            </WrapPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
-                                <TextBlock Text="OVERLAYS" Style="{StaticResource RibbonGroupLabel}"/>
+                                <TextBlock Text="OVERLAYS / RENDER" Style="{StaticResource RibbonGroupLabel}"/>
                             </Border>
                         </StackPanel>
 
@@ -581,7 +609,7 @@
                             </Border>
                         </StackPanel>
 
-                    </StackPanel>
+                    </WrapPanel>
                 </ScrollViewer>
             </TabItem>
         </TabControl>
@@ -635,13 +663,19 @@
         <!-- Row 1: drawing & measurement tools (centered) -->
         <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0" Padding="6,3,6,2">
             <DockPanel LastChildFill="True">
-            <Button x:Name="BtnExportCurrentExcelCell" DockPanel.Dock="Right"
-                    Content="Excel"
-                    Click="BtnExportCurrentExcel_Click"
-                    Style="{StaticResource ToolBtn}"
-                    VerticalAlignment="Center"
-                    Margin="8,0,2,0"
-                    ToolTip="Write the selected takeoff folder/item to the active cell in an already open Excel workbook"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,2,0">
+                <Button x:Name="BtnExportCurrentExcelValues"
+                        Content="Value"
+                        Click="BtnExportCurrentExcelValues_Click"
+                        Style="{StaticResource ToolBtn}"
+                        ToolTip="Write only values for the same selected takeoff scope into one Excel column"/>
+                <Button x:Name="BtnExportCurrentExcelCell"
+                        Content="Excel"
+                        Click="BtnExportCurrentExcel_Click"
+                        Style="{StaticResource ToolBtn}"
+                        Margin="3,0,0,0"
+                        ToolTip="Write the selected takeoff folder/item to the active cell in an already open Excel workbook"/>
+            </StackPanel>
             <WrapPanel x:Name="ToolStripRow1" Orientation="Horizontal"
                        HorizontalAlignment="Center" VerticalAlignment="Center">
 
@@ -692,6 +726,14 @@
                               Unchecked="BtnRulerSheetVisibility_Changed"
                               ToolTip="Hide all ruler markups on this sheet"/>
             </Grid>
+            <RadioButton x:Name="BtnPitch" Click="BtnTool_Click" Tag="pitch"
+                         GroupName="DrawingTool" ToolTip="Draw two points and show roof pitch as rise:12"
+                         Style="{StaticResource ToolRadio}" MinWidth="62" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconRuler}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Pitch" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
             <Border Style="{StaticResource ToolDiv}"/>
             <RadioButton x:Name="BtnPoint" Click="BtnTool_Click" Tag="point"
                          GroupName="DrawingTool" ToolTip="Create a new Count item and start recording (P). Use the active target Record button to continue an existing item"
@@ -825,6 +867,7 @@
                 </Button.ContextMenu>
             </Button>
             <Border Style="{StaticResource ToolDiv}"/>
+            <StackPanel Orientation="Horizontal" Margin="2,0">
             <ToggleButton x:Name="BtnSnap"
                           ToolTip="Snap to existing takeoff points (F3)"
                           Checked="BtnSnap_Checked" Unchecked="BtnSnap_Unchecked"
@@ -861,6 +904,7 @@
                     <TextBlock Text="Box" VerticalAlignment="Center"/>
                 </StackPanel>
             </ToggleButton>
+            </StackPanel>
 
             </WrapPanel>
             </DockPanel>

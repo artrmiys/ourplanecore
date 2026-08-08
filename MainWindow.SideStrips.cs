@@ -97,6 +97,7 @@ public partial class MainWindow
         ["file.exportPdf"] = "IconExport",
         ["view.fit"] = "IconLevel",
         ["tool.ruler"] = "IconRuler",
+        ["tool.pitch"] = "IconRuler",
         ["tool.note"] = "IconNote",
     };
 

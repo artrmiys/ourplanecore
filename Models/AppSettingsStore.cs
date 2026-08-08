@@ -51,6 +51,8 @@ public sealed class AppSettings
     public string DefaultCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public double ViewportMeasurementStrokeScale { get; set; } = 3.0;
     public double ViewportRulerStrokeWidth { get; set; } = 1.0;
+    public double ViewportLiveInputLabelSizePx { get; set; } = AppSettingsStore.LiveInputLabelSizeDefaultPx;
+    public double ViewportLiveInputLabelOpacity { get; set; } = AppSettingsStore.LiveInputLabelOpacityDefault;
     public double ViewportPdfSnapBridgeTolerancePx { get; set; } = AppSettingsStore.ViewportPdfSnapBridgeToleranceDefaultPx;
     public double ViewportPointSizeScale { get; set; } = 2.0;
     public double ViewportZoomWheelFactor { get; set; } = AppSettingsStore.ViewportZoomWheelFactorDefault;
@@ -140,6 +142,11 @@ public static class AppSettingsStore
     public const double ViewportZoomWheelFactorMin = 1.05;
     public const double ViewportZoomWheelFactorMax = 2.5;
     public const double ExtraJoistGlowIntensityDefault = 145.0 / 255.0;
+    public const double LiveInputLabelSizeDefaultPx = 12.0;
+    public const double LiveInputLabelSizeMinPx = 8.0;
+    public const double LiveInputLabelSizeMaxPx = 24.0;
+    public const double LiveInputLabelOpacityDefault = 0.75;
+    public const double LiveInputLabelOpacityMin = 0.15;
     public const int StaticPageRenderDpiDefault = 150;
     public const int StaticPageRenderDpiMin = 72;
     public const int StaticPageRenderDpiMax = 300;
@@ -461,6 +468,10 @@ public static class AppSettingsStore
             fallback: 1.0,
             min: 0.5,
             max: 6.0);
+        settings.ViewportLiveInputLabelSizePx = NormalizeLiveInputLabelSize(
+            settings.ViewportLiveInputLabelSizePx);
+        settings.ViewportLiveInputLabelOpacity = NormalizeLiveInputLabelOpacity(
+            settings.ViewportLiveInputLabelOpacity);
         settings.ViewportPdfSnapBridgeTolerancePx = NormalizePdfSnapBridgeTolerancePx(
             settings.ViewportPdfSnapBridgeTolerancePx);
         settings.ViewportPointSizeScale = NormalizeScale(
@@ -585,6 +596,18 @@ public static class AppSettingsStore
 
         return Math.Clamp(dpi, StaticPageRenderDpiMin, StaticPageRenderDpiMax);
     }
+
+    public static double NormalizeLiveInputLabelSize(double value) =>
+        NormalizeScale(
+            value,
+            LiveInputLabelSizeDefaultPx,
+            LiveInputLabelSizeMinPx,
+            LiveInputLabelSizeMaxPx);
+
+    public static double NormalizeLiveInputLabelOpacity(double value) =>
+        double.IsNaN(value) || double.IsInfinity(value)
+            ? LiveInputLabelOpacityDefault
+            : Math.Clamp(value, LiveInputLabelOpacityMin, 1.0);
 
     public static void NormalizeJobsRoots(AppSettings settings)
     {
