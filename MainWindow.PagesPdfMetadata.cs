@@ -71,7 +71,11 @@ public partial class MainWindow
         return null;
     }
 
-    private async Task AnalyzePdfMetadataAsync(TreeViewItem item, bool applyRename, bool applyScale)
+    private async Task AnalyzePdfMetadataAsync(
+        TreeViewItem item,
+        bool applyRename,
+        bool applyScale,
+        bool forceReanalyze = false)
     {
         if (_currentJob == null)
             return;
@@ -97,22 +101,8 @@ public partial class MainWindow
             await WaitForBusyOverlayRenderAsync();
             if (!EnsureExpectedJobWritable(job, "analyze PDF metadata"))
                 return;
-            results = await Task.Run(() =>
-            {
-                var analyzed = new List<PdfMetadataPageResult>();
-                foreach (PageInfo page in pages)
-                {
-                    bool ok = persistBeforeReview
-                        ? PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error)
-                        : PdfSheetMetadataService.TryAnalyzePage(job, page, out metadata, out error);
-                    if (ok)
-                        analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
-                    else
-                        analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
-                }
-
-                return analyzed;
-            });
+            results = await Task.Run(() => AnalyzePdfPages(
+                job, pages, persistBeforeReview, forceReanalyze: forceReanalyze));
         }
         if (!EnsureExpectedJobWritable(job, "review PDF metadata results"))
             return;
@@ -159,6 +149,30 @@ public partial class MainWindow
             return;
 
         ApplyPdfMetadataResults(job, results, dialog.Rows);
+    }
+
+    private List<PdfMetadataPageResult> AnalyzePdfPages(
+        OurPlanCoreJob job,
+        IReadOnlyList<PageInfo> pages,
+        bool persistMetadata,
+        CancellationToken cancellationToken = default,
+        bool forceReanalyze = false)
+    {
+        IReadOnlyList<PdfSheetMetadataAnalysisItem> analyzed = PdfSheetMetadataService.AnalyzePages(
+            job,
+            pages,
+            persistMetadata,
+            forceReanalyze,
+            cancellationToken,
+            progress => Dispatcher.BeginInvoke(() =>
+            {
+                string cached = progress.CacheHits > 0 ? $", {progress.CacheHits} cached" : "";
+                TxtStatus.Text =
+                    $"Analyzing sheets: {progress.Completed}/{progress.Total}{cached} — {progress.CurrentPdf}";
+            }));
+        return analyzed
+            .Select(item => new PdfMetadataPageResult(item.Page, item.Ok, item.Metadata, item.Error))
+            .ToList();
     }
 
     private PdfMetadataApplySummary ApplyPdfMetadataResults(

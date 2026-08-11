@@ -14,6 +14,7 @@ internal static class PdfSheetMetadataCropServiceTests
                 PageWidthPt = 612,
                 PageHeightPt = 792,
                 SheetNumberRect = PdfSheetMetadataCropService.RegionFromRect(new SKRect(510, 690, 600, 745)),
+                SheetTitleRect = PdfSheetMetadataCropService.RegionFromRect(new SKRect(360, 690, 505, 745)),
                 ScaleRect = PdfSheetMetadataCropService.RegionFromRect(new SKRect(420, 650, 600, 680)),
             };
 
@@ -24,6 +25,7 @@ internal static class PdfSheetMetadataCropServiceTests
             AssertEqual("A101", loaded.SourcePageName, "source page");
             AssertEqual("612", loaded.PageWidthPt.ToString("0"), "page width");
             AssertEqual("510", loaded.SheetNumberRect.Left.ToString("0"), "sheet number left");
+            AssertEqual("360", loaded.SheetTitleRect.Left.ToString("0"), "sheet title left");
             AssertEqual("680", loaded.ScaleRect.Bottom.ToString("0"), "scale bottom");
             AssertTrue(PdfSheetMetadataCropService.HasUsableTemplate(loaded), "loaded template should be usable");
         });
@@ -40,11 +42,50 @@ internal static class PdfSheetMetadataCropServiceTests
         };
         AssertTrue(PdfSheetMetadataCropService.HasUsableTemplate(sheetOnly), "sheet region should be usable");
 
+        var titleOnly = new PdfSheetMetadataCropTemplate
+        {
+            SheetTitleRect = PdfSheetMetadataCropService.RegionFromRect(new SKRect(2, 3, 30, 40)),
+        };
+        AssertTrue(PdfSheetMetadataCropService.HasUsableTemplate(titleOnly), "title region should be usable");
+
         var scaleOnly = new PdfSheetMetadataCropTemplate
         {
             ScaleRect = PdfSheetMetadataCropService.RegionFromRect(new SKRect(4, 5, 40, 50)),
         };
         AssertTrue(PdfSheetMetadataCropService.HasUsableTemplate(scaleOnly), "scale region should be usable");
+    }
+
+    public static void CropTemplateResolvesJobOverrideThenGlobal()
+    {
+        string globalPath = PdfSheetMetadataCropService.GlobalTemplatePath();
+        try
+        {
+            if (File.Exists(globalPath))
+                File.Delete(globalPath);
+            var global = new PdfSheetMetadataCropTemplate
+            {
+                SheetTitleRect = PdfSheetMetadataCropService.RegionFromRect(new SKRect(9, 10, 40, 50)),
+            };
+            PdfSheetMetadataCropService.SaveGlobalTemplate(global);
+
+            WithTempJob("Crop Resolution", job =>
+            {
+                AssertEqual("9", PdfSheetMetadataCropService.LoadTemplate(job)!.SheetTitleRect.Left.ToString("0"), "global fallback");
+                var local = new PdfSheetMetadataCropTemplate
+                {
+                    SheetNumberRect = PdfSheetMetadataCropService.RegionFromRect(new SKRect(1, 2, 20, 30)),
+                };
+                PdfSheetMetadataCropService.SaveTemplate(job, local);
+                AssertEqual("1", PdfSheetMetadataCropService.LoadTemplate(job)!.SheetNumberRect.Left.ToString("0"), "job override");
+                AssertTrue(PdfSheetMetadataCropService.ClearJobTemplate(job), "job override should clear");
+                AssertEqual("9", PdfSheetMetadataCropService.LoadTemplate(job)!.SheetTitleRect.Left.ToString("0"), "global after reset");
+            });
+        }
+        finally
+        {
+            if (File.Exists(globalPath))
+                File.Delete(globalPath);
+        }
     }
 
     private static void WithTempJob(string name, Action<OurPlanCoreJob> action)

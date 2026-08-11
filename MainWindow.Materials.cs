@@ -280,22 +280,7 @@ public partial class MainWindow
             await WaitForBusyOverlayRenderAsync();
             if (!EnsureExpectedJobWritable(job, "analyze and apply sheet metadata"))
                 return new MaterialReportSheetMetadataSummary(0, 0, 0, sourcePages.Count);
-            results = await Task.Run(() =>
-            {
-                var analyzed = new List<PdfMetadataPageResult>();
-                foreach (PageInfo page in sourcePages)
-                {
-                    bool ok = persistDuringAnalysis
-                        ? PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out PdfSheetMetadata metadata, out string error)
-                        : PdfSheetMetadataService.TryAnalyzePage(job, page, out metadata, out error);
-                    if (ok)
-                        analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
-                    else
-                        analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
-                }
-
-                return analyzed;
-            });
+            results = await Task.Run(() => AnalyzePdfPages(job, sourcePages, persistDuringAnalysis));
         }
         if (!EnsureExpectedJobWritable(job, "apply sheet metadata results"))
             return new MaterialReportSheetMetadataSummary(results.Count, 0, 0, results.Count);

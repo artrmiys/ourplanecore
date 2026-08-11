@@ -392,23 +392,9 @@ public partial class MainWindow
                 await WaitForBusyOverlayRenderAsync();
                 if (!EnsureExpectedJobWritable(job, "analyze sheets in Sheet Manager"))
                     return;
-                results = await Task.Run(() =>
-                {
-                    var analyzed = new List<PdfMetadataPageResult>();
-                    foreach (PageInfo page in pages)
-                    {
-                        analysisCts.Token.ThrowIfCancellationRequested();
-                        bool ok = persistDuringAnalysis
-                            ? PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error)
-                            : PdfSheetMetadataService.TryAnalyzePage(job, page, out metadata, out error);
-                        if (ok)
-                            analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
-                        else
-                            analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
-                    }
-
-                    return analyzed;
-                }, analysisCts.Token);
+                results = await Task.Run(
+                    () => AnalyzePdfPages(job, pages, persistDuringAnalysis, analysisCts.Token),
+                    analysisCts.Token);
             }
         }
         catch (OperationCanceledException) when (analysisCts.IsCancellationRequested)

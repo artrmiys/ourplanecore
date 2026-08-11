@@ -2219,7 +2219,7 @@
                         <Button Content="Auto Scale" Click="BtnSheetManagerAutoScale_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Preview automatic sheet scales"/>
                         <Button Content="Name+Scale" Click="BtnSheetManagerAutoNameScale_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Preview names and scales together"/>
                         <Button x:Name="BtnSheetManagerAiFill" Content="AI Fill" Click="BtnQueuePdfMetadataFallback_Click" Margin="0,0,12,4" ToolTip="Queue GPT fallback for missing sheet metadata"/>
-                        <Button x:Name="BtnSheetManagerAiCropHints" Content="Crop Hints" Click="BtnPdfMetadataCropHints_Click" Margin="0,0,12,4" ToolTip="Draw reusable AI Fill crop boxes for sheet number and scale"/>
+                        <Button x:Name="BtnSheetManagerAiCropHints" Content="Crop Hints" Click="BtnPdfMetadataCropHints_Click" Margin="0,0,12,4" ToolTip="Draw reusable sheet number, title, and scale regions"/>
                         <Button Content="Apply Checked" Click="BtnSheetManagerApplyChecked_Click" Style="{StaticResource ManagerCommitButton}" ToolTip="Apply checked rename/scale rows to the job"/>
                         <TextBlock Text="Open" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Open Sheet" Click="BtnSheetManagerOpenSheet_Click" ToolTip="Switch to the selected sheet in Main View"/>

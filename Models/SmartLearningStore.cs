@@ -389,7 +389,7 @@ public static partial class SmartLearningStore
 
         SheetMetadataConfig config = SheetMetadataRulesService.Active;
         bool projectScope = string.Equals(scope, "project", StringComparison.OrdinalIgnoreCase);
-        bool precise = config.DetectorMode == SheetMetadataDetectorMode.PreciseV2;
+        bool precise = config.DetectorMode != SheetMetadataDetectorMode.Legacy;
         bool protectedSuffix = IsProtectedSheetMetadataEvidence(metadata.SuffixSource);
         bool protectedScale = IsProtectedSheetMetadataEvidence(metadata.ScaleSource);
         bool strongerSuffix = PdfSheetMetadataPolicy.ConfidenceLevel(rule.Confidence) >

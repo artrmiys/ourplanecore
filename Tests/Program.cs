@@ -20,6 +20,15 @@ if (args.Length > 0 && args[0] == "sheetmetadata-golden")
 if (args.Length > 0 && args[0] == "sheetmetadata-install-global")
     return SheetMetadataConfigHarness.InstallGlobalPrecise();
 
+if (args.Length > 0 && args[0] == "sheetmetadata-install-ideal-global")
+    return SheetMetadataConfigHarness.InstallGlobalIdeal();
+
+if (args.Length > 0 && args[0] == "sheetmetadata-v3-benchmark")
+    return SheetMetadataV3BenchmarkHarness.Run(args);
+
+if (args.Length > 0 && args[0] == "runtime-smoke-job")
+    return RuntimeSmokeJobHarness.Create();
+
 if (args.Length > 0 && args[0] == "storage-analysis")
     return ProjectStorageHarness.Run(args);
 
@@ -306,6 +315,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression moved active sheet rebinds viewport", TakeoffsTreeRegressionTests.PagesMovedActiveSheetRebindsViewportWithoutReload),
     ("pdf sheet metadata layer discovery restores states", TakeoffsTreeRegressionTests.PdfSheetMetadataLayerDiscoveryRestoresLayerStates),
     ("pdf metadata precise policy preserves compound suffix", PdfSheetMetadataWorkflowTests.PrecisePolicyPreservesExistingCompoundSuffix),
+    ("pdf metadata tree name stays short lowercase without title", PdfSheetMetadataWorkflowTests.TreeNameIsShortLowercaseAndNeverAppendsTitle),
     ("pdf metadata exact scale gate rejects unsafe sources", PdfSheetMetadataWorkflowTests.ExactScaleGateRejectsUnsafeSourcesAndExistingScale),
     ("pdf metadata scale action clear is explicit", PdfSheetMetadataWorkflowTests.ScaleActionDefaultsToKeepAndClearIsExplicit),
     ("pdf metadata learning keeps immutable detection", PdfSheetMetadataWorkflowTests.LearningRecordKeepsImmutableDetectedDecision),
@@ -324,6 +334,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata project learned scale keeps text numeric sync", PdfSheetMetadataWorkflowTests.ProjectLearnedScaleUpdatesTextAndNumericValueTogether),
     ("pdf metadata learned suffix leaves protected scale unchanged", PdfSheetMetadataWorkflowTests.LearnedSuffixDoesNotMutateProtectedScaleDecision),
     ("sheet metadata legacy preview keeps legacy detector", SheetMetadataConfigTests.LegacyPreviewDoesNotSwitchDetector),
+    ("sheet metadata ideal v3 is opt in and preserves policy", SheetMetadataConfigTests.IdealV3IsOptInAndKeepsPrecisePolicyDefaults),
     ("sheet metadata schema one restores precise collections", SheetMetadataConfigTests.SchemaOnePreciseMigrationRestoresCollections),
     ("sheet metadata schema two empty rules stay authoritative", SheetMetadataConfigTests.SchemaTwoEmptyRulesRemainAuthoritative),
     ("sheet metadata null rule rows resolve safely", SheetMetadataConfigTests.NullRuleRowsDoNotCrashUpgradeOrResolve),
@@ -545,6 +556,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf scale parser handles decimal ratio scale", PdfScaleParserHandlesDecimalRatioScale),
     ("pdf metadata crop template save load round trips", PdfSheetMetadataCropServiceTests.CropTemplateSaveLoadRoundTrips),
     ("pdf metadata crop template usable when either region exists", PdfSheetMetadataCropServiceTests.CropTemplateUsableWhenEitherRegionExists),
+    ("pdf metadata crop template resolves job then global", PdfSheetMetadataCropServiceTests.CropTemplateResolvesJobOverrideThenGlobal),
     ("joist rounding aliases normalize", JoistRoundingAliasesNormalize),
     ("joist pitch normalizes common input", JoistPitchNormalizesCommonInput),
     ("joist pitch flat input normalizes empty", JoistPitchFlatInputNormalizesEmpty),

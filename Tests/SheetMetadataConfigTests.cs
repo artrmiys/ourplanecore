@@ -3,6 +3,19 @@ using OurPlanCore;
 
 internal static class SheetMetadataConfigTests
 {
+    public static void IdealV3IsOptInAndKeepsPrecisePolicyDefaults()
+    {
+        SheetMetadataConfig builtIn = SheetMetadataConfig.BuildDefault();
+        SheetMetadataConfig ideal = SheetMetadataConfig.BuildIdealV3();
+
+        AssertEqual(SheetMetadataDetectorMode.Legacy, builtIn.DetectorMode, "built-in default must remain legacy");
+        AssertEqual(SheetMetadataDetectorMode.IdealV3, ideal.DetectorMode, "Ideal preset must select the v3 detector");
+        AssertEqual(SheetMetadataImportPolicy.Preview, ideal.ImportPolicy, "Ideal preset must review before apply");
+        AssertTrue(ideal.EnableSheetIndexEvidence, "Ideal preset must use sheet-index evidence");
+        AssertTrue(ideal.PreserveExistingManualName, "Ideal preset must preserve reviewed names");
+        AssertEqual(SheetMetadataConfig.IdealV3PresetName, ideal.PresetName, "Ideal preset name");
+    }
+
     public static void LegacyPreviewDoesNotSwitchDetector()
     {
         SheetMetadataConfig config = SheetMetadataConfig.BuildLegacy();

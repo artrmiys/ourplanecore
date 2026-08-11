@@ -21,6 +21,7 @@ public enum SheetMetadataDetectorMode
 {
     Legacy,
     PreciseV2,
+    IdealV3,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -32,14 +33,15 @@ public enum SheetMetadataConfidence
 }
 
 // Deterministic policy shared by PDF sheet-name, suffix, and scale workflows.
-// BuildDefault intentionally remains legacy-compatible; PreciseV2 is opt-in.
+// BuildDefault intentionally remains legacy-compatible; newer detectors are opt-in.
 public sealed class SheetMetadataConfig
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
     public const string LegacyPresetName = "Legacy";
     public const string PreciseV2PresetName = "Precise v2";
+    public const string IdealV3PresetName = "Ideal v3";
     public static IReadOnlyList<string> PresetNames { get; } =
-        [LegacyPresetName, PreciseV2PresetName];
+        [LegacyPresetName, PreciseV2PresetName, IdealV3PresetName];
 
     public int SchemaVersion { get; set; }
     public string PresetName { get; set; } = LegacyPresetName;
@@ -155,10 +157,22 @@ public sealed class SheetMetadataConfig
         SheetLabelOverrides = [],
     };
 
-    public static SheetMetadataConfig BuildPreset(string? name) =>
-        string.Equals(name, PreciseV2PresetName, StringComparison.OrdinalIgnoreCase)
+    public static SheetMetadataConfig BuildIdealV3()
+    {
+        SheetMetadataConfig config = BuildPreciseV2();
+        config.PresetName = IdealV3PresetName;
+        config.DetectorMode = SheetMetadataDetectorMode.IdealV3;
+        return config;
+    }
+
+    public static SheetMetadataConfig BuildPreset(string? name)
+    {
+        if (string.Equals(name, IdealV3PresetName, StringComparison.OrdinalIgnoreCase))
+            return BuildIdealV3();
+        return string.Equals(name, PreciseV2PresetName, StringComparison.OrdinalIgnoreCase)
             ? BuildPreciseV2()
             : BuildLegacy();
+    }
 
     public bool HasSameBehaviorAs(SheetMetadataConfig other)
     {
@@ -194,9 +208,12 @@ public sealed class SheetMetadataConfig
             upgraded.EnableTitleBlockScaleEvidence = upgraded.EnableTitleBlockEvidence;
         }
 
-        SheetMetadataConfig fallback = upgraded.DetectorMode == SheetMetadataDetectorMode.PreciseV2
-            ? BuildPreciseV2()
-            : BuildLegacy();
+        SheetMetadataConfig fallback = upgraded.DetectorMode switch
+        {
+            SheetMetadataDetectorMode.IdealV3 => BuildIdealV3(),
+            SheetMetadataDetectorMode.PreciseV2 => BuildPreciseV2(),
+            _ => BuildLegacy(),
+        };
         bool migrateMissingCollections = sourceSchemaVersion < 2;
         upgraded.ScaleCapableSuffixes = NormalizeSuffixes(
             SelectCollection(upgraded.ScaleCapableSuffixes, fallback.ScaleCapableSuffixes, migrateMissingCollections));

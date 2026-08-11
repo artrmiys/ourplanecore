@@ -15,6 +15,7 @@ _DOC_CACHE: "OrderedDict[tuple[str, int, int, str], fitz.Document]" = OrderedDic
 _DOC_LAYER_STATES: dict[tuple[str, int, int, str], dict[int, bool]] = {}
 _MAX_DOC_CACHE = 8
 _SHEET_INDEX_CACHE: "OrderedDict[tuple[str, int, int], dict[str, dict]]" = OrderedDict()
+_SHEET_INDEX_V3_CACHE: "OrderedDict[tuple[str, int, int], dict[str, dict]]" = OrderedDict()
 _MAX_SHEET_INDEX_CACHE = 8
 # Display lists bake in the OCG visibility active when they were built, so the
 # cache key includes the doc's effective layer-state signature.
@@ -832,11 +833,13 @@ def _prominent_sheet_label_from_title_block(
     words: list,
     max_x: float,
     max_y: float,
+    allow_any_prefix: bool = False,
 ) -> tuple[str | None, object | None]:
     scored: list[tuple[float, str, object]] = []
     for word in words:
         label = str(word[4]).strip()
-        if not _valid_sheet_label(label):
+        valid_label = bool(SHEET_LABEL_RE.fullmatch(label)) if allow_any_prefix else _valid_sheet_label(label)
+        if not valid_label:
             continue
 
         x0, y0, _, _ = _word_box(word)
@@ -3408,7 +3411,7 @@ def _uses_precise_sheet_metadata(req: dict) -> bool:
         return False
     if _config_has(config, "detector_mode"):
         detector_mode = _normalized_mode(_config_value(config, "detector_mode", default="legacy"))
-        return detector_mode in {"precisev2", "v2", "precise"}
+        return detector_mode in {"precisev2", "v2", "precise", "idealv3", "v3", "ideal"}
     preset = _config_value(config, "preset_name", "preset", "mode", default="")
     normalized = _normalized_mode(preset)
     if normalized == "legacy":
@@ -3418,6 +3421,14 @@ def _uses_precise_sheet_metadata(req: dict) -> bool:
     # A serialized settings object without an explicit preset is a v2 request.
     # Requests without the object remain byte-for-byte on the legacy path.
     return True
+
+
+def _uses_ideal_sheet_metadata(req: dict) -> bool:
+    config = req.get("sheet_metadata_config")
+    if not isinstance(config, dict):
+        return False
+    detector_mode = _normalized_mode(_config_value(config, "detector_mode", default=""))
+    return detector_mode in {"idealv3", "v3", "ideal"}
 
 
 def _normalize_suffix(value: object) -> str:
@@ -3602,6 +3613,101 @@ def _document_sheet_index(doc: fitz.Document, doc_key: tuple[str, int, int, str]
     return result
 
 
+def _parse_sheet_index_words(page: fitz.Page, page_number: int) -> list[dict]:
+    """Read multi-column drawing lists by geometry instead of text stream order."""
+    text = page.get_text("text") or ""
+    header = re.sub(r"[^A-Z]+", " ", text.upper())
+    if not re.search(r"\b(?:SHEET|DRAWING)\s+(?:INDEX|LIST)\b", header):
+        return []
+
+    words = list(page.get_text("words") or [])
+    label_words: list[tuple[object, str]] = []
+    for word in words:
+        label = _index_label_from_line(str(word[4]))
+        if label and SHEET_LABEL_RE.fullmatch(label):
+            label_words.append((word, label))
+
+    rows: list[dict] = []
+    for label_word, label in label_words:
+        x0, y0, x1, y1 = _word_box(label_word)
+        center_y = (y0 + y1) / 2.0
+        tolerance = max(3.0, (y1 - y0) * 0.65)
+        next_label_x = min(
+            (
+                _word_box(other)[0]
+                for other, _ in label_words
+                if _word_box(other)[0] > x1 + 2.0
+                and abs(((_word_box(other)[1] + _word_box(other)[3]) / 2.0) - center_y) <= tolerance
+            ),
+            default=float(page.rect.width),
+        )
+        title_words = []
+        for word in words:
+            wx0, wy0, wx1, wy1 = _word_box(word)
+            word_center_y = (wy0 + wy1) / 2.0
+            if wx0 <= x1 + 1.0 or wx0 >= next_label_x - 2.0:
+                continue
+            if abs(word_center_y - center_y) > tolerance:
+                continue
+            token = str(word[4]).strip()
+            if token.lower().rstrip(":") in {"sheet", "drawing", "number", "no", "title", "scale"}:
+                continue
+            title_words.append(word)
+
+        title = _clean_index_title([_words_text(sorted(title_words, key=lambda item: float(item[0])))])
+        if not title or _title_quality(title, label) <= -900:
+            continue
+        rows.append({
+            "label": label,
+            "title": title,
+            "scale_text": "",
+            "scale_raw": "",
+            "scale_kind": "",
+            "page_number": page_number,
+        })
+    return rows
+
+
+def _document_sheet_index_v3(doc: fitz.Document, doc_key: tuple[str, int, int, str]) -> dict[str, dict]:
+    cache_key = (doc_key[0], doc_key[1], doc_key[2])
+    cached = _SHEET_INDEX_V3_CACHE.get(cache_key)
+    if cached is not None:
+        _SHEET_INDEX_V3_CACHE.move_to_end(cache_key)
+        return cached
+
+    grouped: dict[str, list[dict]] = {}
+    for page_index in range(doc.page_count):
+        try:
+            page = doc.load_page(page_index)
+            rows = _parse_sheet_index_words(page, page_index + 1)
+            if not rows:
+                rows = _parse_sheet_index_page(page.get_text("text") or "", page_index + 1)
+        except Exception:
+            continue
+        for row in rows:
+            grouped.setdefault(_sheet_index_key(row["label"]), []).append(row)
+
+    result: dict[str, dict] = {}
+    for key, rows in grouped.items():
+        unique: dict[tuple[str, str], dict] = {}
+        for row in rows:
+            signature = (
+                re.sub(r"\s+", " ", row["title"]).strip().casefold(),
+                _scale_key(row.get("scale_text", "")),
+            )
+            unique.setdefault(signature, row)
+        result[key] = next(iter(unique.values())) if len(unique) == 1 else {
+            "ambiguous": True,
+            "rows": list(unique.values()),
+        }
+
+    _SHEET_INDEX_V3_CACHE[cache_key] = result
+    _SHEET_INDEX_V3_CACHE.move_to_end(cache_key)
+    while len(_SHEET_INDEX_V3_CACHE) > _MAX_SHEET_INDEX_CACHE:
+        _SHEET_INDEX_V3_CACHE.popitem(last=False)
+    return result
+
+
 def _source_pdf_pattern_matches(pattern: str | None, pdf_path: str) -> bool:
     value = (pattern or "").strip()
     if not value:
@@ -3759,6 +3865,60 @@ def _extract_standalone_title_field(words: list, sheet_label: str | None, max_x:
     return max(candidates, key=lambda item: item[0])[1] if candidates else ""
 
 
+def _template_region(req: dict, name: str, max_x: float, max_y: float) -> tuple[float, float, float, float] | None:
+    template = req.get("crop_template")
+    if not isinstance(template, dict):
+        return None
+    raw = _config_value(template, name, default=None)
+    if not isinstance(raw, dict):
+        return None
+    try:
+        source_width = float(_config_value(template, "page_width_pt", default=max_x) or max_x)
+        source_height = float(_config_value(template, "page_height_pt", default=max_y) or max_y)
+        x_scale = max_x / source_width if source_width > 0 else 1.0
+        y_scale = max_y / source_height if source_height > 0 else 1.0
+        left = float(_config_value(raw, "left", default=0.0)) * x_scale
+        top = float(_config_value(raw, "top", default=0.0)) * y_scale
+        right = float(_config_value(raw, "right", default=0.0)) * x_scale
+        bottom = float(_config_value(raw, "bottom", default=0.0)) * y_scale
+    except (TypeError, ValueError):
+        return None
+    if right - left < 2.0 or bottom - top < 2.0:
+        return None
+    return max(0.0, left), max(0.0, top), min(max_x, right), min(max_y, bottom)
+
+
+def _template_sheet_label(req: dict, words: list, max_x: float, max_y: float) -> str:
+    rect = _template_region(req, "sheet_number_rect", max_x, max_y)
+    if not rect:
+        return ""
+    region_words = _words_in_rect(words, *rect)
+    for word in sorted(region_words, key=lambda item: (-_word_size(item), float(item[0]))):
+        label = _index_label_from_line(str(word[4]))
+        if label and SHEET_LABEL_RE.fullmatch(label):
+            return label
+    label = _index_label_from_line(_words_text(region_words))
+    return label if label and SHEET_LABEL_RE.fullmatch(label) else ""
+
+
+def _template_sheet_title(req: dict, words: list, sheet_label: str | None, max_x: float, max_y: float) -> str:
+    rect = _template_region(req, "sheet_title_rect", max_x, max_y)
+    if not rect:
+        return ""
+    region_words = _words_in_rect(words, *rect)
+    title = _clean_sheet_title(_words_text(region_words))
+    return title if _title_quality(title, sheet_label) > -900 else ""
+
+
+def _template_scale(req: dict, words: list, max_x: float, max_y: float) -> tuple[str, str, str]:
+    rect = _template_region(req, "scale_rect", max_x, max_y)
+    if not rect:
+        return "", "", ""
+    raw = _words_text(_words_in_rect(words, *rect))
+    parsed = _index_scale_from_line(raw)
+    return parsed if parsed else ("", raw, "")
+
+
 def _precise_title_decision(
     req: dict,
     config: dict,
@@ -3782,12 +3942,21 @@ def _precise_title_decision(
             f"Exact-sheet override for {sheet_label}", sheet_label,
         )
 
+    if _uses_ideal_sheet_metadata(req):
+        template_title = _template_sheet_title(req, words, sheet_label, max_x, max_y)
+        _add_title_candidate(
+            candidates, template_title, "layout_template", "high", 1500.0,
+            f"Saved Sheet Title region: {template_title}", sheet_label,
+        )
+
     if _config_bool(config, "enable_sheet_index_evidence", True):
-        entry = _document_sheet_index(doc, doc_key).get(_sheet_index_key(sheet_label))
+        document_index = _document_sheet_index_v3 if _uses_ideal_sheet_metadata(req) else _document_sheet_index
+        entry = document_index(doc, doc_key).get(_sheet_index_key(sheet_label))
         if entry and not entry.get("ambiguous"):
             index_row = entry
             _add_title_candidate(
-                candidates, entry.get("title"), "sheet_index", "high", 1100.0,
+                candidates, entry.get("title"), "sheet_index", "high",
+                1380.0 if _uses_ideal_sheet_metadata(req) else 1100.0,
                 f"Drawing list p.{entry['page_number']}: {entry['label']} | {entry['title']}", sheet_label,
             )
 
@@ -4330,6 +4499,9 @@ def _precise_scale_decision(
     suffix_decision: dict,
     title: str,
     index_row: dict | None,
+    template_scale: str,
+    template_scale_raw: str,
+    template_scale_kind: str,
     title_scale: str | None,
     title_scale_raw: str,
     bottom_scale: str | None,
@@ -4340,6 +4512,17 @@ def _precise_scale_decision(
     override_candidate = _scale_override_candidate(override)
     if override_candidate:
         candidates.append(override_candidate)
+    if template_scale or template_scale_raw:
+        _add_scale_candidate(
+            candidates,
+            template_scale,
+            template_scale_raw,
+            template_scale_kind,
+            "layout_template",
+            "high",
+            1500.0,
+            f"Saved Scale region: {template_scale_raw}",
+        )
     if title_scale or title_scale_raw:
         parsed = _index_scale_from_line(title_scale_raw or title_scale)
         if parsed:
@@ -4509,9 +4692,17 @@ def _sheetmeta_data_precise_v2(req: dict) -> dict:
         title_block_enabled,
     )
     index_enabled = _config_bool(config, "enable_sheet_index_evidence", True)
+    ideal_v3 = _uses_ideal_sheet_metadata(req)
     if title_block_label_enabled:
         sheet_label = str(metadata.get("sheet_label") or "")
-        _, prominent_label_word = _prominent_sheet_label_from_title_block(words, max_x, max_y)
+        prominent_label, prominent_label_word = _prominent_sheet_label_from_title_block(
+            words,
+            max_x,
+            max_y,
+            allow_any_prefix=ideal_v3,
+        )
+        if ideal_v3 and prominent_label:
+            sheet_label = prominent_label
     else:
         sheet_label = (
             _extract_sheet_label_from_page_label(page)
@@ -4520,7 +4711,12 @@ def _sheetmeta_data_precise_v2(req: dict) -> dict:
             or ""
         )
         prominent_label_word = None
-    index_map = _document_sheet_index(doc, doc_key) if index_enabled else {}
+    if ideal_v3:
+        template_label = _template_sheet_label(req, words, max_x, max_y)
+        if template_label:
+            sheet_label = template_label
+    document_index = _document_sheet_index_v3 if ideal_v3 else _document_sheet_index
+    index_map = document_index(doc, doc_key) if index_enabled else {}
     indexed_label, indexed_label_word = _precise_sheet_label_from_index_words(
         words,
         max_x,
@@ -4569,11 +4765,25 @@ def _sheetmeta_data_precise_v2(req: dict) -> dict:
         title_scale, title_scale_raw = None, ""
         bottom_scale, bottom_scale_raw = None, ""
     body_scales = _precise_body_scales(words, text, max_x, max_y)
+    template_scale, template_scale_raw, template_scale_kind = _template_scale(
+        req, words, max_x, max_y,
+    ) if ideal_v3 else ("", "", "")
     scale_decision = _precise_scale_decision(
         config, effective_override, suffix_decision, title, index_row,
+        template_scale, template_scale_raw, template_scale_kind,
         title_scale, title_scale_raw, bottom_scale, bottom_scale_raw, body_scales,
     )
     selected_scale = str(scale_decision.get("selected_scale") or "")
+    if ideal_v3 and scale_decision.get("source") != "sheet_override" and re.match(r'^\s*\d{2,}\s*"', selected_scale):
+        scale_decision = {
+            "selected_scale": "",
+            "skip_scale": False,
+            "source": "rejected_merged_text",
+            "confidence": "low",
+            "evidence": f"Rejected sheet-label/scale text merge: {selected_scale}",
+            "skip_reason": "scale_not_found",
+        }
+        selected_scale = ""
     ratio = _scale_ratio(selected_scale)
 
     all_scales: list[str] = []
@@ -4617,8 +4827,8 @@ def _sheetmeta_data_precise_v2(req: dict) -> dict:
         explicit_suffix_policy = "allow"
     metadata.update({
         "schema_version": 2,
-        "detector_version": "precise_v2",
-        "detector_preset": str(_config_value(config, "preset_name", default="Precise v2") or "Precise v2"),
+        "detector_version": "ideal_v3" if ideal_v3 else "precise_v2",
+        "detector_preset": str(_config_value(config, "preset_name", default="Ideal v3" if ideal_v3 else "Precise v2") or ("Ideal v3" if ideal_v3 else "Precise v2")),
         "detector_config_fingerprint": _sheet_metadata_config_fingerprint(config),
         "width_pt": max_x,
         "height_pt": max_y,
@@ -4663,8 +4873,34 @@ def sheetmeta_data(req: dict) -> dict:
     return _sheetmeta_data_legacy(req)
 
 
+def sheetmeta_batch_data(req: dict) -> dict:
+    pdf = str(req.get("pdf") or "")
+    pages = req.get("pages") or []
+    config = req.get("sheet_metadata_config") or {}
+    results: list[dict] = []
+    for value in pages:
+        page_index = int(value)
+        item = sheetmeta_data({
+            "pdf": pdf,
+            "page": page_index,
+            "sheet_metadata_config": config,
+            "crop_template": req.get("crop_template"),
+        })
+        results.append({
+            "page": page_index,
+            "ok": bool(item.get("ok")),
+            "error": str(item.get("error") or ""),
+            "metadata": item.get("metadata"),
+        })
+    return {"ok": True, "results": results}
+
+
 def sheetmeta(input_path: str, output_path: str) -> None:
     _write_json(output_path, sheetmeta_data(_load_json(input_path)))
+
+
+def sheetmeta_batch(input_path: str, output_path: str) -> None:
+    _write_json(output_path, sheetmeta_batch_data(_load_json(input_path)))
 
 
 def _similar_text_key(value: str) -> str:
@@ -4936,6 +5172,8 @@ def worker_loop() -> int:
                 response = trace_layer_data(req)
             elif action == "sheetmeta":
                 response = sheetmeta_data(req)
+            elif action == "sheetmeta_batch":
+                response = sheetmeta_batch_data(req)
             elif action == "similartext":
                 response = similar_text_data(req)
             elif action == "pdftakeoffs":
@@ -4962,8 +5200,8 @@ def main() -> int:
     if len(sys.argv) == 2 and sys.argv[1] == "worker":
         return worker_loop()
 
-    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "textrects", "fillrects", "layertrace", "sheetmeta", "similartext", "pdftakeoffs", "pdftakeoffclean"}:
-        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|textrects|fillrects|layertrace|sheetmeta|similartext|pdftakeoffs|pdftakeoffclean|worker> input.json output.json", file=sys.stderr)
+    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "textrects", "fillrects", "layertrace", "sheetmeta", "sheetmeta_batch", "similartext", "pdftakeoffs", "pdftakeoffclean"}:
+        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|textrects|fillrects|layertrace|sheetmeta|sheetmeta_batch|similartext|pdftakeoffs|pdftakeoffclean|worker> input.json output.json", file=sys.stderr)
         return 2
     try:
         if sys.argv[1] == "render":
@@ -4980,6 +5218,8 @@ def main() -> int:
             _write_json(sys.argv[3], fill_rects_data(_load_json(sys.argv[2])))
         elif sys.argv[1] == "layertrace":
             _write_json(sys.argv[3], trace_layer_data(_load_json(sys.argv[2])))
+        elif sys.argv[1] == "sheetmeta_batch":
+            sheetmeta_batch(sys.argv[2], sys.argv[3])
         elif sys.argv[1] == "similartext":
             similar_text(sys.argv[2], sys.argv[3])
         elif sys.argv[1] == "pdftakeoffs":

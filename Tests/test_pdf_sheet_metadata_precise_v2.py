@@ -178,7 +178,66 @@ class PreciseSheetMetadataTests(unittest.TestCase):
         helper._DOC_LAYER_STATES.clear()
         helper._DL_CACHE.clear()
         helper._SHEET_INDEX_CACHE.clear()
+        helper._SHEET_INDEX_V3_CACHE.clear()
         self.temp.cleanup()
+
+    def test_ideal_v3_reads_multi_column_index_and_batch(self) -> None:
+        pdf = Path(self.temp.name) / "multi-column-index.pdf"
+        doc = fitz.open()
+        index = doc.new_page(width=792, height=612)
+        index.insert_text((40, 40), "SHEET INDEX", fontsize=14, fontname="helv")
+        index.insert_text((45, 90), "G001", fontsize=10, fontname="helv")
+        index.insert_text((100, 90), "GENERAL INFORMATION", fontsize=10, fontname="helv")
+        index.insert_text((410, 90), "A101", fontsize=10, fontname="helv")
+        index.insert_text((465, 90), "FIRST FLOOR PLAN", fontsize=10, fontname="helv")
+        general = _add_sheet_page(doc, "G001", "WRONG BODY HEADING")
+        floor = _add_sheet_page(doc, "A101", "WRONG BODY HEADING")
+        doc.save(pdf)
+        doc.close()
+
+        config = _precise_config(detector_mode="IdealV3", preset_name="Ideal v3")
+        result = helper.sheetmeta_batch_data({
+            "pdf": str(pdf),
+            "pages": [general, floor],
+            "sheet_metadata_config": config,
+        })
+        self.assertTrue(result["ok"])
+        self.assertEqual(2, len(result["results"]))
+        metadata = [item["metadata"] for item in result["results"]]
+        self.assertEqual(["GENERAL INFORMATION", "FIRST FLOOR PLAN"], [item["sheet_title"] for item in metadata])
+        self.assertTrue(all(item["title_source"] == "sheet_index" for item in metadata))
+        self.assertTrue(all(item["detector_version"] == "ideal_v3" for item in metadata))
+
+    def test_ideal_v3_saved_title_region_beats_generic_title_block(self) -> None:
+        pdf = Path(self.temp.name) / "saved-layout-region.pdf"
+        doc = fitz.open()
+        page = doc.new_page(width=792, height=612)
+        page.insert_text((650, 450), "A201", fontsize=20, fontname="helv")
+        page.insert_text((500, 500), "SECOND FLOOR PLAN", fontsize=15, fontname="helv")
+        page.insert_text((650, 550), "UNRELATED FOOTER", fontsize=14, fontname="helv")
+        page.insert_text((500, 570), '1/8" = 1\'-0"', fontsize=12, fontname="helv")
+        doc.save(pdf)
+        doc.close()
+
+        config = _precise_config(detector_mode="IdealV3", preset_name="Ideal v3")
+        result = helper.sheetmeta_data({
+            "pdf": str(pdf),
+            "page": 0,
+            "sheet_metadata_config": config,
+            "crop_template": {
+                "page_width_pt": 792,
+                "page_height_pt": 612,
+                "sheet_number_rect": {"left": 640, "top": 425, "right": 730, "bottom": 470},
+                "sheet_title_rect": {"left": 480, "top": 475, "right": 720, "bottom": 525},
+                "scale_rect": {"left": 480, "top": 545, "right": 640, "bottom": 590},
+            },
+        })
+        metadata = result["metadata"]
+        self.assertEqual("A201", metadata["sheet_label"])
+        self.assertEqual("SECOND FLOOR PLAN", metadata["sheet_title"])
+        self.assertEqual("layout_template", metadata["title_source"])
+        self.assertEqual('1/8" = 1\'0"', metadata["scale_text"])
+        self.assertEqual("layout_template", metadata["scale_source"])
 
     def test_legacy_requests_remain_on_exact_legacy_shape(self) -> None:
         no_config = _metadata(self.pdf, self.pages["floor"])

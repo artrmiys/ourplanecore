@@ -15,6 +15,7 @@ public sealed class PdfMetadataCropTemplateDialog : Window
     private enum CropRole
     {
         SheetNumber,
+        SheetTitle,
         Scale,
     }
 
@@ -24,6 +25,7 @@ public sealed class PdfMetadataCropTemplateDialog : Window
     private readonly Canvas _canvas;
     private readonly ScrollViewer _scrollViewer;
     private readonly WpfRectangle _sheetNumberOutline;
+    private readonly WpfRectangle _sheetTitleOutline;
     private readonly WpfRectangle _scaleOutline;
     private readonly WpfRectangle _dragOutline;
     private TextBlock _status = null!;
@@ -33,6 +35,7 @@ public sealed class PdfMetadataCropTemplateDialog : Window
     private double _panHorizontalStart;
     private double _panVerticalStart;
     private SKRect? _sheetNumberRect;
+    private SKRect? _sheetTitleRect;
     private SKRect? _scaleRect;
 
     public PdfSheetMetadataCropTemplate CropTemplate { get; private set; } = new();
@@ -50,11 +53,13 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         {
             if (HasRegion(existingTemplate.SheetNumberRect))
                 _sheetNumberRect = PdfSheetMetadataCropService.RectFromRegion(existingTemplate.SheetNumberRect);
+            if (HasRegion(existingTemplate.SheetTitleRect))
+                _sheetTitleRect = PdfSheetMetadataCropService.RectFromRegion(existingTemplate.SheetTitleRect);
             if (HasRegion(existingTemplate.ScaleRect))
                 _scaleRect = PdfSheetMetadataCropService.RectFromRegion(existingTemplate.ScaleRect);
         }
 
-        Title = "AI Fill Crop Hints";
+        Title = "Sheet Metadata Layout Regions";
         Width = 1120;
         Height = 780;
         MinWidth = 760;
@@ -96,10 +101,12 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         host.Children.Add(_canvas);
 
         _sheetNumberOutline = BuildOutline(Brushes.DeepSkyBlue);
+        _sheetTitleOutline = BuildOutline(Brushes.MediumPurple);
         _scaleOutline = BuildOutline(Brushes.Orange);
         _dragOutline = BuildOutline(Brushes.LimeGreen);
         _dragOutline.Visibility = Visibility.Collapsed;
         _canvas.Children.Add(_sheetNumberOutline);
+        _canvas.Children.Add(_sheetTitleOutline);
         _canvas.Children.Add(_scaleOutline);
         _canvas.Children.Add(_dragOutline);
 
@@ -132,7 +139,7 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
         panel.Children.Add(new TextBlock
         {
-            Text = "Draw crop boxes on the representative sheet. Left-drag draws a crop; right-drag or middle-drag moves the sheet.",
+            Text = "Draw reusable Sheet #, Sheet Title, and Scale regions on a representative sheet. Left-drag draws; right/middle-drag pans.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 6),
         });
@@ -151,6 +158,19 @@ public sealed class PdfMetadataCropTemplateDialog : Window
             UpdateStatus();
         };
         tools.Children.Add(sheet);
+
+        var title = new RadioButton
+        {
+            Content = "Sheet Title",
+            Margin = new Thickness(0, 0, 12, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        title.Checked += (_, _) =>
+        {
+            _activeRole = CropRole.SheetTitle;
+            UpdateStatus();
+        };
+        tools.Children.Add(title);
 
         var scale = new RadioButton
         {
@@ -189,6 +209,8 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         {
             if (_activeRole == CropRole.SheetNumber)
                 _sheetNumberRect = null;
+            else if (_activeRole == CropRole.SheetTitle)
+                _sheetTitleRect = null;
             else
                 _scaleRect = null;
 
@@ -201,6 +223,7 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         clearAll.Click += (_, _) =>
         {
             _sheetNumberRect = null;
+            _sheetTitleRect = null;
             _scaleRect = null;
             RenderOutlines();
             UpdateStatus();
@@ -265,6 +288,8 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         SKRect pdfRect = PixelRectToPdfRect(pixelRect);
         if (_activeRole == CropRole.SheetNumber)
             _sheetNumberRect = pdfRect;
+        else if (_activeRole == CropRole.SheetTitle)
+            _sheetTitleRect = pdfRect;
         else
             _scaleRect = pdfRect;
 
@@ -361,9 +386,9 @@ public sealed class PdfMetadataCropTemplateDialog : Window
 
     private void Accept()
     {
-        if (_sheetNumberRect == null && _scaleRect == null)
+        if (_sheetNumberRect == null && _sheetTitleRect == null && _scaleRect == null)
         {
-            MessageBox.Show(this, "Draw at least one crop box before saving.", "AI Fill Crop Hints",
+            MessageBox.Show(this, "Draw at least one crop box before saving.", "Sheet Metadata Layout Regions",
                             MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -377,6 +402,9 @@ public sealed class PdfMetadataCropTemplateDialog : Window
             SheetNumberRect = _sheetNumberRect == null
                 ? new PdfSheetMetadataCropRegion()
                 : PdfSheetMetadataCropService.RegionFromRect(_sheetNumberRect.Value),
+            SheetTitleRect = _sheetTitleRect == null
+                ? new PdfSheetMetadataCropRegion()
+                : PdfSheetMetadataCropService.RegionFromRect(_sheetTitleRect.Value),
             ScaleRect = _scaleRect == null
                 ? new PdfSheetMetadataCropRegion()
                 : PdfSheetMetadataCropService.RegionFromRect(_scaleRect.Value),
@@ -387,6 +415,7 @@ public sealed class PdfMetadataCropTemplateDialog : Window
     private void RenderOutlines()
     {
         RenderOutline(_sheetNumberOutline, _sheetNumberRect);
+        RenderOutline(_sheetTitleOutline, _sheetTitleRect);
         RenderOutline(_scaleOutline, _scaleRect);
     }
 
@@ -404,10 +433,16 @@ public sealed class PdfMetadataCropTemplateDialog : Window
 
     private void UpdateStatus()
     {
-        string active = _activeRole == CropRole.SheetNumber ? "sheet number" : "scale";
+        string active = _activeRole switch
+        {
+            CropRole.SheetNumber => "sheet number",
+            CropRole.SheetTitle => "sheet title",
+            _ => "scale",
+        };
         string sheet = _sheetNumberRect == null ? "sheet # missing" : "sheet # set";
+        string title = _sheetTitleRect == null ? "title missing" : "title set";
         string scale = _scaleRect == null ? "scale missing" : "scale set";
-        _status.Text = $"Active: {active}. {sheet}; {scale}. Left-drag draws; right/middle-drag pans; Shift+wheel scrolls sideways.";
+        _status.Text = $"Active: {active}. {sheet}; {title}; {scale}. Left-drag draws; right/middle-drag pans; Shift+wheel scrolls sideways.";
     }
 
     private SKRect PixelRectToPdfRect(Rect pixel)

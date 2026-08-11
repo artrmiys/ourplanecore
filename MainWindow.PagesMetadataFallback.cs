@@ -367,12 +367,9 @@ public partial class MainWindow
 
     private void ConfigurePdfMetadataCropHints()
     {
-        if (!RequireModule(ModuleId.Ai, "AI Fill crop hints"))
-            return;
-
         if (_currentJob == null)
         {
-            TxtStatus.Text = "Open a job before AI Fill crop hints.";
+            TxtStatus.Text = "Open a job before sheet metadata layout regions.";
             return;
         }
 
@@ -382,13 +379,13 @@ public partial class MainWindow
 
         if (page == null)
         {
-            PostStatusInfo("Open or select a PDF sheet before configuring AI Fill crop hints.");
+            PostStatusInfo("Open or select a PDF sheet before configuring metadata layout regions.");
             return;
         }
 
         PdfSheetMetadataCropTemplate? template = ShowPdfMetadataCropTemplateDialog(page, showSavedMessage: true);
         if (template != null)
-            TxtStatus.Text = $"AI Fill crop hints saved from {page.Name}.";
+            TxtStatus.Text = $"Sheet # / Title / Scale layout regions saved from {page.Name}.";
     }
 
     private PdfSheetMetadataCropTemplate? LoadOrOfferPdfMetadataCropTemplate(IReadOnlyList<PageInfo> pages)
@@ -408,7 +405,7 @@ public partial class MainWindow
 
         MessageBoxResult answer = MessageBox.Show(
             $"AI Fill still needs help on {fallbackPages.Count} sheet(s)." + Environment.NewLine +
-            "Do you want to pick one representative sheet and draw crop boxes for the sheet number and scale?",
+            "Do you want to pick one representative sheet and draw crop boxes for the sheet number, title, and scale?",
             "AI Fill Crop Hints",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
@@ -460,7 +457,7 @@ public partial class MainWindow
         PdfSheetMetadataCropService.SaveTemplate(_currentJob, dialog.CropTemplate);
         if (showSavedMessage)
         {
-            PostStatusInfo($"Saved crop hints for AI Fill: {PdfSheetMetadataCropService.TemplatePath(_currentJob)}");
+            PostStatusInfo($"Saved metadata layout regions for this job: {PdfSheetMetadataCropService.TemplatePath(_currentJob)}");
         }
 
         return dialog.CropTemplate;

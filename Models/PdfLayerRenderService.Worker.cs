@@ -50,8 +50,18 @@ public static partial class PdfLayerRenderService
         try
         {
             Directory.CreateDirectory(tempDir);
-            return TryInvokeWorker(action, request, out response, out error) ||
-                   TryRunFileCommand(action, request, inputPath, outputPath, out response, out error);
+            if (TryInvokeWorker(action, request, out response, out error))
+                return true;
+
+            string workerError = error;
+            bool fallbackOk = TryRunFileCommand(action, request, inputPath, outputPath, out response, out error);
+            if (string.Equals(action, "sheetmeta_batch", StringComparison.Ordinal))
+            {
+                AppLog.Info(
+                    $"PyMuPDF sheetmeta_batch worker fallback; worker_error={workerError}; " +
+                    $"file_ok={fallbackOk}; file_error={error}");
+            }
+            return fallbackOk;
         }
         catch (Exception ex)
         {
@@ -307,20 +317,34 @@ public static partial class PdfLayerRenderService
             .ConfigureAwait(false);
         await input.FlushAsync().ConfigureAwait(false);
 
-        // 30s bounds how long one stuck render can hold a worker; raising
-        // it (tried 120s) lets a single heavy request starve every queued
-        // interactive render behind it, which reads as long-lasting blur.
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        string? line = await output.ReadLineAsync(timeout.Token).ConfigureAwait(false);
+        // Interactive actions keep the proven 30s bound. A user-started metadata
+        // batch may intentionally cover up to 128 pages in one warm document.
+        double timeoutSeconds = string.Equals(action, "sheetmeta_batch", StringComparison.Ordinal)
+            ? 60
+            : 30;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        for (int ignoredLines = 0; ignoredLines < 8; ignoredLines++)
+        {
+            string? line = await output.ReadLineAsync(timeout.Token).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(line))
+                return (false, default, "PyMuPDF worker stopped unexpectedly.", true);
 
-        if (string.IsNullOrWhiteSpace(line))
-            return (false, default, "PyMuPDF worker stopped unexpectedly.", true);
+            try
+            {
+                var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, WorkerJsonOptions);
+                if (workerResponse != null && workerResponse.Id == id)
+                    return (true, workerResponse.Response, "", false);
+                if (workerResponse != null)
+                    return (false, default, "PyMuPDF worker response id mismatch.", true);
+            }
+            catch (JsonException)
+            {
+                // MuPDF can write a one-line parser diagnostic to stdout before
+                // the protocol response. Ignore only a small bounded number.
+            }
+        }
 
-        var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, WorkerJsonOptions);
-        if (workerResponse == null || workerResponse.Id != id)
-            return (false, default, "PyMuPDF worker returned an invalid response.", true);
-
-        return (true, workerResponse.Response, "", false);
+        return (false, default, "PyMuPDF worker returned no matching response.", true);
     }
 
     private static bool EnsureWorker(WorkerRole role, out string error)
@@ -392,9 +416,9 @@ public static partial class PdfLayerRenderService
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
-            StandardInputEncoding = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
+            StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
         };
         BundledPythonRuntime.ConfigureEnvironment(psi, pythonExecutable);
         psi.ArgumentList.Add("-u");

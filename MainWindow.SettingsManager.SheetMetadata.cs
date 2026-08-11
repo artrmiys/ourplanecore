@@ -79,17 +79,22 @@ public partial class MainWindow
         var panel = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
         panel.Children.Add(MgrButton("Reset", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildDefault(), "Reset to built-in legacy defaults.")));
         panel.Children.Add(MgrButton("Legacy", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildLegacy(), "Loaded Legacy preset.")));
-        panel.Children.Add(MgrButton("Precise v2", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildPreciseV2(), "Loaded recommended Precise v2 preset."), primary: true));
+        panel.Children.Add(MgrButton("Precise v2", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildPreciseV2(), "Loaded Precise v2 preset.")));
+        panel.Children.Add(MgrButton("Ideal v3", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildIdealV3(), "Loaded recommended Ideal v3 preset."), primary: true));
         panel.Children.Add(MgrButton("Save Global", (_, _) => SaveSheetMetadataConfig(saveForJob: false)));
         panel.Children.Add(MgrButton("Save This Job", (_, _) => SaveSheetMetadataConfig(saveForJob: true)));
         panel.Children.Add(MgrButton("Clear Job Override", (_, _) => ClearSheetMetadataJobOverride()));
         panel.Children.Add(MgrButton("Apply selected scope...", ApplySheetMetadataSettingsToSelection, primary: true));
+        panel.Children.Add(MgrButton("Force reanalyze selected...", ForceReanalyzeSheetMetadataSelection));
+        panel.Children.Add(MgrButton("Edit layout regions...", (_, _) => ConfigurePdfMetadataCropHints()));
+        panel.Children.Add(MgrButton("Save layout Global", (_, _) => SaveSheetMetadataLayoutGlobally()));
+        panel.Children.Add(MgrButton("Reset job layout", (_, _) => ResetSheetMetadataJobLayout()));
 
         var root = new StackPanel();
         root.Children.Add(Header("Deterministic Auto Name / Scale policy"));
         root.Children.Add(new TextBlock
         {
-            Text = "Legacy reproduces current behavior. Precise v2 preserves reviewed values, uses stronger evidence, and previews import results. Save globally or override only this job.",
+            Text = "Legacy reproduces current behavior. Precise v2 keeps the existing accurate detector. Ideal v3 adds batched analysis, persistent freshness cache, and layout-aware sheet-index titles. Save globally or override only this job.",
             TextWrapping = TextWrapping.Wrap,
             Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
             Margin = new Thickness(0, 0, 0, 6),
@@ -364,16 +369,22 @@ public partial class MainWindow
         if (string.Equals(_sheetMetadataConfig.PresetName, SheetMetadataConfig.LegacyPresetName, StringComparison.OrdinalIgnoreCase) &&
             !_sheetMetadataConfig.HasSameBehaviorAs(SheetMetadataConfig.BuildLegacy()))
         {
-            _sheetMetadataConfig.PresetName = _sheetMetadataConfig.DetectorMode == SheetMetadataDetectorMode.Legacy
-                ? "Custom Legacy"
-                : "Custom Precise v2";
+            _sheetMetadataConfig.PresetName = CustomSheetMetadataPresetName(_sheetMetadataConfig.DetectorMode);
         }
         else if (string.Equals(_sheetMetadataConfig.PresetName, SheetMetadataConfig.PreciseV2PresetName, StringComparison.OrdinalIgnoreCase) &&
                  !_sheetMetadataConfig.HasSameBehaviorAs(SheetMetadataConfig.BuildPreciseV2()))
         {
-            _sheetMetadataConfig.PresetName = _sheetMetadataConfig.DetectorMode == SheetMetadataDetectorMode.Legacy
-                ? "Custom Legacy"
-                : "Custom Precise v2";
+            _sheetMetadataConfig.PresetName = CustomSheetMetadataPresetName(_sheetMetadataConfig.DetectorMode);
+        }
+        else if (string.Equals(_sheetMetadataConfig.PresetName, SheetMetadataConfig.IdealV3PresetName, StringComparison.OrdinalIgnoreCase) &&
+                 !_sheetMetadataConfig.HasSameBehaviorAs(SheetMetadataConfig.BuildIdealV3()))
+        {
+            _sheetMetadataConfig.PresetName = _sheetMetadataConfig.DetectorMode switch
+            {
+                SheetMetadataDetectorMode.Legacy => "Custom Legacy",
+                SheetMetadataDetectorMode.PreciseV2 => "Custom Precise v2",
+                _ => "Custom Ideal v3",
+            };
         }
     }
 
@@ -383,6 +394,46 @@ public partial class MainWindow
         BindSheetMetadataSettings();
         ShowSheetMetadataStatus(status + " Save or Apply to activate it.");
     }
+
+    private void SaveSheetMetadataLayoutGlobally()
+    {
+        if (_currentJob == null)
+        {
+            ShowSheetMetadataStatus("Open a job and edit its layout regions before saving them globally.");
+            return;
+        }
+
+        PdfSheetMetadataCropTemplate? template = PdfSheetMetadataCropService.LoadJobTemplate(_currentJob);
+        if (!PdfSheetMetadataCropService.HasUsableTemplate(template))
+        {
+            ShowSheetMetadataStatus("This job has no layout override. Click Edit layout regions first.");
+            return;
+        }
+
+        PdfSheetMetadataCropService.SaveGlobalTemplate(template!);
+        ShowSheetMetadataStatus("Saved Sheet # / Title / Scale layout regions as the global default.");
+    }
+
+    private void ResetSheetMetadataJobLayout()
+    {
+        if (_currentJob == null)
+        {
+            ShowSheetMetadataStatus("Open a job before resetting its layout override.");
+            return;
+        }
+
+        bool cleared = PdfSheetMetadataCropService.ClearJobTemplate(_currentJob);
+        ShowSheetMetadataStatus(cleared
+            ? "Cleared this-job layout override; the global layout (if any) is now active."
+            : "Could not clear this-job layout override.");
+    }
+
+    private static string CustomSheetMetadataPresetName(SheetMetadataDetectorMode mode) => mode switch
+    {
+        SheetMetadataDetectorMode.Legacy => "Custom Legacy",
+        SheetMetadataDetectorMode.PreciseV2 => "Custom Precise v2",
+        _ => "Custom Ideal v3",
+    };
 
     private void SaveSheetMetadataConfig(bool saveForJob)
     {
@@ -449,6 +500,40 @@ public partial class MainWindow
             },
             "Auto Name + Scale failed.",
             "Auto Name + Scale");
+    }
+
+    private async void ForceReanalyzeSheetMetadataSelection(object sender, RoutedEventArgs e)
+    {
+        SyncSheetMetadataFromUi();
+        if (!TryValidateSheetMetadataConfig(out string validationError))
+        {
+            ShowSheetMetadataStatus(validationError);
+            return;
+        }
+
+        SheetMetadataConfig previous = SheetMetadataRulesService.Active.Clone();
+        SheetMetadataRulesService.Install(_sheetMetadataConfig);
+        await RunAsyncUiHandler(
+            async () =>
+            {
+                try
+                {
+                    if (GetSelectedPdfAutomationTarget("Force Reanalyze") is { } item)
+                    {
+                        await AnalyzePdfMetadataAsync(
+                            item,
+                            applyRename: true,
+                            applyScale: true,
+                            forceReanalyze: true);
+                    }
+                }
+                finally
+                {
+                    SheetMetadataRulesService.Install(previous);
+                }
+            },
+            "Force sheet reanalysis failed.",
+            "Force Reanalyze");
     }
 
     private void AddSuffixRule()
@@ -572,7 +657,7 @@ public partial class MainWindow
 
     private void UpdateSheetMetadataDetectorUiState()
     {
-        bool precise = _sheetDetectorModeBox?.SelectedItem is SheetMetadataDetectorMode.PreciseV2;
+        bool precise = _sheetDetectorModeBox?.SelectedItem is SheetMetadataDetectorMode.PreciseV2 or SheetMetadataDetectorMode.IdealV3;
         foreach (FrameworkElement? element in new FrameworkElement?[]
         {
             _sheetIndexEvidenceBox,
@@ -596,7 +681,7 @@ public partial class MainWindow
         if (_sheetDetectorModeNote != null)
         {
             _sheetDetectorModeNote.Text = precise
-                ? "PreciseV2 uses the editable evidence, suffix, override, and scale rules below."
+                ? "PreciseV2 and IdealV3 use the editable evidence, suffix, override, and scale rules below. IdealV3 also reuses unchanged analysis."
                 : "Legacy detection is fixed for exact compatibility. Import policy and preservation remain editable; switch the engine to PreciseV2 to edit detector rules.";
         }
     }
@@ -604,7 +689,7 @@ public partial class MainWindow
     private bool TryValidateSheetMetadataConfig(out string error)
     {
         error = "";
-        if (_sheetMetadataConfig.DetectorMode != SheetMetadataDetectorMode.PreciseV2)
+        if (_sheetMetadataConfig.DetectorMode == SheetMetadataDetectorMode.Legacy)
             return true;
 
         foreach (SheetSuffixRule rule in _sheetMetadataConfig.SuffixRules.Where(rule => rule.Enabled))

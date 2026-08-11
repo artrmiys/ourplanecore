@@ -11,7 +11,7 @@ namespace OurPlanCore;
 public sealed class PdfSheetMetadataCropTemplate
 {
     [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     [JsonPropertyName("source_page_name")]
     public string SourcePageName { get; set; } = "";
@@ -27,6 +27,9 @@ public sealed class PdfSheetMetadataCropTemplate
 
     [JsonPropertyName("sheet_number_rect")]
     public PdfSheetMetadataCropRegion SheetNumberRect { get; set; } = new();
+
+    [JsonPropertyName("sheet_title_rect")]
+    public PdfSheetMetadataCropRegion SheetTitleRect { get; set; } = new();
 
     [JsonPropertyName("scale_rect")]
     public PdfSheetMetadataCropRegion ScaleRect { get; set; } = new();
@@ -81,9 +84,22 @@ public static class PdfSheetMetadataCropService
     public static string TemplatePath(OurPlanCoreJob job) =>
         Path.Combine(job.AIContextRoot, "sheet_metadata_crop_template.json");
 
+    public static string GlobalTemplatePath() =>
+        Path.Combine(SmartContextStore.GlobalRoot, "presets", "sheet_metadata_crop_template.json");
+
     public static PdfSheetMetadataCropTemplate? LoadTemplate(OurPlanCoreJob job)
     {
-        string path = TemplatePath(job);
+        return LoadTemplateFromPath(TemplatePath(job)) ?? LoadTemplateFromPath(GlobalTemplatePath());
+    }
+
+    public static PdfSheetMetadataCropTemplate? LoadJobTemplate(OurPlanCoreJob job) =>
+        LoadTemplateFromPath(TemplatePath(job));
+
+    public static PdfSheetMetadataCropTemplate? LoadGlobalTemplate() =>
+        LoadTemplateFromPath(GlobalTemplatePath());
+
+    private static PdfSheetMetadataCropTemplate? LoadTemplateFromPath(string path)
+    {
         if (!File.Exists(path))
             return null;
 
@@ -101,14 +117,43 @@ public static class PdfSheetMetadataCropService
     public static void SaveTemplate(OurPlanCoreJob job, PdfSheetMetadataCropTemplate template)
     {
         string path = TemplatePath(job);
+        SaveTemplateToPath(path, template, job.AIContextRoot);
+    }
+
+    public static void SaveGlobalTemplate(PdfSheetMetadataCropTemplate template) =>
+        SaveTemplateToPath(GlobalTemplatePath(), template, SmartContextStore.GlobalRoot);
+
+    public static bool ClearJobTemplate(OurPlanCoreJob job)
+    {
+        string path = TemplatePath(job);
+        if (!File.Exists(path))
+            return true;
+        JobWriteAccess.Demand(path, "clear sheet-metadata crop template");
+        try
+        {
+            File.Delete(path);
+            return !File.Exists(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warn(ex, $"Sheet metadata crop template could not be cleared from {path}");
+            return false;
+        }
+    }
+
+    private static void SaveTemplateToPath(
+        string path,
+        PdfSheetMetadataCropTemplate template,
+        string fallbackDirectory)
+    {
         JobWriteAccess.Demand(path, "save sheet-metadata crop template");
         string now = DateTime.UtcNow.ToString("O");
-        template.SchemaVersion = 1;
+        template.SchemaVersion = 2;
         if (string.IsNullOrWhiteSpace(template.CreatedAtUtc))
             template.CreatedAtUtc = now;
         template.UpdatedAtUtc = now;
 
-        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? fallbackDirectory);
         try
         {
             IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(template, JsonOptions));
@@ -121,7 +166,9 @@ public static class PdfSheetMetadataCropService
 
     public static bool HasUsableTemplate(PdfSheetMetadataCropTemplate? template) =>
         template != null &&
-        (IsUsableRegion(template.SheetNumberRect) || IsUsableRegion(template.ScaleRect));
+        (IsUsableRegion(template.SheetNumberRect) ||
+         IsUsableRegion(template.SheetTitleRect) ||
+         IsUsableRegion(template.ScaleRect));
 
     public static PdfSheetMetadataCropRegion RegionFromRect(SKRect rect) =>
         new()
@@ -162,6 +209,12 @@ public static class PdfSheetMetadataCropService
         var saved = new List<PdfSheetMetadataSavedCrop>();
         if (IsUsableRegion(template.SheetNumberRect) &&
             TrySaveNamedCrop(render, RectFromRegion(template.SheetNumberRect), cropsRoot, filePrefix, "sheet_number", saved, out error) == false)
+        {
+            return false;
+        }
+
+        if (IsUsableRegion(template.SheetTitleRect) &&
+            TrySaveNamedCrop(render, RectFromRegion(template.SheetTitleRect), cropsRoot, filePrefix, "sheet_title", saved, out error) == false)
         {
             return false;
         }

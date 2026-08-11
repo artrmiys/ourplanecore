@@ -3,6 +3,18 @@ using OurPlanCore.Controls;
 
 internal static class PdfSheetMetadataWorkflowTests
 {
+    public static void TreeNameIsShortLowercaseAndNeverAppendsTitle()
+    {
+        var metadata = new PdfSheetMetadata
+        {
+            SheetKey = "G001",
+            SheetTitle = "GENERAL NOTES AND CODE SUMMARY",
+            Suffix = "N",
+        };
+
+        AssertEqual("g001 n", metadata.ProposedPageName(), "tree name must contain only lowercase sheet key and suffix");
+    }
+
     public static void PrecisePolicyPreservesExistingCompoundSuffix()
     {
         SheetMetadataConfig config = SheetMetadataConfig.BuildPreciseV2();
