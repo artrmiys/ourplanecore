@@ -392,6 +392,7 @@ var tests = new List<(string Name, Action Run)>
     ("job write gate direct storage mutations demand adjacent access", JobWriteAccessTests.DirectStorageMutationsHaveAdjacentWriteDemand),
     ("job write gate concurrent demands share normalized mode", JobWriteAccessTests.ConcurrentDemandsObserveOneNormalizedMode),
     ("job lease main window does not use legacy recovery lock", JobLeaseIntegrationRegressionTests.LegacyRecoveryLockIsNotUsedByMainWindow),
+    ("job lease heartbeat uses durable atomic write", JobLeaseIntegrationRegressionTests.LeaseHeartbeatUsesDurableAtomicWrite),
     ("job lease window close releases current access", JobLeaseIntegrationRegressionTests.WindowCloseReleasesCurrentJobAccess),
     ("job lease read-only window close skips job saves", JobLeaseIntegrationRegressionTests.ReadOnlyWindowCloseSkipsJobSaves),
     ("job lease read-only bookmarks block mutations and keep open", JobLeaseIntegrationRegressionTests.ReadOnlyBookmarksBlockMutationsButKeepOpenAvailable),

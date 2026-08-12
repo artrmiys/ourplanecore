@@ -122,7 +122,9 @@ internal sealed class JobLeaseFileStore : IJobLeaseStore
         if (!string.IsNullOrWhiteSpace(validationError))
             throw new InvalidDataException(validationError);
 
-        IoUtil.WriteAllTextAtomic(LeasePath(jobRoot), JsonSerializer.Serialize(lease, JsonOptions));
+        IoUtil.WriteStreamAtomic(
+            LeasePath(jobRoot),
+            stream => JsonSerializer.Serialize(stream, lease, JsonOptions));
     }
 
     public void Delete(string jobRoot)

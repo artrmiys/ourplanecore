@@ -12,6 +12,22 @@ internal static class JobLeaseIntegrationRegressionTests
             "MainWindow must not write the legacy non-exclusive recovery lock");
     }
 
+    public static void LeaseHeartbeatUsesDurableAtomicWrite()
+    {
+        string store = File.ReadAllText(RepoFile("Models/JobLeaseFileStore.cs"));
+        string io = File.ReadAllText(RepoFile("Models/IoUtil.cs"));
+
+        AssertTrue(
+            store.Contains("IoUtil.WriteStreamAtomic(", StringComparison.Ordinal),
+            "job lease writes must use the durable atomic stream path");
+        AssertFalse(
+            store.Contains("IoUtil.WriteAllTextAtomic(LeasePath(jobRoot)", StringComparison.Ordinal),
+            "job lease writes must not use the non-durable text path");
+        AssertTrue(
+            io.Contains("output.Flush(flushToDisk: true);", StringComparison.Ordinal),
+            "the durable atomic stream path must flush the lease to disk before replacement");
+    }
+
     public static void WindowCloseReleasesCurrentJobAccess()
     {
         string source = File.ReadAllText(RepoFile("MainWindow.WindowBounds.cs"));
