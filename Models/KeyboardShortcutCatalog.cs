@@ -82,6 +82,7 @@ public static class KeyboardShortcutCatalog
                 Item("Ctrl+C / X / V", "Copy / cut / paste"),
                 Item("Ctrl+D", "Duplicate with the exact name"),
                 Item("Ctrl+Up / Down", "Move page, folder, or legend row"),
+                Item("Ctrl+Z", "Restore the last Pages deletion"),
                 Item("F2", "Rename page or folder"),
                 Item("Delete", "Delete selected page(s) / folder(s)"),
                 Item("Shift+click", "Select a range"),

@@ -45,6 +45,13 @@ public partial class MainWindow
             return;
         }
 
+        if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Z)
+        {
+            TryUndoLastPageDelete();
+            e.Handled = true;
+            return;
+        }
+
         if (PagesTree.SelectedItem is not TreeViewItem item) return;
 
         if (item.Tag is PageTakeoffNode node)
@@ -133,6 +140,15 @@ public partial class MainWindow
     private ContextMenu BuildPagesContextMenu(TreeViewItem item)
     {
         var menu = new ContextMenu();
+
+        if (item.Tag is PageFolderNode or PageInfo)
+        {
+            menu.Items.Add(MakeMenuItem(
+                UndoLastPageDeleteMenuLabel(),
+                CanUndoLastPageDelete(),
+                () => TryUndoLastPageDelete()));
+            menu.Items.Add(new Separator());
+        }
 
         if (item.Tag is PageFolderNode folder)
         {

@@ -195,7 +195,6 @@ public partial class MainWindow
         var result = MessageBox.Show(message, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes) return;
 
-        var deletedNames = entries.Select(e => OurPlanCoreJobStore.DisplayName(e.SourcePath)).ToList();
         var parents = entries
             .Select(e => Path.GetDirectoryName(e.SourcePath) ?? _currentJob?.PagesRoot ?? "")
             .Where(Directory.Exists)
@@ -204,11 +203,12 @@ public partial class MainWindow
         string? selectAfter = parents.FirstOrDefault() ?? _currentJob?.PagesRoot;
         try
         {
-            foreach (var entry in entries)
-                ClearCurrentPageIfAffected(entry.SourcePath);
+            PageDeleteUndoBatch undoBatch = MovePageEntriesToUndoTrash(entries);
+            RememberLastPageDelete(undoBatch);
 
             foreach (var entry in entries)
-                DeleteDirectoryToRecycle(entry.SourcePath);
+                ClearCurrentPageIfAffected(entry.SourcePath);
+            CloseDetachedSheetsForDeletedPages(entries);
 
             if (_pagesClipboard != null && entries.Any(e =>
                     _pagesClipboard.Entries.Any(c =>
@@ -220,8 +220,8 @@ public partial class MainWindow
             _pagesMultiSelection.Clear();
             ReloadPagesTree(selectAfter);
             TxtStatus.Text = entries.Count == 1
-                ? $"Deleted: {deletedNames[0]}"
-                : $"Deleted {entries.Count} items.";
+                ? $"Deleted: {undoBatch.StatusName}. Press Ctrl+Z in Pages to restore."
+                : $"Deleted {entries.Count} items. Press Ctrl+Z in Pages to restore.";
         }
         catch (Exception ex)
         {

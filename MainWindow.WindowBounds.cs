@@ -111,6 +111,9 @@ public partial class MainWindow
             return;
         }
 
+        if (!IsCurrentJobReadOnly)
+            FinalizeLastPageDeleteUndo();
+
         SaveWindowBounds();
         base.OnClosing(e);
     }

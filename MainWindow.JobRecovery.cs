@@ -24,6 +24,7 @@ public partial class MainWindow
             CloseDetachedSheetsForModuleDisable();
             if (!TryFlushTakeoffAutosaves("switch jobs after closing detached sheets"))
                 return false;
+            FinalizeLastPageDeleteUndo();
 
             return true;
         }
