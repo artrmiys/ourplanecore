@@ -37,9 +37,9 @@ public partial class MainWindow
     private void OpenObservationCrop(ObservationDisplayItem item)
     {
         string path = ObservationCropPath(item);
-        if (!File.Exists(path))
+        if (!File.Exists(path) || !ProjectPathSafety.IsSafeImagePath(path))
         {
-            TxtStatus.Text = "AI crop file is missing.";
+            TxtStatus.Text = "AI crop is missing or is not a safe image inside this project.";
             return;
         }
 
@@ -63,7 +63,13 @@ public partial class MainWindow
         if (_currentJob == null || string.IsNullOrWhiteSpace(item.CropRelativePath))
             return "";
 
-        return Path.GetFullPath(Path.Combine(_currentJob.AIContextRoot, item.CropRelativePath));
+        return ProjectPathSafety.TryResolveInside(
+            _currentJob.AIContextRoot,
+            item.CropRelativePath,
+            _currentJob.AIContextRoot,
+            out string path)
+            ? path
+            : "";
     }
 
     private bool CanOpenAiMarkerFile(ObservationDisplayItem item) =>

@@ -266,7 +266,9 @@ public partial class MainWindow
             return;
 
         string path = ResolveAiContextPath(marker.CropPath);
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        if (string.IsNullOrWhiteSpace(path) ||
+            !File.Exists(path) ||
+            !ProjectPathSafety.IsSafeImagePath(path))
         {
             TxtStatus.Text = "AI marker crop file is missing.";
             return;
@@ -286,12 +288,16 @@ public partial class MainWindow
 
         if (!string.IsNullOrWhiteSpace(marker.PageFolder))
         {
-            string folder = Path.IsPathFullyQualified(marker.PageFolder)
-                ? marker.PageFolder
-                : Path.GetFullPath(Path.Combine(_currentJob.RootPath, marker.PageFolder));
-            PageInfo? page = OurPlanCoreJobStore.TryReadPage(folder);
-            if (page != null)
-                return page;
+            if (ProjectPathSafety.TryResolveInside(
+                    _currentJob.RootPath,
+                    marker.PageFolder,
+                    _currentJob.RootPath,
+                    out string folder))
+            {
+                PageInfo? page = OurPlanCoreJobStore.TryReadPage(folder);
+                if (page != null)
+                    return page;
+            }
         }
 
         return FindPageByName(marker.Page);
@@ -302,8 +308,12 @@ public partial class MainWindow
         if (_currentJob == null || string.IsNullOrWhiteSpace(path))
             return "";
 
-        return Path.IsPathFullyQualified(path)
-            ? path
-            : Path.GetFullPath(Path.Combine(_currentJob.AIContextRoot, path));
+        return ProjectPathSafety.TryResolveInside(
+            _currentJob.AIContextRoot,
+            path,
+            _currentJob.AIContextRoot,
+            out string resolved)
+            ? resolved
+            : "";
     }
 }

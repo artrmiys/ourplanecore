@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows;
 
 namespace OurPlanCore;
 
@@ -287,7 +288,8 @@ public partial class MainWindow
         if (RejectReadOnlyViewportMutation("edit markups", reloadAnnotations: true))
             return;
 
-        SaveCurrentPageAnnotations();
+        _currentPageAnnotationsDirty = true;
+        TrySaveCurrentPageAnnotationsFromUi();
     }
 
     private string? RequestPageAnnotationText(string prompt, string initial, string title) =>
@@ -295,18 +297,60 @@ public partial class MainWindow
 
     private void SaveCurrentPageAnnotations()
     {
-        if (_currentPage == null || !_currentPageAnnotationsLoaded || !IsCurrentJobWritable)
+        SaveCurrentPageAnnotationsCore();
+        SaveDirtyDetachedPageAnnotations();
+    }
+
+    private void SaveCurrentPageAnnotationsCore()
+    {
+        if (!_currentPageAnnotationsDirty)
             return;
 
+        if (_currentPage == null || !_currentPageAnnotationsLoaded)
+            throw new InvalidOperationException("The edited sheet annotations are not attached to a loaded page.");
+        if (!IsCurrentJobWritable)
+            throw new InvalidOperationException("The current project is read-only; edited sheet annotations remain unsaved.");
+
+        OurPlanCoreJobStore.SavePageAnnotations(
+            _currentPage.FolderPath,
+            _viewport.GetPageAnnotations());
+        _currentPageAnnotationsDirty = false;
+    }
+
+    private bool TrySaveCurrentPageAnnotationsFromUi()
+    {
         try
         {
-            OurPlanCoreJobStore.SavePageAnnotations(
-                _currentPage.FolderPath,
-                _viewport.GetPageAnnotations());
+            SaveCurrentPageAnnotationsCore();
+            return true;
         }
         catch (Exception ex)
         {
-            TxtStatus.Text = $"Annotation save skipped: {ex.Message}";
+            AppLog.Warn(ex, "Page annotation autosave failed; the in-memory annotation state remains dirty.");
+            TxtStatus.Text = $"Annotation save failed; changes remain pending: {ex.Message}";
+            return false;
+        }
+    }
+
+    private bool TryFlushCurrentPageAnnotationsForNavigation(string operation)
+    {
+        try
+        {
+            SaveCurrentPageAnnotationsCore();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Page annotation save failed before {operation}.");
+            TxtStatus.Text = $"{operation} canceled: annotation changes remain unsaved.";
+            MessageBox.Show(
+                this,
+                $"The current sheet's annotation changes could not be saved, so {operation} was canceled.\n\n" +
+                $"Your changes are still held in the open sheet. Retry after resolving the storage problem.\n\n{ex.Message}",
+                "Annotation Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
         }
     }
 
@@ -317,15 +361,21 @@ public partial class MainWindow
 
         if (reloadAnnotations && _currentPage != null)
         {
-            _viewport.SetPageAnnotations(
-                OurPlanCoreJobStore.LoadPageAnnotations(_currentPage.FolderPath));
+            if (!_currentPageAnnotationsDirty)
+            {
+                _viewport.SetPageAnnotations(
+                    OurPlanCoreJobStore.LoadPageAnnotations(_currentPage.FolderPath));
+                _currentPageAnnotationsDirty = false;
+            }
         }
         else
         {
             LoadTakeoffsForJob();
         }
 
-        TxtStatus.Text = $"Read-only: cannot {operation}.";
+        TxtStatus.Text = _currentPageAnnotationsDirty
+            ? $"Read-only: cannot {operation}; earlier unsaved annotation changes remain in the open sheet."
+            : $"Read-only: cannot {operation}.";
         return true;
     }
 }

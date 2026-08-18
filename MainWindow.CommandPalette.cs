@@ -51,6 +51,7 @@ public partial class MainWindow
         string Shortcut(string sequence) => KeyboardShortcutKeys.EnglishLayoutDisplay(sequence);
 
         Add("file.open", "Open / Import", "File", "Ctrl+O", "Open the job picker. The top toolbar button also contains PDF import.");
+        Add("file.openOurPlan", "Open OurPlan Project", "File", "", "Open a portable .ourplan project file.");
         Add("file.openRecent", "Open Recent Job", "File", "Ctrl+Shift+O", "Open the Recent Jobs picker.");
         Add("file.openJobsFolder", "Open Jobs Folder", "File", "", "Open a root folder that contains multiple jobs.");
         Add("file.newJob", "New PDF Job", "File", "", "Create a new OurPlanCore job from a folder of PDFs.");
@@ -63,6 +64,8 @@ public partial class MainWindow
         Add("file.importPdfTakeoffs", "Import PDF Takeoffs", "File", "", "Create a new job from PDF takeoffs or import PDF rulers/takeoffs into the current job.");
         Add("file.exportPdf", "Export PDF", "File", "", "Export selected/all sheets to a PDF.", hasJob, "Open or create a job first.");
         Add("file.save", "Save", "File", "Ctrl+S", "Save current takeoff data.", hasJob, "Open or create a job first.");
+        Add("file.saveAsOurPlan", "Save As OurPlan Project", "File", "", "Save the active project as one portable .ourplan file.", hasJob, "Open or create a job first.");
+        Add("file.saveLegacyCopy", "Save Legacy Folder Copy", "File", "", "Export a compatible folder copy without changing the active project.", hasJob, "Open or create a job first.");
         Add("file.exportCsv", "Export CSV", "File", "", "Export takeoff rows to CSV.", hasJob, "Open or create a job first.");
         Add("file.exportTxt", "Export TXT", "File", "", "Export selected/all takeoffs in PlanSwift text format.", hasJob, "Open or create a job first.");
         Add("file.exportExcel", "Export Excel", "File", "", "Export selected/all takeoffs to .xlsx columns J/K/L from J10.", hasJob, "Open or create a job first.");
@@ -195,6 +198,7 @@ public partial class MainWindow
         switch (id)
         {
             case "file.open": BtnOpen_Click(this, new RoutedEventArgs()); break;
+            case "file.openOurPlan": OpenOurPlanProjectDialog(); break;
             case "file.openRecent": ShowRecentJobPicker(); break;
             case "file.openJobsFolder": BtnOpenJobsFolder_Click(this, new RoutedEventArgs()); break;
             case "file.newJob": BtnNewJob_Click(this, new RoutedEventArgs()); break;
@@ -207,6 +211,8 @@ public partial class MainWindow
             case "file.importPdfTakeoffs": BtnImportPdfTakeoffs_Click(this, new RoutedEventArgs()); break;
             case "file.exportPdf": BtnExportPdf_Click(this, new RoutedEventArgs()); break;
             case "file.save": BtnSave_Click(this, new RoutedEventArgs()); break;
+            case "file.saveAsOurPlan": SaveAsOurPlanProject(); break;
+            case "file.saveLegacyCopy": SaveLegacyFolderCopy(); break;
             case "file.exportCsv": BtnExportCsv_Click(this, new RoutedEventArgs()); break;
             case "file.exportTxt": BtnExportTxt_Click(this, new RoutedEventArgs()); break;
             case "file.exportExcel": BtnExportExcel_Click(this, new RoutedEventArgs()); break;

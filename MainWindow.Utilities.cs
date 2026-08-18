@@ -46,7 +46,9 @@ public partial class MainWindow
 
     private void TryOpenLastJobFromSettings()
     {
-        if (string.IsNullOrWhiteSpace(_settings.LastJobPath) || !Directory.Exists(_settings.LastJobPath))
+        if (string.IsNullOrWhiteSpace(_settings.LastJobPath) ||
+            (!Directory.Exists(_settings.LastJobPath) &&
+             !OurPlanPackageFormat.HasPackageExtension(_settings.LastJobPath)))
         {
             ShowStartupJobPickerIfUseful();
             return;
@@ -54,9 +56,13 @@ public partial class MainWindow
 
         try
         {
-            if (!OpenJob(_settings.LastJobPath, initialPageFolder: _settings.LastPageFolder))
+            if (!OpenProjectPathSafely(_settings.LastJobPath, initialPageFolder: _settings.LastPageFolder))
+            {
+                ShowStartupJobPickerIfUseful();
                 return;
-            TxtStatus.Text = $"Loaded last job: {_currentJob?.Name}. Select a page to render it.";
+            }
+            if (_currentPackageSession?.IsRecoverySession != true)
+                TxtStatus.Text = $"Loaded last job: {_currentJob?.Name}. Select a page to render it.";
         }
         catch (Exception ex)
         {

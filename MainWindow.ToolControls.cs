@@ -386,13 +386,19 @@ public partial class MainWindow
         {
             _pagesWithHiddenRulers.Add(pageKey);
             if (_viewport.HideVisibleRulerAnnotationsOnActivePage())
-                SaveCurrentPageAnnotations();
+            {
+                _currentPageAnnotationsDirty = true;
+                TrySaveCurrentPageAnnotationsFromUi();
+            }
         }
         else
         {
             _pagesWithHiddenRulers.Remove(pageKey);
             if (_viewport.ShowAllRulerAnnotationsOnActivePage())
-                SaveCurrentPageAnnotations();
+            {
+                _currentPageAnnotationsDirty = true;
+                TrySaveCurrentPageAnnotationsFromUi();
+            }
         }
 
         ApplyRulerVisibilityToViewport();

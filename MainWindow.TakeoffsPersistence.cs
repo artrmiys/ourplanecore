@@ -16,6 +16,25 @@ public partial class MainWindow
         if (!EnsureCurrentJobWritable("save changes"))
             return;
 
+        if (!TrySaveCurrentJobData("manual save"))
+            return;
+
+        if (HasCurrentPackageSession)
+        {
+            _currentPackageSession!.HasUnpackagedChanges = true;
+            TrySaveCurrentPackage("manual save");
+        }
+        else
+        {
+            TxtStatus.Text = $"Saved legacy job -> {_currentJob.TakeoffsRoot}.";
+        }
+    }
+
+    private bool TrySaveCurrentJobData(string operation)
+    {
+        if (_currentJob == null)
+            return false;
+
         try
         {
             FlushTakeoffAutosaves();
@@ -27,16 +46,15 @@ public partial class MainWindow
                 OurPlanCoreJobStore.SaveTakeoffItem(item);
             }
 
-            string? snapshotPath = SaveJobRecoverySnapshot("manual_save");
-            string snapshotText = string.IsNullOrWhiteSpace(snapshotPath)
-                ? ""
-                : $" Snapshot: {Path.GetRelativePath(_currentJob.RootPath, snapshotPath)}";
-            TxtStatus.Text = $"Saved takeoffs -> {_currentJob.TakeoffsRoot}.{snapshotText}";
+            SaveJobRecoverySnapshot("manual_save");
+            return true;
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Save failed:\n{ex.Message}", "Error",
+            AppLog.Error(ex, $"Project data save failed during {operation}.");
+            MessageBox.Show($"Save failed during {operation}:\n{ex.Message}", "Error",
                             MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
     }
 

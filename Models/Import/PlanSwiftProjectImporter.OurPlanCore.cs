@@ -36,7 +36,7 @@ public static partial class PlanSwiftProjectImporter
             manifest.Warnings,
             manifest.TakeoffFolders.Count);
 
-        WriteReports(job, manifest, result);
+        WriteReports(job, manifest, result, options.PortableReportPaths);
         return result;
     }
 

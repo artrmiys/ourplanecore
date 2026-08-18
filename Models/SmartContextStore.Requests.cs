@@ -14,7 +14,7 @@ public static partial class SmartContextStore
         if (string.IsNullOrWhiteSpace(requestId))
             return null;
 
-        string path = Path.Combine(ContextRoot(job.RootPath), "requests", $"{requestId}.json");
+        string path = SmartContextFileId.JsonPath(job, "requests", requestId, "AI request id");
         return LoadJson<SmartAiRequest>(path);
     }
 
@@ -23,7 +23,7 @@ public static partial class SmartContextStore
         if (string.IsNullOrWhiteSpace(requestId))
             return null;
 
-        string path = Path.Combine(ContextRoot(job.RootPath), "responses", $"{requestId}.json");
+        string path = SmartContextFileId.JsonPath(job, "responses", requestId, "AI response id");
         return LoadJson<SmartAiResponse>(path);
     }
 
@@ -36,7 +36,7 @@ public static partial class SmartContextStore
     }
 
     public static string AiActionDraftPath(OurPlanCoreJob job, string requestId) =>
-        Path.Combine(ContextRoot(job.RootPath), "actions", $"{requestId}.json");
+        SmartContextFileId.JsonPath(job, "actions", requestId, "AI action draft id");
 
     public static void SaveAiActionDraft(OurPlanCoreJob job, SmartAiActionDraft draft)
     {
@@ -70,7 +70,7 @@ public static partial class SmartContextStore
 
     public static void SaveAiRequest(OurPlanCoreJob job, SmartAiRequest request)
     {
-        string path = Path.Combine(ContextRoot(job.RootPath), "requests", $"{request.Id}.json");
+        string path = SmartContextFileId.JsonPath(job, "requests", request.Id, "AI request id");
         JobWriteAccess.Demand(path, "save AI request");
         request.ContextCropPaths = NormalizeRelativePathList(request.ContextCropPaths);
         request.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
@@ -121,8 +121,8 @@ public static partial class SmartContextStore
         request.UpdatedAtUtc = now;
 
         string contextRoot = ContextRoot(job.RootPath);
-        string requestPath = Path.Combine(contextRoot, "requests", $"{request.Id}.json");
-        string responsePath = Path.Combine(contextRoot, "responses", $"{response.Id}.json");
+        string requestPath = SmartContextFileId.JsonPath(job, "requests", request.Id, "AI request id");
+        string responsePath = SmartContextFileId.JsonPath(job, "responses", response.Id, "AI response id");
         string projectMarkdownPath = Path.Combine(contextRoot, "project.md");
         JobWriteAccess.Demand(requestPath, "save AI request status");
         JobWriteAccess.Demand(responsePath, "save AI response");

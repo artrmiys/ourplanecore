@@ -124,20 +124,13 @@ internal static class PageBookmarkStore
         if (string.IsNullOrWhiteSpace(path))
             return "";
 
-        string clean = path.Trim();
-        try
-        {
-            if (Path.IsPathRooted(clean))
-                return Path.GetFullPath(clean);
-
-            return Path.GetFullPath(Path.Combine(
-                job.RootPath,
-                clean.Replace('/', Path.DirectorySeparatorChar)));
-        }
-        catch
-        {
-            return "";
-        }
+        return ProjectPathSafety.TryResolveInside(
+            job.RootPath,
+            path.Trim().Replace('/', Path.DirectorySeparatorChar),
+            job.RootPath,
+            out string resolved)
+            ? resolved
+            : "";
     }
 
     private static string JobRelativePath(OurPlanCoreJob job, string path)

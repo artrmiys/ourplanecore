@@ -327,7 +327,7 @@ public partial class MainWindow
             () =>
             {
                 if (_viewport.DeletePageAnnotations(source))
-                    SaveCurrentPageAnnotations();
+                    TrySaveCurrentPageAnnotationsFromUi();
             }));
     }
 
@@ -341,7 +341,7 @@ public partial class MainWindow
             return;
 
         if (_viewport.UpdatePageAnnotationText(annotation, text))
-            SaveCurrentPageAnnotations();
+            TrySaveCurrentPageAnnotationsFromUi();
     }
 
     private static string MarkupTitle(PageAnnotation annotation)

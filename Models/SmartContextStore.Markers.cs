@@ -146,7 +146,7 @@ public static partial class SmartContextStore
     }
 
     public static string AiMarkerPath(OurPlanCoreJob job, string markerId) =>
-        Path.Combine(ContextRoot(job.RootPath), "markers", $"{markerId}.json");
+        SmartContextFileId.JsonPath(job, "markers", markerId, "AI marker id");
 
     public static SmartAiMarkerSet SaveAiMarkerSet(
         OurPlanCoreJob job,
@@ -248,7 +248,7 @@ public static partial class SmartContextStore
     }
 
     public static string AiMarkerSetPath(OurPlanCoreJob job, string markerSetId) =>
-        Path.Combine(ContextRoot(job.RootPath), "marker_sets", $"{markerSetId}.json");
+        SmartContextFileId.JsonPath(job, "marker_sets", markerSetId, "AI marker set id");
 
     public static bool DeleteAiMarkerSet(OurPlanCoreJob job, string markerSetId)
     {
@@ -457,5 +457,5 @@ public static partial class SmartContextStore
     }
 
     public static string CropBookmarkPath(OurPlanCoreJob job, string bookmarkId) =>
-        Path.Combine(ContextRoot(job.RootPath), "crop_bookmarks", $"{bookmarkId}.json");
+        SmartContextFileId.JsonPath(job, "crop_bookmarks", bookmarkId, "AI crop bookmark id");
 }

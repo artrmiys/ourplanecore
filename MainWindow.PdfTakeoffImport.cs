@@ -120,6 +120,20 @@ public partial class MainWindow
                 return;
             }
 
+            if (result.TargetJob != null &&
+                HasCurrentPackageSession &&
+                SameJobPath(result.TargetJob.RootPath, _currentJob!.RootPath))
+            {
+                _currentPackageSession!.HasUnpackagedChanges = true;
+                if (!TrySaveCurrentPackage("PDF takeoff import"))
+                {
+                    result.Messages.Add(
+                        "The import is preserved in the local working copy, but the .ourplan file was not updated.");
+                    ShowPdfTakeoffImportResult(result);
+                    return;
+                }
+            }
+
             ReloadPagesTree();
             LoadTakeoffsForJob();
             if (!string.IsNullOrWhiteSpace(result.FirstImportedPageFolder))
@@ -128,7 +142,7 @@ public partial class MainWindow
             TxtStatus.Text =
                 $"Imported PDF takeoffs: {result.PdfsImported} PDF(s), {result.PagesImported} page(s), " +
                 $"{result.RulersImported} ruler(s), {result.TakeoffItemsImported} takeoff item(s), " +
-                $"{result.MeasurementsImported} measurement(s). Report: {result.ReportPath}";
+                $"{result.MeasurementsImported} measurement(s). Report: {ProjectDataPathForDisplay(result.ReportPath)}";
             ShowPdfTakeoffImportResult(result);
             if (result.TargetJob != null)
                 EnsureExpectedJobWritable(result.TargetJob, "finish the PDF takeoff import dialog");
@@ -223,7 +237,13 @@ public partial class MainWindow
                 return scan.Run;
             }
 
-            OurPlanCoreJob targetJob = EnsurePdfTakeoffImportTargetJob(options, expectedTargetJob);
+            OurPlanCoreJob? targetJob = EnsurePdfTakeoffImportTargetJob(options, expectedTargetJob);
+            if (targetJob == null)
+            {
+                scan.Run.Cancelled = true;
+                scan.Run.Messages.Add("Import cancelled before a writable target project became active.");
+                return scan.Run;
+            }
             scan.Run.TargetJob = targetJob;
             if (!EnsurePdfTakeoffImportTargetWritable(
                     targetJob,
@@ -285,7 +305,12 @@ public partial class MainWindow
             {
                 return scan.Run;
             }
-            scan.Run.ReportPath = WritePdfTakeoffImportReport(targetJob, scan.Run, prepared.Sources);
+            bool portableReport = HasCurrentPackageSession &&
+                                  SameJobPath(targetJob.RootPath, _currentPackageSession!.WorkspaceRoot);
+            scan.Run.ReportPath = WritePdfTakeoffImportReport(targetJob,
+                scan.Run,
+                prepared.Sources,
+                portableReport);
             return scan.Run;
         }
         finally
@@ -411,7 +436,7 @@ public partial class MainWindow
         return (prepared, tempRoot);
     }
 
-    private OurPlanCoreJob EnsurePdfTakeoffImportTargetJob(
+    private OurPlanCoreJob? EnsurePdfTakeoffImportTargetJob(
         PdfTakeoffImportOptions options,
         OurPlanCoreJob? expectedTargetJob)
     {
@@ -428,6 +453,13 @@ public partial class MainWindow
         _settings.JobsRootPath = parent;
         AppSettingsStore.AddJobsRoot(_settings, parent);
         SaveAppSettings();
+
+        if (!UseLegacyFolderForNewProjects())
+        {
+            return CreateNewPackageProject(jobName, out OurPlanCoreJob? packageJob, parent)
+                ? packageJob
+                : null;
+        }
 
         OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, jobName);
         if (!OpenJob(job.RootPath))
@@ -464,6 +496,16 @@ public partial class MainWindow
             ? SampleJobService.DefaultJobsRoot
             : options.JobsRootPath;
         string jobName = UniquePdfTakeoffJobName(parent, options.JobName);
+        if (!UseLegacyFolderForNewProjects())
+        {
+            string packagePath = Path.Combine(
+                parent,
+                OurPlanCoreJobStore.SanitizeName(jobName, 120) + OurPlanPackageFormat.Extension);
+            return (
+                $"{packagePath} :: Pages\\{PdfTakeoffImportFolderName}",
+                $"{packagePath} :: Takeoffs\\{PdfTakeoffImportFolderName}");
+        }
+
         string jobRoot = Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(jobName, 120));
         return (
             Path.Combine(jobRoot, "Pages", PdfTakeoffImportFolderName),
@@ -808,7 +850,8 @@ public partial class MainWindow
     private static string WritePdfTakeoffImportReport(
         OurPlanCoreJob targetJob,
         PdfTakeoffImportRunResult run,
-        IReadOnlyList<PdfTakeoffImportSource> sources)
+        IReadOnlyList<PdfTakeoffImportSource> sources,
+        bool portablePaths)
     {
         string reportRoot = Path.Combine(targetJob.RootPath, "import_reports");
         JobWriteAccess.Demand(reportRoot, "write a PDF takeoff import report");
@@ -818,9 +861,9 @@ public partial class MainWindow
         {
             "# PDF Takeoff Import Report",
             "",
-            $"Source folder: `{run.SourceFolder}`",
-            $"Pages folder: `{run.PagesFolder}`",
-            $"Takeoffs folder: `{run.TakeoffsFolder}`",
+            $"Source folder: `{(portablePaths ? Path.GetFileName(Path.TrimEndingDirectorySeparator(run.SourceFolder)) : run.SourceFolder)}`",
+            $"Pages folder: `{(portablePaths ? Path.GetRelativePath(targetJob.RootPath, run.PagesFolder) : run.PagesFolder)}`",
+            $"Takeoffs folder: `{(portablePaths ? Path.GetRelativePath(targetJob.RootPath, run.TakeoffsFolder) : run.TakeoffsFolder)}`",
             "",
             "## Summary",
             "",
@@ -902,7 +945,7 @@ public partial class MainWindow
             summary.AppendLine($"Measurements: {result.MeasurementsImported}");
             summary.AppendLine($"Clean PDF annotations removed: {result.CleanPdfAnnotationsRemoved}");
             summary.AppendLine();
-            summary.AppendLine($"Report: {result.ReportPath}");
+            summary.AppendLine($"Report: {ProjectDataPathForDisplay(result.ReportPath)}");
         }
 
         if (result.Messages.Count > 0)

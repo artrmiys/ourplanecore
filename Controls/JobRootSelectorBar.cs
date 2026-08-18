@@ -30,12 +30,13 @@ public static class JobRootSelectorBar
     {
         string path = NormalizePath(rootPath);
         JobRootLocationKind kind = ClassifyJobRootPath(path);
-        bool exists = Directory.Exists(path);
+        bool probeOnDemand = kind == JobRootLocationKind.Network;
+        bool exists = probeOnDemand || Directory.Exists(path);
         return new JobRootDescriptor(
             path,
             BuildJobRootDisplayName(path),
             kind.ToString(),
-            exists ? "Ready" : "Missing",
+            probeOnDemand ? "Open on demand" : exists ? "Ready" : "Missing",
             exists);
     }
 

@@ -14,7 +14,8 @@ public static partial class PlanSwiftProjectImporter
     private static void WriteReports(
         OurPlanCoreJob job,
         PlanSwiftProjectManifest manifest,
-        PlanSwiftImportResult result)
+        PlanSwiftImportResult result,
+        bool portablePaths)
     {
         string reportRoot = Path.Combine(job.RootPath, "import_reports");
         JobWriteAccess.Demand(reportRoot, "create PlanSwift import reports");
@@ -86,9 +87,10 @@ public static partial class PlanSwiftProjectImporter
 
         string manifestPath = Path.Combine(reportRoot, "planswift_import_manifest.json");
         JobWriteAccess.Demand(manifestPath, "write a PlanSwift import manifest");
+        string manifestJson = JsonSerializer.Serialize(json, OurPlanCoreJobStore.JsonOptions);
         File.WriteAllText(
             manifestPath,
-            JsonSerializer.Serialize(json, OurPlanCoreJobStore.JsonOptions));
+            PortableReportText(manifestJson, manifest, result, portablePaths, jsonEncoded: true));
 
         var sourceMetadata = new
         {
@@ -120,15 +122,21 @@ public static partial class PlanSwiftProjectImporter
 
         string metadataPath = Path.Combine(reportRoot, "planswift_source_metadata.json");
         JobWriteAccess.Demand(metadataPath, "write PlanSwift source metadata");
+        string metadataJson = JsonSerializer.Serialize(sourceMetadata, OurPlanCoreJobStore.JsonOptions);
         File.WriteAllText(
             metadataPath,
-            JsonSerializer.Serialize(sourceMetadata, OurPlanCoreJobStore.JsonOptions));
+            PortableReportText(metadataJson, manifest, result, portablePaths, jsonEncoded: true));
 
         string reportPath = Path.Combine(reportRoot, "planswift_import_report.md");
         JobWriteAccess.Demand(reportPath, "write a PlanSwift import report");
         File.WriteAllText(
             reportPath,
-            BuildReportMarkdown(manifest, result));
+            PortableReportText(
+                BuildReportMarkdown(manifest, result),
+                manifest,
+                result,
+                portablePaths,
+                jsonEncoded: false));
     }
 
     private static string BuildReportMarkdown(PlanSwiftProjectManifest manifest, PlanSwiftImportResult result)
@@ -184,5 +192,44 @@ public static partial class PlanSwiftProjectImporter
 
         lines.Add("");
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string PortableReportText(
+        string text,
+        PlanSwiftProjectManifest manifest,
+        PlanSwiftImportResult result,
+        bool portablePaths,
+        bool jsonEncoded)
+    {
+        if (!portablePaths)
+            return text;
+        string sourceLabel = Path.GetFileName(
+            Path.TrimEndingDirectorySeparator(manifest.SourceJobPath));
+        string scrubbed = ReplaceReportPath(
+            text,
+            manifest.SourceJobPath,
+            sourceLabel,
+            jsonEncoded);
+        return ReplaceReportPath(
+            scrubbed,
+            result.DestinationJobPath,
+            ".",
+            jsonEncoded);
+    }
+
+    private static string ReplaceReportPath(
+        string text,
+        string path,
+        string replacement,
+        bool jsonEncoded)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return text;
+        if (!jsonEncoded)
+            return text.Replace(path, replacement, StringComparison.OrdinalIgnoreCase);
+
+        string encodedPath = JsonSerializer.Serialize(path)[1..^1];
+        string encodedReplacement = JsonSerializer.Serialize(replacement)[1..^1];
+        return text.Replace(encodedPath, encodedReplacement, StringComparison.OrdinalIgnoreCase);
     }
 }

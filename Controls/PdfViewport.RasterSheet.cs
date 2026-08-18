@@ -110,6 +110,11 @@ public sealed partial class PdfViewport
                     return;
                 }
 
+                using IDisposable? writeActivity =
+                    JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(pageFolder);
+                if (writeActivity == null)
+                    return;
+
                 result = await Task.Run(() => overviewOnly
                     ? RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(page)
                     : BuildReadableRasterSheetPreservingPinnedDpi(page)).ConfigureAwait(false);

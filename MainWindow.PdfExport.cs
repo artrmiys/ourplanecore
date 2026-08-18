@@ -159,11 +159,13 @@ public partial class MainWindow
             Title = "Export PDF",
             Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",
             FileName = defaultFileName,
-            InitialDirectory = _currentJob.RootPath,
+            InitialDirectory = InitialProjectExportDirectory(),
             AddExtension = true,
             DefaultExt = ".pdf",
         };
         if (save.ShowDialog(this) != true)
+            return;
+        if (!ConfirmProjectExportDestination(save.FileName))
             return;
 
         try

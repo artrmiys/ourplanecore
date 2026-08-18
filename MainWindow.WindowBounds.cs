@@ -6,6 +6,10 @@ namespace OurPlanCore;
 
 public partial class MainWindow
 {
+    private JobFileWriteActivity.PackageCheckpointScope? _closingPackageCheckpoint;
+
+    private bool _rasterCacheCleanupIncludedInPackageClose;
+
     // ── Main window placement persistence ─────────────────────────────────────
     //
     // Two jobs, both invisible on a screen where the default 1280x780 window
@@ -93,26 +97,80 @@ public partial class MainWindow
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (!EnsureNoActiveJobFileWriters("close OurPlanCore"))
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        _closingPackageCheckpoint = JobFileWriteActivity.BeginPackageCheckpoint();
+        if (_closingPackageCheckpoint.HadActiveWriters)
+        {
+            ReleaseClosingPackageCheckpoint();
+            e.Cancel = true;
+            return;
+        }
+
         if (IsCurrentJobReadOnly && !PrepareReadOnlyJobForExit("close OurPlanCore"))
         {
+            ReleaseClosingPackageCheckpoint();
             e.Cancel = true;
             return;
         }
 
         if (!IsCurrentJobReadOnly && !FlushTakeoffAutosavesBeforeClose())
         {
+            ReleaseClosingPackageCheckpoint();
             e.Cancel = true;
             return;
         }
 
         if (!IsCurrentJobReadOnly && !SaveCurrentPageStateBeforeClose())
         {
+            ReleaseClosingPackageCheckpoint();
             e.Cancel = true;
             return;
         }
 
         if (!IsCurrentJobReadOnly)
+        {
+            if (HasCurrentPackageSession)
+            {
+                _takeoffSaveService.Stop();
+                try
+                {
+                    RunResponsivePackageOperation(() =>
+                    {
+                        RunRasterCacheCleanupOnClose();
+                        return true;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, "Close canceled because package pre-save cleanup failed.");
+                    MessageBox.Show(
+                        this,
+                        $"The final project cleanup could not finish, so the app will stay open.\n\n{ex.Message}",
+                        "Project Close Canceled",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    ReleaseClosingPackageCheckpoint();
+                    e.Cancel = true;
+                    return;
+                }
+                _currentPackageSession!.HasUnpackagedChanges = true;
+            }
+            if (!TrySaveCurrentPackage("close OurPlanCore", showDialog: false) &&
+                !ResolveFailedPackageCheckpointBeforeExit("close OurPlanCore"))
+            {
+                ReleaseClosingPackageCheckpoint();
+                e.Cancel = true;
+                return;
+            }
+            if (HasCurrentPackageSession)
+                _rasterCacheCleanupIncludedInPackageClose = true;
             FinalizeLastPageDeleteUndo();
+        }
 
         SaveWindowBounds();
         base.OnClosing(e);
@@ -123,11 +181,20 @@ public partial class MainWindow
         _sheetLegendAutoSortTimer.Stop();
         _takeoffSaveService.Stop();
         RunCloseCleanup(SaveSidePanelWidths, "save side panel widths");
-        if (IsCurrentJobWritable)
+        if (IsCurrentJobWritable && !_rasterCacheCleanupIncludedInPackageClose)
             RunCloseCleanup(RunRasterCacheCleanupOnClose, "clean raster cache");
+        RunCloseCleanup(CloseCurrentPackageWorkspaceSession, "close package workspace session");
         RunCloseCleanup(CloseCurrentJobAccess, "release job lease");
+        RunCloseCleanup(() => JobFileWriteActivity.SetCurrentJobRoot(null), "close background project writes");
+        RunCloseCleanup(ReleaseClosingPackageCheckpoint, "release package checkpoint gate");
         RunCloseCleanup(PdfLayerRenderService.StopWorker, "stop PDF layer worker");
         base.OnClosed(e);
+    }
+
+    private void ReleaseClosingPackageCheckpoint()
+    {
+        _closingPackageCheckpoint?.Dispose();
+        _closingPackageCheckpoint = null;
     }
 
     private bool FlushTakeoffAutosavesBeforeClose()

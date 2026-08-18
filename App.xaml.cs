@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -7,8 +9,11 @@ namespace OurPlanCore;
 
 public partial class App : Application
 {
+    internal static string StartupProjectPath { get; private set; } = "";
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        StartupProjectPath = ResolveStartupProjectPath(e.Args);
         AppDataMigration.RunCritical();
         base.OnStartup(e);
 
@@ -19,7 +24,30 @@ public partial class App : Application
         AppLog.Info($"Version {AppVersion.Display}.");
         Task.Run(() => AppLog.PruneOldLogs());
         Task.Run(AppDataMigration.RunDeferred);
+#if !DEBUG
+        Task.Run(OurPlanFileAssociationService.EnsureRegisteredForCurrentExecutable);
+#endif
         _ = PdfLayerRenderService.PrewarmWorkersAsync();
+    }
+
+    private static string ResolveStartupProjectPath(IReadOnlyList<string> args)
+    {
+        foreach (string argument in args)
+        {
+            if (string.IsNullOrWhiteSpace(argument))
+                continue;
+            try
+            {
+                string path = Path.GetFullPath(argument.Trim());
+                if (File.Exists(path) && OurPlanPackageFormat.HasPackageExtension(path))
+                    return path;
+            }
+            catch
+            {
+                // Ignore unrelated or malformed command-line arguments.
+            }
+        }
+        return "";
     }
 
     protected override void OnExit(ExitEventArgs e)

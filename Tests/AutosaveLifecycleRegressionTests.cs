@@ -40,7 +40,7 @@ internal static class AutosaveLifecycleRegressionTests
             "OurPlanCoreJobStore.LoadJob(normalizedRoot, pending.Mode)",
             prepareAccess,
             StringComparison.Ordinal);
-        int prepare = lifecycle.IndexOf("if (!PrepareCurrentJobForSwitch())", loadTarget, StringComparison.Ordinal);
+        int prepare = lifecycle.IndexOf("PrepareCurrentJobForSwitch()", loadTarget, StringComparison.Ordinal);
         int assign = lifecycle.IndexOf("_currentJob = nextJob;", prepare, StringComparison.Ordinal);
 
         AssertTrue(

@@ -46,6 +46,12 @@ public partial class MainWindow
             return;
         }
 
+        if (_currentPageAnnotationsDirty &&
+            !TryFlushCurrentPageAnnotationsForNavigation("opening another sheet"))
+        {
+            return;
+        }
+
         SaveCurrentPageScale();
         SaveActivePageTabViewState();
 
@@ -159,10 +165,17 @@ public partial class MainWindow
         List<DetachedSheetWindow> detached = _detachedSheetWindows.ToList();
         foreach (DetachedSheetWindow window in detached)
             window.Close();
+        int closedDetached = detached.Count(window => !_detachedSheetWindows.Contains(window));
+        int pendingDetached = detached.Count - closedDetached;
+        if (pendingDetached > 0)
+        {
+            TxtStatus.Text = $"Closed {closedDetached} detached window(s); {pendingDetached} stayed open because annotations are still unsaved.";
+            return;
+        }
 
         TxtStatus.Text = viewportTab == null
-            ? $"Closed {closedTabs} sheet tab(s) and {detached.Count} detached window(s)."
-            : $"Kept {_currentPage!.Name} in the main viewport; closed {closedTabs} other tab(s) and {detached.Count} detached window(s).";
+            ? $"Closed {closedTabs} sheet tab(s) and {closedDetached} detached window(s)."
+            : $"Kept {_currentPage!.Name} in the main viewport; closed {closedTabs} other tab(s) and {closedDetached} detached window(s).";
     }
 
     private void BtnPagesCloseDetachedSecondMonitor_Click(object sender, RoutedEventArgs e)
@@ -180,7 +193,11 @@ public partial class MainWindow
 
         foreach (DetachedSheetWindow window in targets)
             window.Close();
-        TxtStatus.Text = $"Closed {targets.Count} detached sheet window(s) on monitor 2.";
+        int closed = targets.Count(window => !_detachedSheetWindows.Contains(window));
+        int pending = targets.Count - closed;
+        TxtStatus.Text = pending == 0
+            ? $"Closed {closed} detached sheet window(s) on monitor 2."
+            : $"Closed {closed} detached window(s); {pending} stayed open because annotations are still unsaved.";
     }
 
     private bool TileM2VerticalLayoutEnabled =>
@@ -400,6 +417,13 @@ public partial class MainWindow
             return;
         }
 
+        if (_currentPageAnnotationsDirty &&
+            !TryFlushCurrentPageAnnotationsForNavigation("opening another sheet"))
+        {
+            RefreshPageTabs(_activePageTab);
+            return;
+        }
+
         tab.PageName = page.Name;
         _activePageTab = tab;
         RefreshPageTabs(tab);
@@ -408,6 +432,12 @@ public partial class MainWindow
 
     private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)
     {
+        if (_currentPageAnnotationsDirty &&
+            !TryFlushCurrentPageAnnotationsForNavigation("reloading the current sheet"))
+        {
+            return;
+        }
+
         PageOpenTrace? trace = BeginPageOpenTrace(page.Name);
         PageInfo viewportPage = page;
         int deferredVersion = ++_pageOpenDeferredVersion;
@@ -443,9 +473,8 @@ public partial class MainWindow
         trace?.Mark("annotations");
         QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView);
         trace?.Mark("overlay-queued");
-        _settings.LastPageFolder = viewportPage.FolderPath;
         if (_currentJob != null)
-            _settings.LastJobPath = _currentJob.RootPath;
+            StoreLastPageForCurrentDocument(viewportPage.FolderPath);
         QueueDeferredPageOpenWork(deferredVersion, viewportPage, trace, restoreView);
     }
 
@@ -577,6 +606,7 @@ public partial class MainWindow
     private void LoadViewportPageAnnotations(PageInfo viewportPage)
     {
         _viewport.SetPageAnnotations(OurPlanCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
+        _currentPageAnnotationsDirty = false;
         _currentPageAnnotationsLoaded = true;
         ApplyRulerVisibilityToViewport();
     }
@@ -1049,6 +1079,12 @@ public partial class MainWindow
             return;
 
         bool wasActive = ReferenceEquals(tab, _activePageTab);
+        if (wasActive &&
+            _currentPageAnnotationsDirty &&
+            !TryFlushCurrentPageAnnotationsForNavigation("closing the sheet tab"))
+        {
+            return;
+        }
         if (wasActive)
             SaveCurrentPageScale();
 
@@ -1071,6 +1107,8 @@ public partial class MainWindow
         OnSheetOverlayPageCleared();
         _currentPage = null;
         _currentPdfPath = "";
+        _currentPageAnnotationsLoaded = false;
+        _currentPageAnnotationsDirty = false;
         TxtStatusPage.Text = "—";
         UpdateScaleUi(0);
         _viewport.ClearPage();

@@ -45,8 +45,24 @@ public partial class MainWindow
         FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
     }
 
-    private static void OpenFolderInExplorer(string folder)
+    private void OpenFolderInExplorer(string folder)
     {
+        if (HasCurrentPackageSession &&
+            OurPlanCoreJobStore.IsSameOrDescendant(_currentPackageSession!.WorkspaceRoot, folder))
+        {
+            string packagePath = _currentPackageSession.PackagePath;
+            if (!File.Exists(packagePath))
+                return;
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{packagePath}\"",
+                UseShellExecute = true,
+            });
+            TxtStatus.Text = "This project is stored as one .ourplan file; the private working cache stays hidden.";
+            return;
+        }
+
         if (!Directory.Exists(folder)) return;
         Process.Start(new ProcessStartInfo
         {

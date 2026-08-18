@@ -32,6 +32,13 @@ public static class JobThumbnailService
     }
 
     public static bool TryCreateThumbnail(OurPlanCoreJob job, out string thumbnailPath, out string error)
+        => TryCreateThumbnail(job, job.RootPath, out thumbnailPath, out error);
+
+    public static bool TryCreateThumbnail(
+        OurPlanCoreJob job,
+        string identityPath,
+        out string thumbnailPath,
+        out string error)
     {
         thumbnailPath = "";
         error = "";
@@ -66,7 +73,7 @@ public static class JobThumbnailService
             }
 
             Directory.CreateDirectory(ThumbnailDirectory);
-            thumbnailPath = GetThumbnailPath(job.RootPath);
+            thumbnailPath = GetThumbnailPath(identityPath);
             string tempPath = $"{thumbnailPath}.{Guid.NewGuid():N}.tmp";
             using var thumbnail = CreateFitThumbnail(source);
             using SKData data = thumbnail.Encode(SKEncodedImageFormat.Png, 92);

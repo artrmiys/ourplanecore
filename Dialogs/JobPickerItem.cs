@@ -12,6 +12,7 @@ public enum JobPickerAction
 {
     None,
     OpenSelected,
+    BrowsePackage,
     BrowseJob,
     BrowseJobsFolder,
     NewJob,
@@ -75,7 +76,12 @@ public sealed class JobPickerItem : INotifyPropertyChanged
         }
     }
 
-    public string Status => Exists ? "Ready" : "Missing";
+    public bool CanOpen => Exists || OurPlanPackageFormat.HasPackageExtension(Path);
+    public string Status => Exists
+        ? "Ready"
+        : CanOpen
+            ? "Missing - recovery may be available"
+            : "Missing";
     public string RelativeDate => JobPickerFormatting.RelativeDate(LastOpenedUtc);
     public ImageSource? ThumbnailImage => LoadThumbnail(ThumbnailPath);
 

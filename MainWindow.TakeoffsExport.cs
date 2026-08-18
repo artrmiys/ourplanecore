@@ -32,12 +32,14 @@ public partial class MainWindow
             Title = "Export Takeoff CSV",
             Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
             FileName = $"{SafeFileName(_currentJob.Name)}_takeoffs.csv",
-            InitialDirectory = _currentJob.RootPath,
+            InitialDirectory = InitialProjectExportDirectory(),
             AddExtension = true,
             DefaultExt = ".csv",
         };
 
         if (dlg.ShowDialog(this) != true)
+            return;
+        if (!ConfirmProjectExportDestination(dlg.FileName))
             return;
 
         try
@@ -150,12 +152,14 @@ public partial class MainWindow
             Title = excel ? "Export Takeoffs Excel" : "Export Takeoffs TXT",
             Filter = excel ? "Excel workbook (*.xlsx)|*.xlsx|All files (*.*)|*.*" : "Text files (*.txt)|*.txt|All files (*.*)|*.*",
             FileName = $"{SafeFileName(_currentJob.Name)}_takeoffs.{(excel ? "xlsx" : "txt")}",
-            InitialDirectory = _currentJob.RootPath,
+            InitialDirectory = InitialProjectExportDirectory(),
             AddExtension = true,
             DefaultExt = excel ? ".xlsx" : ".txt",
         };
 
         if (dlg.ShowDialog(this) != true)
+            return;
+        if (!ConfirmProjectExportDestination(dlg.FileName))
             return;
 
         try

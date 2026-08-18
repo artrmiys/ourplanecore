@@ -29,6 +29,94 @@ internal static class TakeoffsTreeRegressionTests
             "TryAutoLoad must refuse to run while a job is open");
     }
 
+    public static void PageAnnotationsUseLosslessDirtyLifecycle()
+    {
+        string mainWindow = ReadRepoFile("MainWindow.xaml.cs");
+        string callbacks = ReadRepoFile("MainWindow.MeasurementCallbacks.cs");
+        string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
+        string toolControls = ReadRepoFile("MainWindow.ToolControls.cs");
+        string contextMenu = ReadRepoFile("MainWindow.ViewportContextMenu.cs");
+        string detached = ReadRepoFile("MainWindow.DetachedSheets.cs");
+        string recovery = ReadRepoFile("MainWindow.JobRecovery.cs");
+        string store = ReadRepoFile("Models/Storage/PageAnnotationStore.cs");
+
+        string changed = SliceMethod(callbacks, "private void OnPageAnnotationChanged(");
+        string checkpoint = SliceMethod(callbacks, "private void SaveCurrentPageAnnotations()");
+        string saveCore = SliceMethod(callbacks, "private void SaveCurrentPageAnnotationsCore()");
+        string uiSave = SliceMethod(callbacks, "private bool TrySaveCurrentPageAnnotationsFromUi()");
+        string loadAnnotations = SliceMethod(pageTabs, "private void LoadViewportPageAnnotations(");
+        string openActive = SliceMethod(pageTabs, "private void OpenPageInActiveTab(");
+        string loadFromTab = SliceMethod(pageTabs, "private void LoadPageFromTab(");
+        string loadIntoViewport = SliceMethod(pageTabs, "private void LoadPageIntoViewport(");
+        string closeTab = SliceMethod(pageTabs, "private void ClosePageTab(");
+        string detachedChanged = SliceMethod(detached, "private void OnDetachedPageAnnotationChanged(");
+        string detachedSave = SliceMethod(detached, "private void SaveDetachedPageAnnotationsCore(");
+        string detachedNavigate = SliceMethod(detached, "private bool TryShowPageInFocusedDetachedSheet(");
+        string storeSave = SliceMethod(store, "public static void SavePageAnnotations(");
+
+        AssertTrue(
+            mainWindow.Contains("private bool _currentPageAnnotationsDirty;", StringComparison.Ordinal),
+            "main viewport must retain explicit annotation dirty state");
+        AssertTrue(
+            changed.IndexOf("_currentPageAnnotationsDirty = true", StringComparison.Ordinal) >= 0 &&
+            changed.IndexOf("TrySaveCurrentPageAnnotationsFromUi()", StringComparison.Ordinal) >
+            changed.IndexOf("_currentPageAnnotationsDirty = true", StringComparison.Ordinal),
+            "annotation callbacks must mark dirty before the non-throwing UI autosave path");
+
+        int saveCall = saveCore.IndexOf("OurPlanCoreJobStore.SavePageAnnotations", StringComparison.Ordinal);
+        int clearDirty = saveCore.IndexOf("_currentPageAnnotationsDirty = false", StringComparison.Ordinal);
+        AssertTrue(
+            saveCore.Contains("if (!_currentPageAnnotationsDirty)", StringComparison.Ordinal) &&
+            saveCore.Contains("throw new InvalidOperationException", StringComparison.Ordinal) &&
+            saveCall >= 0 && clearDirty > saveCall &&
+            !saveCore.Contains("catch (Exception", StringComparison.Ordinal),
+            "checkpoint save must be dirty-only, throw on failure, and clear dirty only after the store succeeds");
+        AssertTrue(
+            checkpoint.Contains("SaveCurrentPageAnnotationsCore();", StringComparison.Ordinal) &&
+            checkpoint.Contains("SaveDirtyDetachedPageAnnotations();", StringComparison.Ordinal) &&
+            uiSave.Contains("catch (Exception ex)", StringComparison.Ordinal) &&
+            uiSave.Contains("changes remain pending", StringComparison.Ordinal),
+            "checkpoints must include detached annotations while UI autosave catches and reports failures");
+
+        int setAnnotations = loadAnnotations.IndexOf("_viewport.SetPageAnnotations", StringComparison.Ordinal);
+        int resetDirty = loadAnnotations.IndexOf("_currentPageAnnotationsDirty = false", StringComparison.Ordinal);
+        int markLoaded = loadAnnotations.IndexOf("_currentPageAnnotationsLoaded = true", StringComparison.Ordinal);
+        AssertTrue(
+            setAnnotations >= 0 && resetDirty > setAnnotations && markLoaded > resetDirty,
+            "page load must reset dirty only after installing the loaded annotations");
+        AssertTrue(
+            openActive.Contains("TryFlushCurrentPageAnnotationsForNavigation", StringComparison.Ordinal) &&
+            loadFromTab.Contains("TryFlushCurrentPageAnnotationsForNavigation", StringComparison.Ordinal) &&
+            loadIntoViewport.Contains("TryFlushCurrentPageAnnotationsForNavigation", StringComparison.Ordinal) &&
+            closeTab.Contains("TryFlushCurrentPageAnnotationsForNavigation", StringComparison.Ordinal),
+            "all main page mutation/navigation paths must stop before replacing a dirty viewport");
+
+        AssertTrue(
+            toolControls.Contains("_currentPageAnnotationsDirty = true", StringComparison.Ordinal) &&
+            toolControls.Contains("TrySaveCurrentPageAnnotationsFromUi();", StringComparison.Ordinal) &&
+            contextMenu.Contains("TrySaveCurrentPageAnnotationsFromUi();", StringComparison.Ordinal),
+            "direct ruler and context-menu annotation mutations must use the dirty UI-save path");
+        AssertTrue(
+            detached.Contains("private readonly HashSet<DetachedSheetWindow> _dirtyDetachedPageAnnotations", StringComparison.Ordinal) &&
+            detached.Contains("window.Closing +=", StringComparison.Ordinal) &&
+            detachedChanged.Contains("_dirtyDetachedPageAnnotations.Add(window)", StringComparison.Ordinal) &&
+            detachedSave.Contains("OurPlanCoreJobStore.SavePageAnnotations", StringComparison.Ordinal) &&
+            detachedSave.IndexOf("_dirtyDetachedPageAnnotations.Remove(window)", StringComparison.Ordinal) >
+            detachedSave.IndexOf("OurPlanCoreJobStore.SavePageAnnotations", StringComparison.Ordinal) &&
+            detachedNavigate.Contains("TryFlushDetachedPageAnnotationsForNavigation", StringComparison.Ordinal),
+            "detached windows must retain dirty state, flush before close/navigation, and clear only after success");
+
+        int compareExisting = storeSave.IndexOf("string.Equals(File.ReadAllText(path), json", StringComparison.Ordinal);
+        int atomicWrite = storeSave.IndexOf("IoUtil.WriteAllTextAtomic(path, json)", StringComparison.Ordinal);
+        AssertTrue(
+            compareExisting >= 0 && atomicWrite > compareExisting,
+            "the annotation store must not rewrite byte-identical JSON");
+        AssertTrue(
+            recovery.Contains("EnsureNoUnsavedReadOnlyPageAnnotations", StringComparison.Ordinal) &&
+            recovery.Contains("OurPlanCore will not discard them", StringComparison.Ordinal),
+            "read-only exit and Save As must block instead of silently losing dirty in-memory annotations");
+    }
+
     public static void PageOpenDefersHeavyUiWork()
     {
         string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
@@ -37,7 +125,7 @@ internal static class TakeoffsTreeRegressionTests
         string loadFromTabMethod = SliceMethod(pageTabs, "private void LoadPageFromTab(");
         string loadMethod = SliceMethod(pageTabs, "private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)");
         string loadAnnotationsMethod = SliceMethod(pageTabs, "private void LoadViewportPageAnnotations(");
-        string saveAnnotationsMethod = SliceMethod(measurementCallbacks, "private void SaveCurrentPageAnnotations()");
+        string saveAnnotationsMethod = SliceMethod(measurementCallbacks, "private void SaveCurrentPageAnnotationsCore()");
         string distinctBatchPagesMethod = SliceMethod(pageTabs, "private static IReadOnlyList<PageInfo> DistinctBatchPages(");
         string queueMethod = SliceMethod(pageTabs, "private void QueueDeferredPageOpenWork(");
         string deferredQuietMethod = SliceMethod(pageTabs, "private async void RunDeferredPageOpenWorkWhenQuiet(");
@@ -87,10 +175,12 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             loadMethod.Contains("_currentPageAnnotationsLoaded = false", StringComparison.Ordinal) &&
             loadAnnotationsMethod.Contains("OurPlanCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            loadAnnotationsMethod.Contains("_currentPageAnnotationsDirty = false", StringComparison.Ordinal) &&
             loadAnnotationsMethod.Contains("_currentPageAnnotationsLoaded = true", StringComparison.Ordinal) &&
             loadAnnotationsMethod.Contains("ApplyRulerVisibilityToViewport()", StringComparison.Ordinal) &&
+            saveAnnotationsMethod.Contains("if (!_currentPageAnnotationsDirty)", StringComparison.Ordinal) &&
             saveAnnotationsMethod.Contains("_currentPage == null || !_currentPageAnnotationsLoaded", StringComparison.Ordinal),
-            "page annotation save must be blocked during page switching until annotations.json has been loaded into the viewport");
+            "page annotation save must be dirty-only and blocked during page switching until annotations.json has been loaded into the viewport");
 
         AssertFalse(
             loadMethod.Contains("LoadSheetOverlay(", StringComparison.Ordinal) ||
@@ -2108,6 +2198,16 @@ internal static class TakeoffsTreeRegressionTests
     {
         string wallTrace = ReadRepoFile("MainWindow.WallTrace.cs");
         string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
+        int rasterWriteGate = pdfSnap.IndexOf(
+            "JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(page.FolderPath)",
+            StringComparison.Ordinal);
+        int rasterWriteGateNullCheck = pdfSnap.IndexOf(
+            "if (writeActivity == null)",
+            rasterWriteGate < 0 ? 0 : rasterWriteGate,
+            StringComparison.Ordinal);
+        int rasterFallbackBuild = pdfSnap.IndexOf(
+            "BuildCachePreservingEnabled(page, buildScale)",
+            StringComparison.Ordinal);
         string dialog = ReadRepoFile(Path.Combine("Dialogs", "WallTraceDialog.cs"));
         int vectorTrace = wallTrace.IndexOf("TraceWallCenterlinesAsync(segments, polygon, options, holes)", StringComparison.Ordinal);
         int fallbackRead = wallTrace.IndexOf("ReadWallTraceRasterImageSegmentsForCurrentPageAsync", StringComparison.Ordinal);
@@ -2116,6 +2216,11 @@ internal static class TakeoffsTreeRegressionTests
             pdfSnap.Contains("public Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error)>", StringComparison.Ordinal) &&
             pdfSnap.Contains("ReadWallTraceRasterImageSegmentsForCurrentPageAsync()", StringComparison.Ordinal),
             "viewport should expose a raster-only Wall Trace segment read for PDF-image sheets");
+        AssertTrue(
+            rasterWriteGate >= 0 &&
+            rasterWriteGateNullCheck > rasterWriteGate &&
+            rasterFallbackBuild > rasterWriteGateNullCheck,
+            "Wall Trace raster fallback must not write a page cache across a project package checkpoint");
         AssertTrue(
             vectorTrace >= 0 &&
             fallbackRead > vectorTrace &&
@@ -2205,6 +2310,9 @@ internal static class TakeoffsTreeRegressionTests
         string rasterSheetPreparedApply = ReadRepoFile("Controls/PdfViewport.RasterSheetPreparedApply.cs");
         string rasterSheetReadySourceCache = ReadRepoFile("Controls/PdfViewport.RasterSheetReadySourceCache.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
+        string workZoomRasterWarmMethod = SliceMethod(
+            renderCache,
+            "private static void WarmRasterSheetWorkZoomDpi(");
         string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
         string raster = ReadRepoFile("Models/RasterSheetCacheService.cs");
@@ -2445,13 +2553,13 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SetSheetManagerRasterPrepareRunning", StringComparison.Ordinal) &&
             workspaceManagers.Contains("CompactSheetManagerRasterCacheAsync(SelectedSheetManagerPages())", StringComparison.Ordinal) &&
             compactRasterMethod.Contains("CompactSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
-            compactRasterMethod.Contains("_sheetManagerRasterBackgroundLabel = \"Cleanup\"", StringComparison.Ordinal) &&
-            compactRasterMethod.Contains("SetSheetManagerRasterPrepareRunning(true)", StringComparison.Ordinal) &&
+            compactRasterMethod.Contains("TryBeginSheetManagerRasterOperation(", StringComparison.Ordinal) &&
+            compactRasterMethod.Contains("\"Cleanup\"", StringComparison.Ordinal) &&
             !compactRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             compactRasterBackgroundMethod.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
             compactRasterBackgroundMethod.Contains("RasterSheetCacheService.CompactCache(page)", StringComparison.Ordinal) &&
             compactRasterBackgroundMethod.Contains("RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager: true, reloadCurrentPage: false)", StringComparison.Ordinal) &&
-            compactRasterBackgroundMethod.Contains("SetSheetManagerRasterPrepareRunning(false)", StringComparison.Ordinal) &&
+            compactRasterBackgroundMethod.Contains("FinishSheetManagerRasterOperation(cts)", StringComparison.Ordinal) &&
             compactRasterBackgroundMethod.Contains("Sheet Manager Raster Cleanup done", StringComparison.Ordinal) &&
             !compactRasterBackgroundMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.CompactCache(page)", StringComparison.Ordinal) &&
@@ -2673,6 +2781,15 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("if (!buildMissingDpis)", StringComparison.Ordinal) &&
             renderCache.Contains("BuildCachePreservingEnabled(currentPage, scale)", StringComparison.Ordinal) &&
             renderCache.Contains("work-zoom-{dpi}dpi warmed", StringComparison.Ordinal) &&
+            workZoomRasterWarmMethod.Contains(
+                "JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(currentPage.FolderPath)",
+                StringComparison.Ordinal) &&
+            workZoomRasterWarmMethod.Contains("if (writeActivity == null)", StringComparison.Ordinal) &&
+            workZoomRasterWarmMethod.IndexOf(
+                "TryBeginBackgroundWriteForProjectPath",
+                StringComparison.Ordinal) < workZoomRasterWarmMethod.IndexOf(
+                "BuildCachePreservingEnabled",
+                StringComparison.Ordinal) &&
             renderCache.Contains("allowDuringNavigation", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("buildMissingDpis: false", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("allowDuringNavigation: true", StringComparison.Ordinal) &&

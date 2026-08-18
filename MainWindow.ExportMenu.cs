@@ -19,6 +19,8 @@ public partial class MainWindow
         };
 
         menu.Items.Add(MakeMenuItem("Save", hasJob, () => BtnSave_Click(this, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Save As OurPlan Project...", hasJob, SaveAsOurPlanProject));
+        menu.Items.Add(MakeMenuItem("Save a Legacy Folder Copy...", hasJob, SaveLegacyFolderCopy));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Export CSV", hasJob, () => BtnExportCsv_Click(this, new RoutedEventArgs())));
         menu.Items.Add(MakeMenuItem("Export TXT", hasJob, () => BtnExportTxt_Click(this, new RoutedEventArgs())));

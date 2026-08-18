@@ -29,6 +29,9 @@ if (args.Length > 0 && args[0] == "sheetmetadata-v3-benchmark")
 if (args.Length > 0 && args[0] == "runtime-smoke-job")
     return RuntimeSmokeJobHarness.Create();
 
+if (args.Length > 0 && args[0] == "ourplan-runtime-smoke")
+    return OurPlanPackageSmokeHarness.Create();
+
 if (args.Length > 0 && args[0] == "storage-analysis")
     return ProjectStorageHarness.Run(args);
 
@@ -186,6 +189,43 @@ var tests = new List<(string Name, Action Run)>
     ("project storage compact preserves json semantics and reports savings", ProjectStorageCompactorTests.CompactPreservesJsonSemanticsAndReportsSavings),
     ("project storage compact skips invalid or changed json", ProjectStorageCompactorTests.InvalidOrChangedJsonIsSkippedWithoutMutation),
     ("project storage compact guards cancellation path races and reparse points", ProjectStorageCompactorTests.CancellationAndPathRaceGuardsAreWired),
+    ("new projects default to ourplan format", OurPlanPackageTests.NewProjectsDefaultToOurPlanFormat),
+    ("ourplan package round trip preserves durable data and deduplicates objects", OurPlanPackageTests.RoundTripPreservesDurableDataAndDeduplicatesObjects),
+    ("ourplan package compresses snap json without changing bytes", OurPlanPackageTests.PackageCompressionShrinksLargeSnapJsonWithoutChangingIt),
+    ("ourplan package rejects traversal paths", OurPlanPackageTests.PackageRejectsTraversalPaths),
+    ("ourplan package rejects object hash mismatch", OurPlanPackageTests.PackageRejectsObjectHashMismatch),
+    ("ourplan package detects external revision conflict", OurPlanPackageTests.PackageSaveDetectsExternalRevisionConflict),
+    ("ourplan package unchanged save does not rewrite file", OurPlanPackageTests.UnchangedSaveDoesNotRewritePackage),
+    ("ourplan package same metadata content change", OurPlanPackageTests.SameSizeAndTimestampChangeIsNeverSkipped),
+    ("ourplan package failed save leaves previous file byte exact", OurPlanPackageTests.FailedPackageSaveLeavesPreviousFileByteExact),
+    ("ourplan package rejects excluded active pdf", OurPlanPackageTests.PackageRejectsActivePdfInsideExcludedData),
+    ("ourplan stale clean workspace re-extracts newer revision", OurPlanPackageTests.StaleCleanWorkspaceIsReExtractedAfterExternalRevision),
+    ("ourplan dirty closed workspace is advertised without implicit recovery", OurPlanPackageTests.DirtyClosedWorkspaceIsAdvertisedButPackageOpensByDefault),
+    ("ourplan copied package uses separate exact-path workspace", OurPlanPackageTests.SameRevisionPackageCopyUsesSeparateWorkspace),
+    ("ourplan active workspace claim prevents concurrent reuse", OurPlanPackageTests.ActiveWorkspaceClaimPreventsConcurrentReuse),
+    ("ourplan prune cannot race exclusive workspace claim", OurPlanPackageTests.PruneCannotRaceAnExclusiveWorkspaceClaim),
+    ("ourplan corrupt or missing package opens preserved recovery", OurPlanPackageTests.CorruptAndMissingPackageCanOpenPreservedRecovery),
+    ("ourplan managed legacy copy isolates original", OurPlanPackageTests.ManagedLegacyCopyDoesNotMutateOriginalJob),
+    ("ourplan package legacy copy is loadable and excludes ephemeral files", OurPlanPackageTests.LegacyFolderCopyIsLoadableAndExcludesEphemeralFiles),
+    ("ourplan portable 3d annotations and pdf metadata round trip", OurPlanPackageHardeningTests.PortableThreeDAnnotationsAndPdfMetadataRoundTrip),
+    ("ourplan opaque provider ids remain portable", OurPlanPackageHardeningTests.AiOpaqueProviderIdsRemainPortable),
+    ("ourplan portable project open stays clean", OurPlanPackageHardeningTests.OpeningPortableProjectDoesNotDirtyTheProject),
+    ("ourplan unsafe ai ids and embedded paths are rejected", OurPlanPackageHardeningTests.UnsafeAiIdsAndEmbeddedPathsAreRejected),
+    ("ourplan invalid overwrite publishes successfully", OurPlanPackageHardeningTests.OverwritingInvalidTargetPublishesSuccessfully),
+    ("ourplan corrupt object overwrite publishes successfully", OurPlanPackageHardeningTests.OverwritingPackageWithCorruptObjectPublishesSuccessfully),
+    ("ourplan local publish staging is target scoped", OurPlanPackageHardeningTests.LocalPublishStagingIsScopedByFullTargetPath),
+    ("ourplan explicit recovery keeps partial json", OurPlanPackageHardeningTests.ExplicitRecoveryKeepsWorkspaceWithPartialJson),
+    ("ourplan recovery rejects external references", OurPlanPackageHardeningTests.RecoveryStillRejectsParseableExternalReferences),
+    ("ourplan crash rollback is retained", OurPlanPackageHardeningTests.CrashRollbackIsNeverAutoDeleted),
+    ("ourplan provenance does not leak workspace paths", OurPlanPackageHardeningTests.PortableProvenanceDoesNotLeakWorkspacePaths),
+    ("ourplan background writes stay with current project", OurPlanPackageHardeningTests.BackgroundWritesStayBoundToCurrentProject),
+    ("ourplan legacy pages stay portable and contained", OurPlanPackageHardeningTests.LegacyPageFoldersStayPortableAndContained),
+    ("ourplan opaque json attachments remain byte exact", OurPlanPackageSemanticScopeTests.OpaqueJsonAttachmentsRemainByteExact),
+    ("ourplan malformed authoritative stores are rejected", OurPlanPackageSemanticScopeTests.MalformedAuthoritativeStoresAreRejected),
+    ("ourplan structured data size limits reject manifest before extraction", OurPlanPackageSemanticScopeTests.StructuredDataSizeLimitsRejectManifestBeforeExtraction),
+    ("ourplan archive quotas are high but finite", OurPlanPackageArchiveQuotaTests.LimitsAreHighButFinite),
+    ("ourplan archive rejects oversized declared objects and totals", OurPlanPackageArchiveQuotaTests.DeclaredObjectAndTotalSizesAreRejected),
+    ("ourplan archive rejects oversized compressed manifest", OurPlanPackageArchiveQuotaTests.OversizedCompressedManifestIsRejectedBeforeJsonRead),
     ("sheet overlay reciprocal cleanup is wired", TakeoffsTreeRegressionTests.SheetOverlayReciprocalCleanupIsWired),
     ("sheet overlay auto fit can auto-select overlay", TakeoffsTreeRegressionTests.SheetOverlayAutoFitCanAutoSelectOverlay),
     ("sheet overlay auto fit raster fallback is wired", TakeoffsTreeRegressionTests.SheetOverlayAutoFitRasterFallbackIsWired),
@@ -280,6 +320,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff rename allows duplicate display names", TakeoffRenameAllowsDuplicateDisplayNames),
     ("takeoff tree regression job save avoids legacy pdf sidecar", TakeoffsTreeRegressionTests.JobSaveDoesNotWriteLegacyPdfSidecar),
     ("takeoff tree regression job page load gates legacy autoload", TakeoffsTreeRegressionTests.JobPageLoadGatesLegacyAutoLoad),
+    ("page annotations use lossless dirty lifecycle", TakeoffsTreeRegressionTests.PageAnnotationsUseLosslessDirtyLifecycle),
     ("page open defers heavy ui work", TakeoffsTreeRegressionTests.PageOpenDefersHeavyUiWork),
     ("page tabs support drag reorder and detach", TakeoffsTreeRegressionTests.PageTabsSupportDragReorderAndDetach),
     ("programmatic page selection opens viewport directly", TakeoffsTreeRegressionTests.ProgrammaticPageSelectionOpensViewportDirectly),
@@ -545,6 +586,8 @@ var tests = new List<(string Name, Action Run)>
     ("page multiple overlay layers persist copy reorder and rebase", StorageTests.PageMultipleOverlayLayersPersistCopyReorderAndRebase),
     ("page source json repair restores reciprocal overlay", StorageTests.PageSourceJsonRepairRestoresReciprocalOverlay),
     ("page annotations save load normalize defaults", StorageTests.PageAnnotationsSaveLoadNormalizeDefaults),
+    ("page annotations unchanged save is idempotent", StorageTests.PageAnnotationsUnchangedSaveIsIdempotent),
+    ("page annotations delete last persists empty state", StorageTests.PageAnnotationsDeleteLastPersistsEmptyState),
     ("page annotations follow moved page folder", StorageTests.PageAnnotationsFollowMovedPageFolder),
     ("page corrupt annotations json is quarantined", StorageTests.PageCorruptAnnotationsJsonIsQuarantined),
     ("page bookmarks save load use job-relative page folders", StorageTests.PageBookmarksSaveLoadUseJobRelativePageFolders),
@@ -3186,7 +3229,7 @@ static void ThreeDModelStorePersistsRoofGuides()
                 {
                     Kind = ThreeDRoofGuideKinds.Eave,
                     Label = "Eave 1",
-                    PageFolder = @"C:\job\Pages\A101",
+                    PageFolder = Path.Combine(job.PagesRoot, "A101"),
                     ElevationFeet = 10,
                     DefinesSlope = true,
                     OverhangFeet = 0.5,
@@ -4705,6 +4748,9 @@ static void JobPickerRootsClassifyLocalCloudNetwork()
             JobRootLocationKind.Network.ToString(),
             JobRootSelectorBar.ClassifyJobRootPath(@"\\server\shared\jobs").ToString(),
             "UNC root kind");
+        JobRootDescriptor network = JobRootSelectorBar.DescribeJobRoot(@"\\server\shared\jobs");
+        AssertEqual("Open on demand", network.StatusLabel, "UNC root must not be probed on the UI thread");
+        AssertTrue(network.Exists, "UNC root remains available through explicit open actions");
 
         JobRootDescriptor missing = JobRootSelectorBar.DescribeJobRoot(
             Path.Combine(localRoot, "missing child"));

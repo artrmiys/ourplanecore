@@ -210,8 +210,10 @@ public partial class JobPickerDialog : Window
 
         DetailsText.Text = item.Exists
             ? $"{item.Path}  ·  Right-click for pin / unpin / open folder / remove from Recent."
-            : $"Missing: {item.Path}";
-        OpenButton.IsEnabled = item.Exists;
+            : item.CanOpen
+                ? $"Missing: {item.Path}  -  Open will check for a preserved local recovery."
+                : $"Missing: {item.Path}";
+        OpenButton.IsEnabled = item.CanOpen;
     }
 
     private void JobsList_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
@@ -289,8 +291,8 @@ public partial class JobPickerDialog : Window
 
             var openFolder = new MenuItem
             {
-                Header = "Open Folder in Explorer",
-                IsEnabled = Directory.Exists(item.Path),
+                Header = File.Exists(item.Path) ? "Show Project File in Explorer" : "Open Folder in Explorer",
+                IsEnabled = Directory.Exists(item.Path) || File.Exists(item.Path),
             };
             openFolder.Click += (_, _) => OpenFolderInExplorer(item.Path);
             menu.Items.Add(openFolder);
@@ -362,11 +364,14 @@ public partial class JobPickerDialog : Window
     }
 
     private void SampleLink_Click(object sender, MouseButtonEventArgs e) =>
-        AcceptAction(JobPickerAction.CreateSample);
+        AcceptAction(JobPickerAction.CreateSample, ResolveSelectedJobsRootPath());
+
+    private void BrowsePackageLink_Click(object sender, MouseButtonEventArgs e) =>
+        AcceptAction(JobPickerAction.BrowsePackage);
 
     private void AcceptOpen()
     {
-        if (JobsList.SelectedItem is not JobPickerItem item || !item.Exists)
+        if (JobsList.SelectedItem is not JobPickerItem item || !item.CanOpen)
             return;
 
         SelectedAction = JobPickerAction.OpenSelected;
@@ -501,6 +506,17 @@ public partial class JobPickerDialog : Window
     {
         try
         {
+            if (File.Exists(path))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true,
+                });
+                return;
+            }
+
             Process.Start(new ProcessStartInfo
             {
                 FileName = path,

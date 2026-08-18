@@ -201,7 +201,9 @@ public static class JobWriteAccess
     {
         string relative = Path.GetRelativePath(jobRoot, fullPath);
         return string.Equals(relative, ".~lock", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(relative, ".~lock.guard", StringComparison.OrdinalIgnoreCase);
+            string.Equals(relative, ".~lock.guard", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(relative, OurPlanPackageFormat.WorkspaceMarkerFileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(relative, OurPlanPackageFormat.WorkspaceClaimFileName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSameOrDescendant(string root, string path)

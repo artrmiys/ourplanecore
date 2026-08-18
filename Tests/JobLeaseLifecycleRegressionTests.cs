@@ -22,7 +22,8 @@ internal static class JobLeaseLifecycleRegressionTests
 
     public static void ReloadAndOwnershipLossFailClosed()
     {
-        string lifecycle = Read("MainWindow.JobLifecycle.cs");
+        string lifecycle = Read("MainWindow.JobLifecycle.cs") +
+                           Read("MainWindow.JobLifecycle.Maintenance.cs");
         string access = Read("MainWindow.JobAccess.cs");
 
         AssertTrue(
@@ -53,7 +54,8 @@ internal static class JobLeaseLifecycleRegressionTests
     {
         string requests = Read("MainWindow.AiRequestActions.cs");
         string viewport = Read("MainWindow.ViewportCallbacks.cs");
-        string lifecycle = Read("MainWindow.JobLifecycle.cs");
+        string lifecycle = Read("MainWindow.JobLifecycle.cs") +
+                           Read("MainWindow.JobLifecycle.Maintenance.cs");
 
         AssertTrue(
             requests.Contains("OurPlanCoreJob runJob = _currentJob;", StringComparison.Ordinal) &&
@@ -102,7 +104,7 @@ internal static class JobLeaseLifecycleRegressionTests
 
         int pdfDialogCapture = pdfImport.IndexOf("OurPlanCoreJob? dialogOriginJob = _currentJob;", StringComparison.Ordinal);
         int pdfTargetCapture = pdfImport.IndexOf(
-            "OurPlanCoreJob targetJob = EnsurePdfTakeoffImportTargetJob(options, expectedTargetJob);",
+            "OurPlanCoreJob? targetJob = EnsurePdfTakeoffImportTargetJob(options, expectedTargetJob);",
             pdfDialogCapture,
             StringComparison.Ordinal);
         int pdfTargetGuard = pdfImport.IndexOf(

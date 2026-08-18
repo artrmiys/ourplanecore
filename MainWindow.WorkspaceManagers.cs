@@ -21,6 +21,7 @@ public partial class MainWindow
     private bool _updatingSheetManagerBulkEdit;
     private bool _sheetManagerRefreshPendingAfterEdit;
     private CancellationTokenSource? _sheetManagerRasterPrepareCts;
+    private IDisposable? _sheetManagerRasterWriteActivity;
     private CancellationTokenSource? _sheetManagerAnalysisCts;
     private string _sheetManagerRasterBackgroundLabel = "Prepare";
 
@@ -622,10 +623,13 @@ public partial class MainWindow
         int rasterDpi = SelectedSheetManagerRasterDpi();
         string rasterFormat = SelectedSheetManagerRasterFormat();
         string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
-        var cts = new CancellationTokenSource();
-        _sheetManagerRasterPrepareCts = cts;
-        _sheetManagerRasterBackgroundLabel = "Prepare";
-        SetSheetManagerRasterPrepareRunning(true);
+        if (!TryBeginSheetManagerRasterOperation(
+                "Prepare",
+                "preparing raster cache",
+                out CancellationTokenSource cts))
+        {
+            return;
+        }
         TxtStatus.Text = $"Sheet Manager Raster Prepare {rasterDpiLabel}: queued {pages.Count} sheet(s).";
         _ = PrepareSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), rasterDpi, rasterFormat, cts);
     }
@@ -732,7 +736,17 @@ public partial class MainWindow
             return false;
         }
 
+        IDisposable? writeActivity = JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(
+            _currentJob?.RootPath ?? "");
+        if (writeActivity == null)
+        {
+            TxtStatus.Text = $"A project checkpoint is active. Retry {command} when it finishes.";
+            cts = null!;
+            return false;
+        }
+
         cts = new CancellationTokenSource();
+        _sheetManagerRasterWriteActivity = writeActivity;
         _sheetManagerRasterPrepareCts = cts;
         _sheetManagerRasterBackgroundLabel = operationLabel;
         SetSheetManagerRasterPrepareRunning(true);
@@ -746,6 +760,8 @@ public partial class MainWindow
             _sheetManagerRasterPrepareCts = null;
             _sheetManagerRasterBackgroundLabel = "Prepare";
             SetSheetManagerRasterPrepareRunning(false);
+            _sheetManagerRasterWriteActivity?.Dispose();
+            _sheetManagerRasterWriteActivity = null;
         }
 
         cts.Dispose();
@@ -888,14 +904,7 @@ public partial class MainWindow
         }
         finally
         {
-            if (ReferenceEquals(_sheetManagerRasterPrepareCts, cts))
-            {
-                _sheetManagerRasterPrepareCts = null;
-                _sheetManagerRasterBackgroundLabel = "Prepare";
-                SetSheetManagerRasterPrepareRunning(false);
-            }
-
-            cts.Dispose();
+            FinishSheetManagerRasterOperation(cts);
             InvalidatePagePreviewPrefetchCache();
             if (!RefreshSheetManagerRasterRows(pages))
                 RefreshSheetManager();
@@ -920,10 +929,13 @@ public partial class MainWindow
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        _sheetManagerRasterPrepareCts = cts;
-        _sheetManagerRasterBackgroundLabel = "Cleanup";
-        SetSheetManagerRasterPrepareRunning(true);
+        if (!TryBeginSheetManagerRasterOperation(
+                "Cleanup",
+                "cleaning raster cache",
+                out CancellationTokenSource cts))
+        {
+            return;
+        }
         TxtStatus.Text = $"Sheet Manager Raster Cleanup: queued {pages.Count} sheet(s).";
         _ = CompactSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), cts);
         await Task.CompletedTask;
@@ -988,14 +1000,7 @@ public partial class MainWindow
         }
         finally
         {
-            if (ReferenceEquals(_sheetManagerRasterPrepareCts, cts))
-            {
-                _sheetManagerRasterPrepareCts = null;
-                _sheetManagerRasterBackgroundLabel = "Prepare";
-                SetSheetManagerRasterPrepareRunning(false);
-            }
-
-            cts.Dispose();
+            FinishSheetManagerRasterOperation(cts);
             InvalidatePagePreviewPrefetchCache();
             if (!RefreshSheetManagerRasterRows(pages))
                 RefreshSheetManager();

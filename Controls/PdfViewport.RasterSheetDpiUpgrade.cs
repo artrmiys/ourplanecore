@@ -78,6 +78,10 @@ public sealed partial class PdfViewport
                     RasterSheetCacheService.IsRasterDpiPinned(buildPage.RasterSheet))
                     return;
 
+                using IDisposable? writeActivity =
+                    JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(queuedPage.FolderPath);
+                if (writeActivity == null)
+                    return;
                 float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
                 result = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(buildPage, targetScale))
                     .ConfigureAwait(false);
@@ -214,6 +218,10 @@ public sealed partial class PdfViewport
 
                 PageInfo buildPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
                 if (RasterSheetCacheService.IsRasterDpiPinned(buildPage.RasterSheet))
+                    return;
+                using IDisposable? writeActivity =
+                    JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(queuedPage.FolderPath);
+                if (writeActivity == null)
                     return;
                 float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
                 result = await Task.Run(() =>
@@ -890,6 +898,10 @@ public sealed partial class PdfViewport
             float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
             await Task.Run(() =>
             {
+                using IDisposable? writeActivity =
+                    JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(queuedPage.FolderPath);
+                if (writeActivity == null)
+                    return;
                 PageInfo persistPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
                 RasterSheetCacheService.TryEnableReadyReadableRaster(persistPage, targetScale, out _);
             }).ConfigureAwait(false);
@@ -1006,6 +1018,10 @@ public sealed partial class PdfViewport
             float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
             RasterSheetBuildResult result = await Task.Run(() =>
             {
+                using IDisposable? writeActivity =
+                    JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(queuedPage.FolderPath);
+                if (writeActivity == null)
+                    return new RasterSheetBuildResult(false, null, "", "Package checkpoint active");
                 PageInfo buildPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
                 return RasterSheetCacheService.TryEnableReadyReadableRaster(buildPage, targetScale, out RasterSheetBuildResult enabled)
                     ? enabled
@@ -1126,6 +1142,10 @@ public sealed partial class PdfViewport
                 if (buildPage.RasterSheet?.Enabled != true)
                     return;
 
+                using IDisposable? writeActivity =
+                    JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(queuedPage.FolderPath);
+                if (writeActivity == null)
+                    return;
                 float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
                 result = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(buildPage, targetScale))
                     .ConfigureAwait(false);

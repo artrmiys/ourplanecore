@@ -13,6 +13,7 @@ namespace OurPlanCore;
 public partial class MainWindow
 {
     private bool _synchronizingOrthoAcrossViewports;
+    private readonly HashSet<DetachedSheetWindow> _dirtyDetachedPageAnnotations = [];
 
     // The most recently focused detached sheet window. While set, clicking a
     // sheet in the Pages tree swaps THAT window to the clicked sheet instead
@@ -24,10 +25,16 @@ public partial class MainWindow
     private void ConfigureDetachedSheetWindow(DetachedSheetWindow window, UnitMode unitMode)
     {
         window.Activated += (_, _) => _detachedSheetNavigationTarget = window;
+        window.Closing += (_, e) =>
+        {
+            if (!TryFlushDetachedPageAnnotationsForNavigation(window, "closing the detached sheet"))
+                e.Cancel = true;
+        };
         window.Closed += (_, _) =>
         {
             if (ReferenceEquals(_detachedSheetNavigationTarget, window))
                 _detachedSheetNavigationTarget = null;
+            _dirtyDetachedPageAnnotations.Remove(window);
             ForgetDetachedSheetOverlay(window);
         };
         PdfViewport viewport = window.Viewport;
@@ -70,9 +77,9 @@ public partial class MainWindow
             QueueDetachedSheetOverlays(window, page, requestedScale);
         };
         viewport.ScaleChanged += scale => OnDetachedPageScaleChanged(window, scale);
-        viewport.PageAnnotationAdded += _ => SaveDetachedPageAnnotations(window);
-        viewport.PageAnnotationRemoved += _ => SaveDetachedPageAnnotations(window);
-        viewport.PageAnnotationChanged += _ => SaveDetachedPageAnnotations(window);
+        viewport.PageAnnotationAdded += _ => OnDetachedPageAnnotationChanged(window);
+        viewport.PageAnnotationRemoved += _ => OnDetachedPageAnnotationChanged(window);
+        viewport.PageAnnotationChanged += _ => OnDetachedPageAnnotationChanged(window);
         viewport.PageAnnotationTextRequested += RequestPageAnnotationText;
         viewport.OrthoChanged += SynchronizeOrthoAcrossViewports;
         viewport.JoistDirectionCaptured += (area, start, end) => OnDetachedJoistDirectionCaptured(window, area, start, end, unitMode);
@@ -383,6 +390,9 @@ public partial class MainWindow
             return true;
         }
 
+        if (!TryFlushDetachedPageAnnotationsForNavigation(window, "opening another sheet in the detached window"))
+            return true;
+
         UnitMode unitMode = _settings.UnitMode == UnitMode.Metric.ToString()
             ? UnitMode.Metric
             : UnitMode.Imperial;
@@ -390,6 +400,7 @@ public partial class MainWindow
         // selection; the guard keeps that from wiping the Takeoffs tree.
         RunWithDetachedSelectionSyncGuard(() =>
             window.ShowPage(_currentJob, target, _takeoffItems, _settings, unitMode));
+        _dirtyDetachedPageAnnotations.Remove(window);
         QueueDetachedSheetOverlays(window, target);
         TxtStatus.Text = $"Detached window now shows {target.Name}.";
         return true;
@@ -675,23 +686,82 @@ public partial class MainWindow
         UpdateTotalDisplay();
     }
 
-    private void SaveDetachedPageAnnotations(DetachedSheetWindow window)
+    private void OnDetachedPageAnnotationChanged(DetachedSheetWindow window)
     {
         if (!IsCurrentJobWritable)
         {
-            TxtStatus.Text = $"{window.Page.Name}: read-only; markup changes were not saved.";
+            if (!_dirtyDetachedPageAnnotations.Contains(window))
+            {
+                window.Viewport.SetPageAnnotations(
+                    OurPlanCoreJobStore.LoadPageAnnotations(window.Page.FolderPath));
+                TxtStatus.Text = $"{window.Page.Name}: read-only; the rejected markup change was reverted.";
+            }
+            else
+            {
+                TxtStatus.Text = $"{window.Page.Name}: read-only; earlier unsaved annotation changes remain in this window.";
+            }
             return;
         }
 
+        _dirtyDetachedPageAnnotations.Add(window);
+        TrySaveDetachedPageAnnotationsFromUi(window);
+    }
+
+    private void SaveDirtyDetachedPageAnnotations()
+    {
+        foreach (DetachedSheetWindow window in _dirtyDetachedPageAnnotations.ToList())
+            SaveDetachedPageAnnotationsCore(window);
+    }
+
+    private void SaveDetachedPageAnnotationsCore(DetachedSheetWindow window)
+    {
+        if (!_dirtyDetachedPageAnnotations.Contains(window))
+            return;
+        if (!IsCurrentJobWritable)
+            throw new InvalidOperationException($"{window.Page.Name} is read-only; its annotation changes remain unsaved.");
+
+        OurPlanCoreJobStore.SavePageAnnotations(
+            window.Page.FolderPath,
+            window.Viewport.GetPageAnnotations());
+        _dirtyDetachedPageAnnotations.Remove(window);
+    }
+
+    private bool TrySaveDetachedPageAnnotationsFromUi(DetachedSheetWindow window)
+    {
         try
         {
-            OurPlanCoreJobStore.SavePageAnnotations(
-                window.Page.FolderPath,
-                window.Viewport.GetPageAnnotations());
+            SaveDetachedPageAnnotationsCore(window);
+            return true;
         }
         catch (Exception ex)
         {
-            TxtStatus.Text = $"{window.Page.Name}: annotation save skipped: {ex.Message}";
+            AppLog.Warn(ex, $"Detached annotation autosave failed for {window.Page.Name}; state remains dirty.");
+            TxtStatus.Text = $"{window.Page.Name}: annotation save failed; changes remain pending. {ex.Message}";
+            return false;
+        }
+    }
+
+    private bool TryFlushDetachedPageAnnotationsForNavigation(
+        DetachedSheetWindow window,
+        string operation)
+    {
+        try
+        {
+            SaveDetachedPageAnnotationsCore(window);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Detached annotation save failed before {operation}.");
+            TxtStatus.Text = $"{window.Page.Name}: {operation} canceled; annotation changes remain unsaved.";
+            MessageBox.Show(
+                window,
+                $"Annotation changes on {window.Page.Name} could not be saved, so {operation} was canceled.\n\n" +
+                $"The changes are still held in this open detached sheet. Retry after resolving the storage problem.\n\n{ex.Message}",
+                "Annotation Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
         }
     }
 

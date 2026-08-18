@@ -833,7 +833,9 @@ internal sealed class PageBookmarksController
         }
 
         string path = BookmarkCropImageFullPath(bookmark);
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        if (string.IsNullOrWhiteSpace(path) ||
+            !File.Exists(path) ||
+            !ProjectPathSafety.IsSafeImagePath(path))
         {
             _setStatus($"Crop image is missing for bookmark '{bookmark.Name}'.");
             return;
@@ -899,19 +901,14 @@ internal sealed class PageBookmarksController
         if (string.IsNullOrWhiteSpace(path))
             return "";
 
-        try
-        {
-            if (Path.IsPathRooted(path))
-                return Path.GetFullPath(path);
-
-            OurPlanCoreJob? job = _currentJob();
-            return job == null ? "" : Path.GetFullPath(Path.Combine(job.RootPath, path));
-        }
-        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
-        {
-            AppLog.Warn(ex, $"Invalid bookmark crop image path {path}");
-            return "";
-        }
+        OurPlanCoreJob? job = _currentJob();
+        return job != null && ProjectPathSafety.TryResolveInside(
+            job.RootPath,
+            path,
+            job.RootPath,
+            out string resolved)
+            ? resolved
+            : "";
     }
 
     private static string BookmarkCropImagePath(

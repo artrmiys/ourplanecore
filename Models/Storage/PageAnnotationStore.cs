@@ -48,8 +48,8 @@ internal static class PageAnnotationStore
 
     public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations)
     {
-        JobWriteAccess.Demand(PageAnnotationsJsonPath(pageFolder), "save page annotations");
-        Directory.CreateDirectory(pageFolder);
+        string path = PageAnnotationsJsonPath(pageFolder);
+        JobWriteAccess.Demand(path, "save page annotations");
         var dtos = annotations.Select(annotation =>
         {
             string kind = NormalizePageAnnotationKind(annotation.Kind);
@@ -66,16 +66,22 @@ internal static class PageAnnotationStore
                 PointsPdf = annotation.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
             };
         }).ToList();
+        string json = JsonSerializer.Serialize(dtos, OurPlanCoreJobStore.JsonOptions);
 
         try
         {
-            IoUtil.WriteAllTextAtomic(
-                PageAnnotationsJsonPath(pageFolder),
-                JsonSerializer.Serialize(dtos, OurPlanCoreJobStore.JsonOptions));
+            if (File.Exists(path) &&
+                string.Equals(File.ReadAllText(path), json, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(pageFolder);
+            IoUtil.WriteAllTextAtomic(path, json);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(PageAnnotationsJsonPath(pageFolder))}': {ex.Message}", ex);
+            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(path)}': {ex.Message}", ex);
         }
     }
 

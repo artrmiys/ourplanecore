@@ -26,10 +26,49 @@ public partial class MainWindow
     private Button? _projectStorageAnalyzeButton;
     private Button? _projectStoragePreviewButton;
     private Button? _projectStorageCompactButton;
+    private ComboBox? _newProjectStorageFormatCombo;
 
     private FrameworkElement BuildProjectStoragePanel()
     {
         var root = new DockPanel { Margin = new Thickness(2) };
+
+        var formatPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
+        formatPanel.Children.Add(Header("Default format for new projects"));
+        formatPanel.Children.Add(new TextBlock
+        {
+            Text = "OurPlan Project stores a portable project as one .ourplan file. Legacy folder remains available for compatibility.",
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+        var formatRow = new WrapPanel();
+        _newProjectStorageFormatCombo = new ComboBox
+        {
+            Width = 310,
+            Margin = new Thickness(0, 0, 8, 0),
+            ItemsSource = new[]
+            {
+                "OurPlan Project (*.ourplan) — Recommended",
+                "Legacy project folder",
+            },
+            SelectedIndex = UseLegacyFolderForNewProjects() ? 1 : 0,
+        };
+        _newProjectStorageFormatCombo.SelectionChanged += (_, _) =>
+        {
+            _settings.NewProjectStorageFormat = _newProjectStorageFormatCombo.SelectedIndex == 1
+                ? "LegacyFolder"
+                : "OurPlan";
+            SaveAppSettings();
+        };
+        formatRow.Children.Add(_newProjectStorageFormatCombo);
+        formatRow.Children.Add(MgrButton("Reset recommended", (_, _) =>
+        {
+            _settings.NewProjectStorageFormat = "OurPlan";
+            _newProjectStorageFormatCombo.SelectedIndex = 0;
+            SaveAppSettings();
+        }));
+        formatPanel.Children.Add(formatRow);
+        DockPanel.SetDock(formatPanel, Dock.Top);
+        root.Children.Add(formatPanel);
 
         var actions = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
         _projectStorageAnalyzeButton = MgrButton(
@@ -104,6 +143,12 @@ public partial class MainWindow
         BindProjectStorageSettings();
         return root;
     }
+
+    private bool UseLegacyFolderForNewProjects() =>
+        string.Equals(
+            _settings.NewProjectStorageFormat,
+            "LegacyFolder",
+            StringComparison.OrdinalIgnoreCase);
 
     private static TextBlock StorageTextBlock() => new()
     {
@@ -345,7 +390,13 @@ public partial class MainWindow
         try
         {
             ProjectStorageCompactionResult result = await Task.Run(() =>
-                ProjectStorageCompactor.Execute(plan, cancellation.Token),
+            {
+                using IDisposable? writeActivity =
+                    JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(jobRoot);
+                if (writeActivity == null)
+                    throw new OperationCanceledException("A package checkpoint started before compaction.");
+                return ProjectStorageCompactor.Execute(plan, cancellation.Token);
+            },
                 cancellation.Token);
             if (generation != _projectStorageAnalysisGeneration ||
                 _currentJob == null ||

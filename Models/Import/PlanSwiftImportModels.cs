@@ -27,6 +27,7 @@ public sealed class PlanSwiftImportOptions
     public int MaxPages { get; init; }
     public int MaxTakeoffItems { get; init; }
     public int MaxMeasurements { get; init; }
+    public bool PortableReportPaths { get; init; }
 
     public bool ImportIntoExistingJob => !string.IsNullOrWhiteSpace(DestinationJobPath);
 }

@@ -929,6 +929,11 @@ public sealed partial class PdfViewport
             if (!buildMissingDpis)
                 return;
 
+            using IDisposable? writeActivity =
+                JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(currentPage.FolderPath);
+            if (writeActivity == null)
+                return;
+
             RasterSheetBuildResult build = RasterSheetCacheService.BuildCachePreservingEnabled(currentPage, scale);
             if (!build.Ok)
             {
@@ -1407,6 +1412,10 @@ public sealed partial class PdfViewport
             await RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
+                using IDisposable? writeActivity =
+                    JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(pageFolder);
+                if (writeActivity == null)
+                    return;
                 await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
                 PageInfo? page = OurPlanCoreJobStore.TryReadPage(pageFolder);
                 if (page?.RasterSheet?.Enabled != true ||

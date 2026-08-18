@@ -203,6 +203,8 @@ internal static class PageStore
     {
         SourceInfo? src = ReadSource(pageFolder);
         if (src == null) return;
+        if (src.ScaleMetersPerPt.Equals(scaleMetersPerPt))
+            return;
 
         string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
         WriteSource(
@@ -494,7 +496,16 @@ internal static class PageStore
 
         try
         {
-            return JsonSerializer.Deserialize<PdfSheetMetadata>(File.ReadAllText(path), OurPlanCoreJobStore.JsonOptions);
+            PdfSheetMetadata? metadata = JsonSerializer.Deserialize<PdfSheetMetadata>(
+                File.ReadAllText(path),
+                OurPlanCoreJobStore.JsonOptions);
+            if (metadata != null &&
+                !string.IsNullOrWhiteSpace(metadata.PdfPath) &&
+                !Path.IsPathRooted(metadata.PdfPath))
+            {
+                metadata.PdfPath = Path.GetFullPath(Path.Combine(pageFolder, metadata.PdfPath));
+            }
+            return metadata;
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {

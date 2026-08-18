@@ -214,18 +214,64 @@ public static partial class SmartContextStore
         CreateJobDirectory(Path.Combine(contextRoot, "learning"), "prepare AI learning context");
 
         string projectJsonPath = ProjectContextPath(jobRoot);
-        SmartProjectContext context = LoadProjectContext(projectJsonPath) ?? new SmartProjectContext
+        SmartProjectContext? loaded = LoadProjectContext(projectJsonPath);
+        SmartProjectContext context = loaded ?? new SmartProjectContext();
+        bool durableChanged = loaded == null;
+        string now = DateTime.UtcNow.ToString("O");
+        if (string.IsNullOrWhiteSpace(context.ProjectId))
         {
-            ProjectId = Guid.NewGuid().ToString(),
-            CreatedAtUtc = DateTime.UtcNow.ToString("O"),
-        };
+            context.ProjectId = Guid.NewGuid().ToString();
+            durableChanged = true;
+        }
+        if (string.IsNullOrWhiteSpace(context.CreatedAtUtc))
+        {
+            context.CreatedAtUtc = now;
+            durableChanged = true;
+        }
+        if (!string.Equals(context.ProjectName, projectName, StringComparison.Ordinal))
+        {
+            context.ProjectName = projectName;
+            durableChanged = true;
+        }
+        string absoluteRoot = Path.GetFullPath(jobRoot);
+        bool rootNeedsUpdate = string.IsNullOrWhiteSpace(context.RootPath);
+        if (!rootNeedsUpdate && !context.RootPath.Equals(".", StringComparison.Ordinal))
+        {
+            try
+            {
+                rootNeedsUpdate = !Path.TrimEndingDirectorySeparator(
+                        Path.GetFullPath(context.RootPath))
+                    .Equals(
+                        Path.TrimEndingDirectorySeparator(absoluteRoot),
+                        StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                rootNeedsUpdate = true;
+            }
+        }
+        if (rootNeedsUpdate)
+        {
+            context.RootPath = absoluteRoot;
+            durableChanged = true;
+        }
+        List<string> normalizedMarkerTypes = NormalizeMarkerTypeList(context.HiddenMarkerTypes);
+        if (!(context.HiddenMarkerTypes ?? []).SequenceEqual(
+                normalizedMarkerTypes,
+                StringComparer.Ordinal))
+        {
+            context.HiddenMarkerTypes = normalizedMarkerTypes;
+            durableChanged = true;
+        }
+        if (durableChanged)
+        {
+            context.UpdatedAtUtc = now;
+            SaveProjectContext(jobRoot, context);
+        }
 
-        context.ProjectName = projectName;
-        context.RootPath = Path.GetFullPath(jobRoot);
-        context.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
-        context.HiddenMarkerTypes = NormalizeMarkerTypeList(context.HiddenMarkerTypes);
-
-        SaveProjectContext(jobRoot, context);
+        // RootPath is runtime information. A transferred package may persist it
+        // as "."; keep that portable value on disk during an idempotent ensure.
+        context.RootPath = absoluteRoot;
         EnsureFile(Path.Combine(contextRoot, "project.md"), $"# {projectName}{Environment.NewLine}{Environment.NewLine}");
         EnsureFile(Path.Combine(contextRoot, "observations.jsonl"), "");
         EnsureFile(Path.Combine(contextRoot, "takeoff_rules_used.json"), "{\n  \"rules\": []\n}\n");
@@ -240,10 +286,9 @@ public static partial class SmartContextStore
 
     public static IReadOnlyList<string> LoadHiddenMarkerTypes(OurPlanCoreJob job)
     {
-        if (!JobWriteAccess.IsWriteAllowed(job.RootPath))
-            return LoadProjectContext(ProjectContextPath(job.RootPath))?.HiddenMarkerTypes.ToList() ?? [];
-
-        return EnsureProjectContext(job.RootPath, job.Name).HiddenMarkerTypes.ToList();
+        return LoadProjectContext(ProjectContextPath(job.RootPath))
+            ?.HiddenMarkerTypes
+            .ToList() ?? [];
     }
 
     public static void SaveHiddenMarkerTypes(OurPlanCoreJob job, IEnumerable<string> hiddenMarkerTypes)
@@ -345,7 +390,7 @@ public static partial class SmartContextStore
             UpdatedAtUtc = now,
         };
 
-        string requestPath = Path.Combine(ContextRoot(job.RootPath), "requests", $"{request.Id}.json");
+        string requestPath = SmartContextFileId.JsonPath(job, "requests", request.Id, "AI request id");
         try
         {
             IoUtil.WriteAllTextAtomic(requestPath, JsonSerializer.Serialize(request, JsonOptions));

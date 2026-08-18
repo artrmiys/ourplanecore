@@ -83,12 +83,13 @@ public static class ThreeDModelStore
             ThreeDWallModel? model = JsonSerializer.Deserialize<ThreeDWallModel>(File.ReadAllText(path), OurPlanCoreJobStore.JsonOptions);
             if (model != null)
             {
+                ThreeDModelPathPortability.RehydrateRuntimePaths(job.RootPath, model);
                 NormalizeLegacyRoofGuides(model);
                 NormalizeLegacyRoofGroups(model);
             }
             return model;
         }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException or IOException)
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or IOException or OurPlanPackageValidationException)
         {
             AppLog.Warn(ex, $"Failed to load 3D wall model {path}");
             return null;

@@ -231,8 +231,18 @@ public sealed partial class PdfViewport
             float buildScale = pinnedDpi > 0
                 ? RasterSheetCacheService.RasterDpiToRenderScale(pinnedDpi)
                 : RasterSheetCacheService.DefaultRenderScale;
-            RasterSheetBuildResult build =
-                RasterSheetCacheService.BuildCachePreservingEnabled(page, buildScale);
+            RasterSheetBuildResult build;
+            using (IDisposable? writeActivity =
+                   JobFileWriteActivity.TryBeginBackgroundWriteForProjectPath(page.FolderPath))
+            {
+                if (writeActivity == null)
+                {
+                    return ((IReadOnlyList<PdfGeometrySnapSegment>)[],
+                        CombineWallTraceSegmentErrors(error, "raster build skipped during project checkpoint"));
+                }
+
+                build = RasterSheetCacheService.BuildCachePreservingEnabled(page, buildScale);
+            }
             if (!build.Ok || build.Source == null)
             {
                 string buildError = string.IsNullOrWhiteSpace(build.Error)

@@ -41,6 +41,12 @@ public partial class MainWindow
             return;
 
         PlanSwiftImportOptions options = dialog.ImportOptions;
+        if (!UseLegacyFolderForNewProjects())
+        {
+            await ImportPlanSwiftJobAsOurPlanAsync(options);
+            return;
+        }
+
         PlanSwiftImportResult result;
         using (ShowBusyOverlay("Importing PlanSwift job..."))
         {
@@ -68,6 +74,101 @@ public partial class MainWindow
             $"{result.MeasurementsImported} measurement(s). Report: {reportPath}";
         ShowPlanSwiftImportResult(result, reportPath);
     }
+
+    private async Task ImportPlanSwiftJobAsOurPlanAsync(PlanSwiftImportOptions sourceOptions)
+    {
+        string displayName = string.IsNullOrWhiteSpace(sourceOptions.DestinationJobName)
+            ? Path.GetFileName(sourceOptions.SourceJobPath)
+            : sourceOptions.DestinationJobName.Trim();
+        var saveDialog = CreateOurPlanSaveDialog(displayName);
+        if (Directory.Exists(sourceOptions.DestinationParentPath))
+            saveDialog.InitialDirectory = sourceOptions.DestinationParentPath;
+        if (saveDialog.ShowDialog(this) != true || !PrepareCurrentJobForSwitch())
+            return;
+
+        OurPlanManagedWorkspaceReservation? reservation = null;
+        OurPlanPackageSession? packageSession = null;
+        try
+        {
+            reservation = OurPlanPackageWorkspace.ReserveManagedWorkspace(displayName);
+            PlanSwiftImportOptions managedOptions = ForManagedPlanSwiftImport(sourceOptions, reservation);
+            PlanSwiftImportResult result;
+            using (ShowBusyOverlay("Importing PlanSwift job into an OurPlan project..."))
+            {
+                await WaitForBusyOverlayRenderAsync();
+                TxtStatus.Text = "Importing PlanSwift job. The source folder is read-only.";
+                result = await Task.Run(() => PlanSwiftProjectImporter.Import(managedOptions));
+            }
+
+            OurPlanCoreJob managedJob = OurPlanPackageWorkspace.CompleteManagedWorkspace(
+                reservation,
+                result.DestinationJobPath);
+            result = result with { DestinationJobPath = managedJob.RootPath };
+            packageSession = RunResponsivePackageOperation(() =>
+                OurPlanPackageWriter.SaveAs(
+                    managedJob.RootPath,
+                    saveDialog.FileName,
+                    displayName,
+                    overwriteExisting: File.Exists(saveDialog.FileName),
+                    projectId: reservation.ProjectId));
+            _openingPackageSession = packageSession;
+            // Re-enter OpenJob's checkpointed switch preparation after the long import/package write.
+            if (!OpenJob(managedJob.RootPath))
+            {
+                OurPlanPackageWorkspace.MarkSessionClosed(packageSession);
+                throw new IOException("The imported OurPlan project could not be opened safely.");
+            }
+            packageSession.HasUnpackagedChanges = true;
+            if (!TrySaveCurrentPackage("PlanSwift import initialization"))
+            {
+                TxtStatus.Text =
+                    $"PlanSwift import completed in the preserved local working copy " +
+                    $"({result.PagesImported} page(s)), but the .ourplan file was not updated.";
+                return;
+            }
+
+            string artifactParent = Path.GetDirectoryName(packageSession.PackagePath) ?? "";
+            if (Directory.Exists(artifactParent))
+            {
+                _settings.JobsRootPath = artifactParent;
+                AppSettingsStore.AddJobsRoot(_settings, artifactParent);
+                SaveAppSettings();
+            }
+            string reportPath = PlanSwiftImportReportPath(managedJob.RootPath);
+            TxtStatus.Text =
+                $"Imported OurPlan project: {result.PagesImported} page(s), " +
+                $"{result.TakeoffFoldersImported} takeoff folder(s), " +
+                $"{result.TakeoffItemsImported} takeoff item(s), " +
+                $"{result.MeasurementsImported} measurement(s).";
+            ShowPlanSwiftImportResult(
+                result,
+                reportPath,
+                packageSession.PackagePath,
+                Path.GetRelativePath(managedJob.RootPath, reportPath));
+        }
+        finally
+        {
+            _openingPackageSession = null;
+            if (reservation != null && packageSession == null)
+                OurPlanPackageWorkspace.AbandonManagedWorkspace(reservation);
+        }
+    }
+
+    private static PlanSwiftImportOptions ForManagedPlanSwiftImport(
+        PlanSwiftImportOptions source,
+        OurPlanManagedWorkspaceReservation reservation) =>
+        new()
+        {
+            SourceJobPath = source.SourceJobPath,
+            DestinationParentPath = reservation.ImportParentRoot,
+            DestinationJobName = reservation.DisplayName,
+            ConvertPageImages = source.ConvertPageImages,
+            ImportAllSheetsAndTakeoffFolders = source.ImportAllSheetsAndTakeoffFolders,
+            MaxPages = source.MaxPages,
+            MaxTakeoffItems = source.MaxTakeoffItems,
+            MaxMeasurements = source.MaxMeasurements,
+            PortableReportPaths = true,
+        };
 
     private async Task ImportPlanSwiftToCurrentJobAsync()
     {
@@ -141,7 +242,11 @@ public partial class MainWindow
         ShowPlanSwiftImportResult(result, reportPath);
     }
 
-    private void ShowPlanSwiftImportResult(PlanSwiftImportResult result, string reportPath)
+    private void ShowPlanSwiftImportResult(
+        PlanSwiftImportResult result,
+        string reportPath,
+        string? displayDestination = null,
+        string? displayReportPath = null)
     {
         var window = new Window
         {
@@ -180,7 +285,10 @@ public partial class MainWindow
 
         var summary = new TextBlock
         {
-            Text = BuildPlanSwiftImportSummary(result, reportPath),
+            Text = BuildPlanSwiftImportSummary(
+                result,
+                displayDestination ?? result.DestinationJobPath,
+                displayReportPath ?? reportPath),
             TextWrapping = TextWrapping.Wrap,
             FontFamily = new System.Windows.Media.FontFamily("Consolas"),
         };
@@ -197,12 +305,15 @@ public partial class MainWindow
         window.ShowDialog();
     }
 
-    private static string BuildPlanSwiftImportSummary(PlanSwiftImportResult result, string reportPath)
+    private static string BuildPlanSwiftImportSummary(
+        PlanSwiftImportResult result,
+        string destinationPath,
+        string reportPath)
     {
         var lines = new[]
         {
             $"Source: {result.SourceJobPath}",
-            $"Destination: {result.DestinationJobPath}",
+            $"Destination: {destinationPath}",
             "",
             $"Pages imported: {result.PagesImported}",
             $"Takeoff folders imported: {result.TakeoffFoldersImported}",

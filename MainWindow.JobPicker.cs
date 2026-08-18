@@ -59,13 +59,15 @@ public partial class MainWindow
             AddJobPickerItem(
                 items,
                 seen,
-                name: string.IsNullOrWhiteSpace(recent.Name) ? Path.GetFileName(path) : recent.Name.Trim(),
+                name: string.IsNullOrWhiteSpace(recent.Name) ? ProjectNameFromPath(path) : recent.Name.Trim(),
                 path,
                 thumbnailPath: File.Exists(recent.ThumbnailPath)
                     ? recent.ThumbnailPath
                     : JobThumbnailService.ExistingThumbnailPath(path),
                 lastOpenedUtc: ParseRecentJobTime(recent.LastOpenedUtc),
-                sourceLabel: BuildSourceLabel(rootPath, fallback: "Recent"),
+                sourceLabel: OurPlanPackageFormat.HasPackageExtension(path)
+                    ? $"OurPlan file · {BuildSourceLabel(rootPath, fallback: "Recent")}"
+                    : $"Legacy folder · {BuildSourceLabel(rootPath, fallback: "Recent")}",
                 isPinned: recent.IsPinned,
                 isRecent: true,
                 rootPath: rootPath);
@@ -73,14 +75,18 @@ public partial class MainWindow
 
         foreach (string rootPath in roots)
         {
+            if (JobRootSelectorBar.ClassifyJobRootPath(rootPath) == JobRootLocationKind.Network)
+            {
+                // Never block the WPF dispatcher on an automatic UNC enumeration. Network
+                // projects remain available through Recent and the explicit Browse actions.
+                continue;
+            }
             if (!Directory.Exists(rootPath))
                 continue;
 
             string sourceLabel = BuildSourceLabel(rootPath, fallback: "Local");
 
-            foreach (string folder in Directory.EnumerateDirectories(rootPath)
-                         .Where(IsJobFolder)
-                         .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            foreach (string folder in EnumerateProjectFoldersSafe(rootPath))
             {
                 AddJobPickerItem(
                     items,
@@ -89,7 +95,22 @@ public partial class MainWindow
                     path: folder,
                     thumbnailPath: JobThumbnailService.ExistingThumbnailPath(folder),
                     lastOpenedUtc: ReadJobDataMtimeUtc(folder),
-                    sourceLabel: sourceLabel,
+                    sourceLabel: $"Legacy folder · {sourceLabel}",
+                    isPinned: false,
+                    isRecent: false,
+                    rootPath: rootPath);
+            }
+
+            foreach (string package in EnumerateProjectPackagesSafe(rootPath))
+            {
+                AddJobPickerItem(
+                    items,
+                    seen,
+                    name: ProjectNameFromPath(package),
+                    path: package,
+                    thumbnailPath: JobThumbnailService.ExistingThumbnailPath(package),
+                    lastOpenedUtc: ReadJobDataMtimeUtc(package),
+                    sourceLabel: $"OurPlan file · {sourceLabel}",
                     isPinned: false,
                     isRecent: false,
                     rootPath: rootPath);
@@ -97,6 +118,40 @@ public partial class MainWindow
         }
 
         return items;
+    }
+
+    private static IReadOnlyList<string> EnumerateProjectFoldersSafe(string rootPath)
+    {
+        try
+        {
+            return Directory.EnumerateDirectories(rootPath)
+                .Where(IsJobFolder)
+                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warn(ex, $"Could not enumerate legacy projects in '{rootPath}'.");
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<string> EnumerateProjectPackagesSafe(string rootPath)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(
+                    rootPath,
+                    $"*{OurPlanPackageFormat.Extension}",
+                    SearchOption.TopDirectoryOnly)
+                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warn(ex, $"Could not enumerate OurPlan project files in '{rootPath}'.");
+            return [];
+        }
     }
 
     private static void AddJobPickerItem(
@@ -115,7 +170,12 @@ public partial class MainWindow
         if (!seen.Add(key))
             return;
 
-        bool exists = Directory.Exists(path) && IsJobFolder(path);
+        bool networkRecent = isRecent &&
+                             !string.IsNullOrWhiteSpace(rootPath) &&
+                             JobRootSelectorBar.ClassifyJobRootPath(rootPath) == JobRootLocationKind.Network;
+        bool exists = networkRecent || (OurPlanPackageFormat.HasPackageExtension(path)
+            ? File.Exists(path)
+            : Directory.Exists(path) && IsJobFolder(path));
         items.Add(new JobPickerItem
         {
             Name = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(path) : name,
@@ -134,6 +194,8 @@ public partial class MainWindow
     {
         try
         {
+            if (File.Exists(jobFolder) && OurPlanPackageFormat.HasPackageExtension(jobFolder))
+                return File.GetLastWriteTimeUtc(jobFolder);
             string dataXml = Path.Combine(jobFolder, "Data.xml");
             if (!File.Exists(dataXml))
                 return null;
@@ -163,6 +225,9 @@ public partial class MainWindow
             case JobPickerAction.OpenSelected:
                 OpenJobSafely(selectedJobPath);
                 break;
+            case JobPickerAction.BrowsePackage:
+                OpenOurPlanProjectDialog();
+                break;
             case JobPickerAction.BrowseJob:
                 OpenJobFromFolderDialog();
                 break;
@@ -176,7 +241,7 @@ public partial class MainWindow
                 CreateBlankJobFromDialog(selectedJobsRootPath);
                 break;
             case JobPickerAction.CreateSample:
-                CreateSampleJob();
+                CreateSampleJob(selectedJobsRootPath);
                 break;
         }
     }
@@ -189,6 +254,11 @@ public partial class MainWindow
 
         OpenJobSafely(folder);
     }
+
+    private static string ProjectNameFromPath(string path) =>
+        OurPlanPackageFormat.HasPackageExtension(path)
+            ? Path.GetFileNameWithoutExtension(path)
+            : Path.GetFileName(path);
 
     private void OpenJobFromJobsRootDialog()
     {
@@ -228,7 +298,34 @@ public partial class MainWindow
         HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath, dialog.SelectedJobsRootPath);
     }
 
-    private void CreateJobFromDialog(string? preferredParent = null)
+    private void CreateJobFromDialog(string? preferredParent = null, bool forceOurPlan = false)
+    {
+        if (!forceOurPlan && UseLegacyFolderForNewProjects())
+        {
+            CreateLegacyJobFromDialog(preferredParent);
+            return;
+        }
+
+        string? pdfFolder = SelectFolder("Select folder with PDFs for the new project", NewJobInitialFolder(preferredParent));
+        if (pdfFolder == null)
+            return;
+
+        IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(pdfFolder);
+        if (pdfPaths.Count == 0)
+        {
+            PostStatusInfo("No PDF files were found in the selected folder or its subfolders.");
+            return;
+        }
+
+        string? name = ShowInputDialog("Project name:", DefaultNewJobName(pdfFolder), "New OurPlan Project");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        if (CreateNewPackageProject(name, out OurPlanCoreJob? createdJob, preferredParent) && createdJob != null)
+            QueuePdfImportForNewJob(pdfPaths, pdfFolder, createdJob);
+    }
+
+    private void CreateLegacyJobFromDialog(string? preferredParent = null)
     {
         string? pdfFolder = SelectFolder("Select folder with PDFs for the new job", NewJobInitialFolder(preferredParent));
         if (pdfFolder == null)
@@ -256,7 +353,7 @@ public partial class MainWindow
             var job = OurPlanCoreJobStore.CreateJob(parent, name);
             if (!OpenJob(job.RootPath))
                 return;
-            QueuePdfImportForNewJob(pdfPaths, pdfFolder);
+            QueuePdfImportForNewJob(pdfPaths, pdfFolder, job);
         }
         catch (Exception ex)
         {
@@ -265,21 +362,51 @@ public partial class MainWindow
         }
     }
 
-    private void QueuePdfImportForNewJob(IReadOnlyList<string> pdfPaths, string pdfFolder)
+    private void QueuePdfImportForNewJob(
+        IReadOnlyList<string> pdfPaths,
+        string pdfFolder,
+        OurPlanCoreJob expectedJob)
     {
         TxtStatus.Text = $"New job created. Importing {pdfPaths.Count} PDF file(s) from {pdfFolder}.";
         Dispatcher.BeginInvoke(
             new Action(async () =>
             {
                 await RunAsyncUiHandler(
-                    () => ImportPdfPathsAsync(pdfPaths, this, confirmPageNames: false),
+                    () => ImportPdfPathsAsync(
+                        pdfPaths,
+                        this,
+                        confirmPageNames: false,
+                        expectedJob: expectedJob),
                     "Import PDF failed.",
                     "Import PDF");
+                if (_currentJob != null &&
+                    SameJobPath(_currentJob.RootPath, expectedJob.RootPath) &&
+                    HasCurrentPackageSession)
+                {
+                    _currentPackageSession!.HasUnpackagedChanges = true;
+                    TrySaveCurrentPackage("new project PDF import");
+                }
             }),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
     }
 
-    private void CreateBlankJobFromDialog(string? preferredParent = null)
+    private void CreateBlankJobFromDialog(string? preferredParent = null, bool forceOurPlan = false)
+    {
+        if (!forceOurPlan && UseLegacyFolderForNewProjects())
+        {
+            CreateLegacyBlankJobFromDialog(preferredParent);
+            return;
+        }
+
+        string? name = ShowInputDialog("Project name:", "New Project", "Blank OurPlan Project");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        if (CreateNewPackageProject(name, out OurPlanCoreJob? job, preferredParent) && job != null)
+            TxtStatus.Text = $"Blank OurPlan project created: {job.Name}. Use Blank Sheet to add an empty sheet.";
+    }
+
+    private void CreateLegacyBlankJobFromDialog(string? preferredParent = null)
     {
         string? name = ShowInputDialog("Job name:", "New Job", "Blank Job");
         if (string.IsNullOrWhiteSpace(name))
@@ -341,7 +468,13 @@ public partial class MainWindow
         if (!string.IsNullOrWhiteSpace(preferredParent))
             yield return preferredParent.Trim();
 
-        if (_currentJob != null)
+        if (HasCurrentPackageSession)
+        {
+            string? artifactParent = Path.GetDirectoryName(_currentPackageSession!.PackagePath);
+            if (!string.IsNullOrWhiteSpace(artifactParent))
+                yield return artifactParent;
+        }
+        else if (_currentJob != null)
         {
             string? currentParent = Path.GetDirectoryName(_currentJob.RootPath);
             if (!string.IsNullOrWhiteSpace(currentParent))
@@ -368,9 +501,17 @@ public partial class MainWindow
         }
     }
 
-    private void CreateSampleJob()
+    private void CreateSampleJob(string? preferredParent = null)
     {
-        string parent = Directory.Exists(_settings.JobsRootPath)
+        if (!UseLegacyFolderForNewProjects())
+        {
+            CreateOurPlanSampleJob(preferredParent);
+            return;
+        }
+
+        string parent = !string.IsNullOrWhiteSpace(preferredParent) && Directory.Exists(preferredParent)
+            ? preferredParent
+            : Directory.Exists(_settings.JobsRootPath)
             ? _settings.JobsRootPath
             : SampleJobService.DefaultJobsRoot;
 
@@ -392,6 +533,100 @@ public partial class MainWindow
         }
     }
 
+    private void CreateOurPlanSampleJob(string? preferredParent = null)
+    {
+        string parent = !string.IsNullOrWhiteSpace(preferredParent) && Directory.Exists(preferredParent)
+            ? preferredParent
+            : Directory.Exists(_settings.JobsRootPath)
+            ? _settings.JobsRootPath
+            : SampleJobService.DefaultJobsRoot;
+        if (!PrepareCurrentJobForSwitch())
+            return;
+
+        OurPlanManagedWorkspaceReservation? reservation = null;
+        OurPlanPackageSession? packageSession = null;
+        try
+        {
+            Directory.CreateDirectory(parent);
+            _settings.JobsRootPath = parent;
+            AppSettingsStore.AddJobsRoot(_settings, parent);
+            SaveAppSettings();
+
+            (string displayName, string packagePath) = UniqueSamplePackageDestination(parent);
+            OurPlanManagedWorkspaceReservation activeReservation =
+                OurPlanPackageWorkspace.ReserveManagedWorkspace(displayName);
+            reservation = activeReservation;
+            (OurPlanCoreJob managedJob, OurPlanPackageSession createdSession) =
+                RunResponsivePackageOperation(() =>
+                {
+                    OurPlanCoreJob stagedJob = SampleJobService.CreateSampleJob(
+                        activeReservation.ImportParentRoot);
+                    OurPlanCoreJob completedJob = OurPlanPackageWorkspace.CompleteManagedWorkspace(
+                        activeReservation,
+                        stagedJob.RootPath);
+                    OurPlanPackageSession session = OurPlanPackageWriter.SaveAs(
+                        completedJob.RootPath,
+                        packagePath,
+                        displayName,
+                        overwriteExisting: false,
+                        projectId: activeReservation.ProjectId);
+                    return (completedJob, session);
+                });
+            packageSession = createdSession;
+
+            _openingPackageSession = createdSession;
+            // Re-enter OpenJob's checkpointed switch preparation after sample generation.
+            if (!OpenJob(managedJob.RootPath))
+            {
+                OurPlanPackageWorkspace.MarkSessionClosed(createdSession);
+                throw new IOException(
+                    $"The sample .ourplan file was created at '{createdSession.PackagePath}', " +
+                    "but its managed working copy could not be opened safely.");
+            }
+
+            createdSession.HasUnpackagedChanges = true;
+            if (!TrySaveCurrentPackage("sample project initialization"))
+                return;
+            TxtStatus.Text = $"Sample OurPlan project created: {managedJob.Name}.";
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error(ex, "OurPlan sample project creation failed.");
+            MessageBox.Show(
+                $"Cannot create sample OurPlan project:\n{ex.Message}",
+                "Sample Project",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            _openingPackageSession = null;
+            if (reservation != null && packageSession == null)
+                OurPlanPackageWorkspace.AbandonManagedWorkspace(reservation);
+        }
+    }
+
+    private static (string DisplayName, string PackagePath) UniqueSamplePackageDestination(
+        string parent)
+    {
+        const string baseName = "OurPlanCore Guide Sample";
+        string displayName = baseName;
+        for (int index = 2; ; index++)
+        {
+            string safeName = OurPlanCoreJobStore.SanitizeName(displayName, 120);
+            string legacyPath = Path.Combine(parent, safeName);
+            string packagePath = legacyPath + OurPlanPackageFormat.Extension;
+            if (!Directory.Exists(legacyPath) &&
+                !Directory.Exists(packagePath) &&
+                !File.Exists(packagePath))
+            {
+                return (displayName, packagePath);
+            }
+
+            displayName = $"{baseName} {index}";
+        }
+    }
+
     private bool OpenJobSafely(string folder)
     {
         if (string.IsNullOrWhiteSpace(folder))
@@ -399,7 +634,7 @@ public partial class MainWindow
 
         try
         {
-            return OpenJob(folder);
+            return OpenProjectPathSafely(folder);
         }
         catch (Exception ex)
         {
@@ -409,12 +644,16 @@ public partial class MainWindow
         }
     }
 
-    private void QueueRecentJobThumbnailGeneration(OurPlanCoreJob job)
+    private void QueueRecentJobThumbnailGeneration(OurPlanCoreJob job, string documentPath)
     {
-        string jobRoot = job.RootPath;
+        string identityPath = documentPath;
         Task.Run(() =>
         {
-            bool ok = JobThumbnailService.TryCreateThumbnail(job, out string thumbnailPath, out string error);
+            bool ok = JobThumbnailService.TryCreateThumbnail(
+                job,
+                identityPath,
+                out string thumbnailPath,
+                out string error);
             return (ok, thumbnailPath, error);
         }).ContinueWith(task =>
         {
@@ -425,7 +664,7 @@ public partial class MainWindow
             if (!ok)
                 return;
 
-            AppSettingsStore.UpdateRecentJobThumbnail(_settings, jobRoot, thumbnailPath);
+            AppSettingsStore.UpdateRecentJobThumbnail(_settings, identityPath, thumbnailPath);
             SaveAppSettings();
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }

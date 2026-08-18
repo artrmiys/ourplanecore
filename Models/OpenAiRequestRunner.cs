@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using SkiaSharp;
 
 namespace OurPlanCore;
 
@@ -132,7 +133,7 @@ public static class OpenAiRequestRunner
             },
         };
 
-        string? cropPath = ResolveContextPath(job, request.CropPath, job.AIContextRoot);
+        string? cropPath = ResolveContextPath(job.AIContextRoot, request.CropPath, job.AIContextRoot);
         AddImageContent(content, cropPath, "high");
 
         foreach (string contextCropPath in request.ContextCropPaths
@@ -142,7 +143,7 @@ public static class OpenAiRequestRunner
         {
             AddImageContent(
                 content,
-                ResolveContextPath(job, contextCropPath, job.AIContextRoot),
+                ResolveContextPath(job.AIContextRoot, contextCropPath, job.AIContextRoot),
                 "high");
         }
 
@@ -388,10 +389,30 @@ public static class OpenAiRequestRunner
 
     private static void AddImageContent(List<object> content, string? path, string detail)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        const long maxImageBytes = 25L * 1024 * 1024;
+        if (string.IsNullOrWhiteSpace(path) ||
+            !File.Exists(path) ||
+            !ProjectPathSafety.IsSafeImagePath(path))
             return;
 
-        string dataUrl = $"data:image/png;base64,{Convert.ToBase64String(File.ReadAllBytes(path))}";
+        var info = new FileInfo(path);
+        if (info.Length is <= 0 or > maxImageBytes)
+            return;
+        byte[] bytes = File.ReadAllBytes(path);
+        using SKData data = SKData.CreateCopy(bytes);
+        using SKCodec? codec = SKCodec.Create(data);
+        if (codec == null || codec.Info.Width <= 0 || codec.Info.Height <= 0)
+            return;
+
+        string mime = codec.EncodedFormat switch
+        {
+            SKEncodedImageFormat.Jpeg => "image/jpeg",
+            SKEncodedImageFormat.Webp => "image/webp",
+            SKEncodedImageFormat.Gif => "image/gif",
+            SKEncodedImageFormat.Bmp => "image/bmp",
+            _ => "image/png",
+        };
+        string dataUrl = $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
         content.Add(new
         {
             type = "input_image",
@@ -818,14 +839,14 @@ public static class OpenAiRequestRunner
             return marker;
         }
 
-        string? requestCropPath = ResolveContextPath(job, request.CropPath, job.AIContextRoot);
+        string? requestCropPath = ResolveContextPath(job.AIContextRoot, request.CropPath, job.AIContextRoot);
         if (string.IsNullOrWhiteSpace(requestCropPath))
             return null;
 
         string normalizedRequestCrop = Path.GetFullPath(requestCropPath);
         return SmartContextStore.LoadAiMarkers(job).FirstOrDefault(marker =>
         {
-            string? markerCropPath = ResolveContextPath(job, marker.CropPath, job.AIContextRoot);
+            string? markerCropPath = ResolveContextPath(job.AIContextRoot, marker.CropPath, job.AIContextRoot);
             return !string.IsNullOrWhiteSpace(markerCropPath) &&
                    string.Equals(
                        Path.GetFullPath(markerCropPath),
@@ -858,12 +879,7 @@ public static class OpenAiRequestRunner
 
     private static string? ResolveContextPath(string jobRoot, string value, string basePath)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-
-        return Path.IsPathFullyQualified(value)
-            ? value
-            : Path.GetFullPath(Path.Combine(basePath, value));
+        return ProjectPathSafety.ResolveInside(jobRoot, value, basePath);
     }
 
     private static string? ResolveContextPath(OurPlanCoreJob job, string value, string basePath) =>
@@ -879,7 +895,12 @@ public static class OpenAiRequestRunner
         string cleanRequestId = string.IsNullOrWhiteSpace(requestId)
             ? $"openai_{DateTime.UtcNow:yyyyMMdd_HHmmss}"
             : requestId.Trim();
-        string path = Path.Combine(job.AIContextRoot, "responses", $"{cleanRequestId}.openai.raw.json");
+        string path = SmartContextFileId.FilePath(
+            job,
+            "responses",
+            cleanRequestId,
+            ".openai.raw.json",
+            "AI request id");
         JobWriteAccess.Demand(path, "save raw AI response");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
         IoUtil.WriteAllTextAtomic(path, body);

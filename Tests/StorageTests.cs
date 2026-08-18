@@ -357,6 +357,57 @@ internal static class StorageTests
         });
     }
 
+    public static void PageAnnotationsUnchangedSaveIsIdempotent()
+    {
+        WithTempJob("Page Annotation Idempotence", job =>
+        {
+            PageInfo page = CreatePageItem(job, "A203");
+            var annotation = new PageAnnotation
+            {
+                Kind = "line",
+                PageFolder = page.FolderPath,
+                Points = [new SKPoint(1, 2), new SKPoint(10, 20)],
+            };
+
+            OurPlanCoreJobStore.SavePageAnnotations(page.FolderPath, [annotation]);
+            string path = OurPlanCoreJobStore.PageAnnotationsJsonPath(page.FolderPath);
+            File.SetLastWriteTimeUtc(path, new DateTime(2020, 1, 2, 3, 4, 6, DateTimeKind.Utc));
+            long beforeTicks = File.GetLastWriteTimeUtc(path).Ticks;
+
+            OurPlanCoreJobStore.SavePageAnnotations(page.FolderPath, [annotation]);
+
+            AssertEqual(
+                beforeTicks.ToString(),
+                File.GetLastWriteTimeUtc(path).Ticks.ToString(),
+                "unchanged annotation save timestamp");
+        });
+    }
+
+    public static void PageAnnotationsDeleteLastPersistsEmptyState()
+    {
+        WithTempJob("Page Annotation Delete Last", job =>
+        {
+            PageInfo page = CreatePageItem(job, "A204");
+            var annotation = new PageAnnotation
+            {
+                Kind = "note",
+                Text = "Delete me",
+                PageFolder = page.FolderPath,
+                Points = [new SKPoint(1, 2), new SKPoint(10, 20)],
+            };
+
+            OurPlanCoreJobStore.SavePageAnnotations(page.FolderPath, [annotation]);
+            OurPlanCoreJobStore.SavePageAnnotations(page.FolderPath, Array.Empty<PageAnnotation>());
+
+            string path = OurPlanCoreJobStore.PageAnnotationsJsonPath(page.FolderPath);
+            AssertTrue(File.Exists(path), "delete-last annotation file should record the empty state");
+            AssertEqual(
+                "0",
+                OurPlanCoreJobStore.LoadPageAnnotations(page.FolderPath).Count.ToString(),
+                "delete-last annotation count");
+        });
+    }
+
     public static void PageAnnotationsFollowMovedPageFolder()
     {
         WithTempJob("Page Annotation Move", job =>

@@ -331,7 +331,10 @@ public partial class MainWindow
     {
         if (_currentJob == null)
             return "No job";
-        return IsCurrentJobReadOnly ? $"{_currentJob.Name} [READ-ONLY]" : _currentJob.Name;
+        string name = HasCurrentPackageSession
+            ? $"{_currentJob.Name} [.ourplan]"
+            : _currentJob.Name;
+        return IsCurrentJobReadOnly ? $"{name} [READ-ONLY]" : name;
     }
 
     private string CurrentJobWindowTitle() =>

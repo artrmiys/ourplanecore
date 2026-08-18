@@ -84,6 +84,23 @@ public partial class MainWindow
         if (_currentJob == null)
             return "Save: --";
 
+        if (HasCurrentPackageSession)
+        {
+            if (_takeoffSaveService.State != TakeoffSaveState.Clean ||
+                _takeoffSaveService.PendingCount > 0)
+            {
+                return FormatTakeoffSaveStatus(
+                    _takeoffSaveService.State,
+                    _takeoffSaveService.PendingCount,
+                    _takeoffSaveService.LastSuccessfulFlushUtc);
+            }
+            if (!string.IsNullOrWhiteSpace(_packageSaveStatus))
+                return _packageSaveStatus;
+            return _currentPackageSession!.HasUnpackagedChanges
+                ? "Save: Pending"
+                : "Save: Saved";
+        }
+
         return FormatTakeoffSaveStatus(
             _takeoffSaveService.State,
             _takeoffSaveService.PendingCount,

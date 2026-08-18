@@ -14,6 +14,8 @@ namespace OurPlanCore;
 
 public partial class MainWindow
 {
+    private Task? _aiContextMaintenanceTask;
+
     // ── Toolbar ───────────────────────────────────────────────────────────────
 
     private void SetupToolButtonContent()
@@ -162,8 +164,21 @@ public partial class MainWindow
         CreateBlankJobFromDialog();
     }
 
-    private bool OpenJob(string rootPath, string? initialPageFolder = null)
+    private bool OpenJob(
+        string rootPath,
+        string? initialPageFolder = null,
+        bool currentJobPrepared = false)
     {
+        using JobFileWriteActivity.PackageCheckpointScope openCheckpoint =
+            JobFileWriteActivity.BeginPackageCheckpoint();
+        if (openCheckpoint.HadActiveWriters)
+        {
+            ShowJobOpenError(
+                "A background project writer is still finishing.",
+                "Wait a moment and open the project again.");
+            return false;
+        }
+
         string normalizedRoot;
         try
         {
@@ -216,7 +231,7 @@ public partial class MainWindow
             if (!ConfirmPendingJobAccess(pending))
                 return false;
 
-            if (!PrepareCurrentJobForSwitch())
+            if (!currentJobPrepared && !PrepareCurrentJobForSwitch())
             {
                 pending.Dispose();
                 return false;
@@ -237,7 +252,12 @@ public partial class MainWindow
             return false;
         }
 
+        OurPlanCoreJob? previousJob = _currentJob;
         _currentJob = nextJob;
+        JobFileWriteActivity.SetCurrentJobRoot(nextJob.RootPath);
+        if (previousJob != null && !SameJobPath(previousJob.RootPath, nextJob.RootPath))
+            FinalizeLastPageDeleteUndo();
+        AdoptPackageSessionForOpenedJob(normalizedRoot, reloadCurrent);
         ApplyCurrentJobAccessToUi();
         try
         {
@@ -277,12 +297,15 @@ public partial class MainWindow
         LoadPageBookmarksForJob();
         LoadTakeoffsForJob();
         LoadThreeDModelForCurrentJob();
-        _settings.LastJobPath = _currentJob.RootPath;
-        _settings.JobsRootPath = Path.GetDirectoryName(_currentJob.RootPath) ?? _settings.JobsRootPath;
+        string documentPath = CurrentDocumentPath();
+        if (HasCurrentPackageSession && !SameDocumentPath(_settings.LastJobPath, documentPath))
+            _settings.LastPageRelativePath = "";
+        _settings.LastJobPath = documentPath;
+        _settings.JobsRootPath = Path.GetDirectoryName(documentPath) ?? _settings.JobsRootPath;
         AppSettingsStore.AddJobsRoot(_settings, _settings.JobsRootPath);
-        AppSettingsStore.AddRecentJob(_settings, _currentJob.RootPath, _currentJob.Name);
+        AppSettingsStore.AddRecentJob(_settings, documentPath, _currentJob.Name);
         SaveAppSettings();
-        QueueRecentJobThumbnailGeneration(_currentJob);
+        QueueRecentJobThumbnailGeneration(_currentJob, documentPath);
         if (IsModuleEnabled(ModuleId.Ai))
             LoadPersistedMarkerVisibility();
         if (!IsTruthyEnvironment(TakeoffsMoveSmokeEnv) &&
@@ -299,32 +322,7 @@ public partial class MainWindow
         if (IsModuleEnabled(ModuleId.ThreeD))
             RefreshMassingDraftPanel();
         if (IsCurrentJobWritable && IsModuleEnabled(ModuleId.Ai))
-        {
-            string aiMaintenanceRoot = _currentJob.RootPath;
-            _ = System.Threading.Tasks.Task.Run(() =>
-            {
-                try
-                {
-                    int reset = SmartContextStore.ResetStuckRunningRequests(aiMaintenanceRoot);
-                    if (reset > 0)
-                        AppLog.Info($"AI context maintenance: reset {reset} stuck 'running' request(s) to failed so they can be retried.");
-                    (int archived, int failed) = SmartContextStore.ArchiveStaleRequestFiles(aiMaintenanceRoot);
-                    if (archived > 0 || failed > 0)
-                        AppLog.Info($"AI context maintenance: archived {archived} stale request/response file(s), {failed} failed.");
-                    int prunedCrops = SmartContextStore.PruneOrphanCrops(aiMaintenanceRoot);
-                    if (prunedCrops > 0)
-                        AppLog.Info($"AI context maintenance: pruned {prunedCrops} orphaned crop image(s).");
-                }
-                catch (JobWriteDeniedException ex)
-                {
-                    AppLog.Info($"AI context maintenance stopped after write access changed: {ex.Message}");
-                }
-                catch (Exception ex)
-                {
-                    AppLog.Warn(ex, "AI context maintenance failed.");
-                }
-            });
-        }
+            QueueAiContextMaintenance(_currentJob);
         Dispatcher.BeginInvoke(
             new Action(CollapseProjectTreeDisplays),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
@@ -386,7 +384,9 @@ public partial class MainWindow
         if (_currentJob == null)
             return null;
 
-        if (!string.IsNullOrWhiteSpace(initialPageFolder) && Directory.Exists(initialPageFolder))
+        if (!string.IsNullOrWhiteSpace(initialPageFolder) &&
+            Directory.Exists(initialPageFolder) &&
+            OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.PagesRoot, initialPageFolder))
             return initialPageFolder;
 
         if (!string.IsNullOrWhiteSpace(_settings.LastPageFolder) &&

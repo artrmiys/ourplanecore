@@ -19,10 +19,10 @@ public sealed class ThreeDWallSegment
 {
     public string Id { get; init; } = Guid.NewGuid().ToString();
     public string TakeoffName { get; init; } = "";
-    public string TakeoffFolder { get; init; } = "";
+    public string TakeoffFolder { get; set; } = "";
     public string MeasurementId { get; init; } = "";
     public int SegmentIndex { get; init; }
-    public string PageFolder { get; init; } = "";
+    public string PageFolder { get; set; } = "";
     public double StartXFeet { get; init; }
     public double StartZFeet { get; init; }
     public double EndXFeet { get; init; }

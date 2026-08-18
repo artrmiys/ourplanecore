@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     private PageInfo? _currentPage;
     private string _currentPdfPath = "";
     private bool _currentPageAnnotationsLoaded;
+    private bool _currentPageAnnotationsDirty;
 
     private readonly List<TakeoffItem> _takeoffItems = [];
     private TakeoffItem? _activeItem;
@@ -354,6 +355,8 @@ public partial class MainWindow : Window
         InputBindings.Add(new KeyBinding(OpenRecentJobsCommand, Key.O, ModifierKeys.Control | ModifierKeys.Shift));
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, (_, _) => BtnSave_Click(null!, null!)));
         InputBindings.Add(new KeyBinding(ApplicationCommands.Save, Key.S, ModifierKeys.Control));
+        CommandBindings.Add(new CommandBinding(ApplicationCommands.SaveAs, (_, _) => SaveAsOurPlanProject()));
+        InputBindings.Add(new KeyBinding(ApplicationCommands.SaveAs, Key.S, ModifierKeys.Control | ModifierKeys.Shift));
         CommandBindings.Add(new CommandBinding(OpenCommandPaletteCommand, (_, _) => ShowCommandPalette()));
         InputBindings.Add(new KeyBinding(OpenCommandPaletteCommand, Key.P, ModifierKeys.Control | ModifierKeys.Shift));
         PreviewKeyDown += MainWindow_GlobalPreviewKeyDown;
@@ -423,7 +426,13 @@ public partial class MainWindow : Window
     {
         Dispatcher.InvokeAsync(async () =>
         {
-            TryOpenLastJobFromSettings();
+            if (!string.IsNullOrWhiteSpace(App.StartupProjectPath))
+            {
+                if (!OpenProjectPathSafely(App.StartupProjectPath))
+                    ShowStartupJobPickerIfUseful();
+            }
+            else
+                TryOpenLastJobFromSettings();
             await TryRunGuideScreenshotCaptureAsync();
             if (await TryRunViewportAreaPreviewSmokeAsync())
                 return;

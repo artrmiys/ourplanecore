@@ -12,6 +12,8 @@ public sealed class AppSettings
     public List<string> JobsRootPaths { get; set; } = [];
     public string LastJobPath { get; set; } = "";
     public string LastPageFolder { get; set; } = "";
+    public string LastPageRelativePath { get; set; } = "";
+    public string NewProjectStorageFormat { get; set; } = "OurPlan";
     public string UnitMode { get; set; } = "Imperial";
     public string Theme { get; set; } = "Dark";
     public string ViewportBackground { get; set; } = "#2B2B2B";

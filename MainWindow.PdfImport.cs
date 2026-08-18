@@ -126,6 +126,13 @@ public partial class MainWindow
 
     private string? NewPdfImportInitialFolder()
     {
+        if (HasCurrentPackageSession)
+        {
+            string? artifactParent = Path.GetDirectoryName(_currentPackageSession!.PackagePath);
+            if (!string.IsNullOrWhiteSpace(artifactParent) && Directory.Exists(artifactParent))
+                return artifactParent;
+        }
+
         if (_currentJob?.RootPath is { } root && Directory.Exists(root))
             return root;
 
