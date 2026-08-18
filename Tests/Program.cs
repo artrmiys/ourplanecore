@@ -207,6 +207,7 @@ var tests = new List<(string Name, Action Run)>
     ("ourplan corrupt or missing package opens preserved recovery", OurPlanPackageTests.CorruptAndMissingPackageCanOpenPreservedRecovery),
     ("ourplan managed legacy copy isolates original", OurPlanPackageTests.ManagedLegacyCopyDoesNotMutateOriginalJob),
     ("ourplan package legacy copy is loadable and excludes ephemeral files", OurPlanPackageTests.LegacyFolderCopyIsLoadableAndExcludesEphemeralFiles),
+    ("ourplan workspace watcher ignores only control atomic temps", OurPlanPackageHardeningTests.WorkspaceWatcherIgnoresOnlyControlAtomicTemps),
     ("ourplan portable 3d annotations and pdf metadata round trip", OurPlanPackageHardeningTests.PortableThreeDAnnotationsAndPdfMetadataRoundTrip),
     ("ourplan opaque provider ids remain portable", OurPlanPackageHardeningTests.AiOpaqueProviderIdsRemainPortable),
     ("ourplan portable project open stays clean", OurPlanPackageHardeningTests.OpeningPortableProjectDoesNotDirtyTheProject),

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -6,6 +7,51 @@ using OurPlanCore;
 
 internal static class OurPlanPackageHardeningTests
 {
+    public static void WorkspaceWatcherIgnoresOnlyControlAtomicTemps()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "ourplan-watcher-root");
+        MethodInfo predicate = typeof(MainWindow).GetMethod(
+            "IsTransientPackageWorkspacePath",
+            BindingFlags.NonPublic | BindingFlags.Static) ??
+            throw new InvalidOperationException("Package workspace transient predicate was not found.");
+        bool IsTransient(string path) =>
+            predicate.Invoke(null, [root, path]) is true;
+        const string token = "0123456789abcdef0123456789abcdef";
+        string markerTemp = Path.Combine(
+            root,
+            $".{OurPlanPackageFormat.WorkspaceMarkerFileName}.{token}.tmp");
+        string claimTemp = Path.Combine(
+            root,
+            $".{OurPlanPackageFormat.WorkspaceClaimFileName}.{token}.tmp");
+        string markerReplaceTemp = Path.Combine(
+            root,
+            $"{OurPlanPackageFormat.WorkspaceMarkerFileName}~RF25433af.TMP");
+        string claimReplaceTemp = Path.Combine(
+            root,
+            $"{OurPlanPackageFormat.WorkspaceClaimFileName}~RF25433af.TMP");
+        string projectTemp = Path.Combine(root, $".source.json.{token}.tmp");
+        string projectReplaceTemp = Path.Combine(root, "source.json~RF25433af.TMP");
+
+        AssertTrue(
+            IsTransient(markerTemp),
+            "workspace marker atomic temp must not dirty the package session");
+        AssertTrue(
+            IsTransient(claimTemp),
+            "workspace claim atomic temp must not dirty the package session");
+        AssertTrue(
+            IsTransient(markerReplaceTemp),
+            "workspace marker File.Replace temp must not dirty the package session");
+        AssertTrue(
+            IsTransient(claimReplaceTemp),
+            "workspace claim File.Replace temp must not dirty the package session");
+        AssertFalse(
+            IsTransient(projectTemp),
+            "normal project atomic temp must remain visible to the package watcher");
+        AssertFalse(
+            IsTransient(projectReplaceTemp),
+            "normal project File.Replace temp must remain visible to the package watcher");
+    }
+
     public static void PortableThreeDAnnotationsAndPdfMetadataRoundTrip()
     {
         WithTempJob("portable-3d", (root, job) =>

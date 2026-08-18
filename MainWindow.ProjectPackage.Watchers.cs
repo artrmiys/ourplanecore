@@ -66,7 +66,48 @@ public partial class MainWindow
                fileName.Equals(".~lock", StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals(".~lock.guard", StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals(OurPlanPackageFormat.WorkspaceClaimFileName, StringComparison.OrdinalIgnoreCase) ||
-               fileName.Equals(OurPlanPackageFormat.WorkspaceMarkerFileName, StringComparison.OrdinalIgnoreCase);
+               fileName.Equals(OurPlanPackageFormat.WorkspaceMarkerFileName, StringComparison.OrdinalIgnoreCase) ||
+               IsWorkspaceControlAtomicTemp(
+                   fileName,
+                   OurPlanPackageFormat.WorkspaceClaimFileName) ||
+               IsWorkspaceControlAtomicTemp(
+                   fileName,
+                   OurPlanPackageFormat.WorkspaceMarkerFileName) ||
+               IsWorkspaceControlReplaceTemp(
+                   fileName,
+                   OurPlanPackageFormat.WorkspaceClaimFileName) ||
+               IsWorkspaceControlReplaceTemp(
+                   fileName,
+                   OurPlanPackageFormat.WorkspaceMarkerFileName);
+    }
+
+    private static bool IsWorkspaceControlAtomicTemp(string fileName, string targetFileName)
+    {
+        const string suffix = ".tmp";
+        string prefix = $".{targetFileName}.";
+        if (!fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+            !fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string token = fileName[prefix.Length..^suffix.Length];
+        return Guid.TryParseExact(token, "N", out _);
+    }
+
+    private static bool IsWorkspaceControlReplaceTemp(string fileName, string targetFileName)
+    {
+        const string replacePrefix = "~RF";
+        const string suffix = ".TMP";
+        string prefix = targetFileName + replacePrefix;
+        if (!fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+            !fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string token = fileName[prefix.Length..^suffix.Length];
+        return token.Length > 0 && token.All(Uri.IsHexDigit);
     }
 
     private void StopPackageWorkspaceWatcher()
