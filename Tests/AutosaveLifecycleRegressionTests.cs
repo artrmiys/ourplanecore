@@ -85,6 +85,58 @@ internal static class AutosaveLifecycleRegressionTests
             "package close must not ask the user to choose Save As or local recovery");
     }
 
+    public static void SaveAsMenuExposesPortableFileAndLegacyFolderCopy()
+    {
+        string xaml = File.ReadAllText(RepoFile("MainWindow.xaml"));
+        string menu = File.ReadAllText(RepoFile("MainWindow.ExportMenu.cs"));
+        int jobGroup = xaml.IndexOf("<!-- GROUP: JOB -->", StringComparison.Ordinal);
+        int saveAsButton = xaml.IndexOf("x:Name=\"BtnMainSaveAs\"", jobGroup, StringComparison.Ordinal);
+        int pdfGroup = xaml.IndexOf("<!-- GROUP: PDF -->", saveAsButton, StringComparison.Ordinal);
+
+        AssertTrue(
+            jobGroup >= 0 && saveAsButton > jobGroup && pdfGroup > saveAsButton,
+            "the visible Save As button must stay in the top Main JOB ribbon group");
+        AssertTrue(
+            xaml.Contains("Click=\"BtnSaveAsMenu_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("<TextBlock Text=\"Save As\"", StringComparison.Ordinal),
+            "the JOB ribbon must expose the Save As menu button");
+
+        int handlerStart = menu.IndexOf("private void BtnSaveAsMenu_Click", StringComparison.Ordinal);
+        int exportHandler = handlerStart >= 0
+            ? menu.IndexOf("private void BtnRightExportMenu_Click", handlerStart, StringComparison.Ordinal)
+            : -1;
+        int helperStart = exportHandler >= 0
+            ? menu.IndexOf("private void AddSaveAsMenuItems", exportHandler, StringComparison.Ordinal)
+            : -1;
+        string handler = handlerStart >= 0 && exportHandler > handlerStart
+            ? menu[handlerStart..exportHandler]
+            : "";
+        string helper = helperStart >= 0 ? menu[helperStart..] : "";
+
+        AssertTrue(
+            handler.Contains("AddSaveAsMenuItems(menu);", StringComparison.Ordinal),
+            "the visible Save As button must build the shared project-format menu");
+        AssertFalse(
+            handler.Contains("EnsureCurrentJobWritable", StringComparison.Ordinal),
+            "the chooser must not block package recovery before the user selects a format");
+        AssertTrue(
+            helper.Contains("\"One portable file (.ourplan)...\"", StringComparison.Ordinal) &&
+            helper.Contains("SaveAsOurPlanProject", StringComparison.Ordinal) &&
+            helper.Contains(
+                "hasJob && (IsCurrentJobWritable || HasCurrentPackageSession)",
+                StringComparison.Ordinal),
+            "the Save As menu must route the portable-file choice to the existing package workflow");
+        AssertTrue(
+            helper.Contains("\"Legacy folder copy...\"", StringComparison.Ordinal) &&
+            helper.Contains("hasJob && IsCurrentJobWritable", StringComparison.Ordinal) &&
+            helper.Contains("SaveLegacyFolderCopy", StringComparison.Ordinal),
+            "the Save As menu must route a writable legacy copy to the existing export workflow");
+        AssertTrue(
+            helper.Contains("the current project stays active", StringComparison.Ordinal) &&
+            helper.Contains("SetShowOnDisabled", StringComparison.Ordinal),
+            "the legacy choice must explain that it creates a copy without switching projects");
+    }
+
     private static string RepoFile(string relativePath)
     {
         DirectoryInfo? current = new(AppContext.BaseDirectory);

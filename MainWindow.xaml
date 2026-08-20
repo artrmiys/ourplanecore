@@ -58,6 +58,18 @@
                                             <TextBlock Text="PDF Takeoffs" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Button>
+                                    <Button x:Name="BtnMainSaveAs"
+                                            Click="BtnSaveAsMenu_Click"
+                                            Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Save the current project as one .ourplan file or a legacy folder copy"
+                                            AutomationProperties.Name="Save As project">
+                                        <StackPanel Orientation="Horizontal"
+                                                    TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconExport}"/>
+                                            <TextBlock Text="Save As" VerticalAlignment="Center"/>
+                                            <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
