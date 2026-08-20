@@ -1,7 +1,10 @@
 import base64
 import hashlib
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 from fractions import Fraction
 from collections import OrderedDict
@@ -17,6 +20,10 @@ _MAX_DOC_CACHE = 8
 _SHEET_INDEX_CACHE: "OrderedDict[tuple[str, int, int], dict[str, dict]]" = OrderedDict()
 _SHEET_INDEX_V3_CACHE: "OrderedDict[tuple[str, int, int], dict[str, dict]]" = OrderedDict()
 _MAX_SHEET_INDEX_CACHE = 8
+_TESSERACT_COMMAND: str | None = None
+_TESSERACT_RESOLVED = False
+_TEMPLATE_OCR_CACHE: "OrderedDict[tuple, str]" = OrderedDict()
+_MAX_TEMPLATE_OCR_CACHE = 128
 # Display lists bake in the OCG visibility active when they were built, so the
 # cache key includes the doc's effective layer-state signature.
 _DL_CACHE: "OrderedDict[tuple, fitz.DisplayList]" = OrderedDict()
@@ -3862,7 +3869,102 @@ def _extract_standalone_title_field(words: list, sheet_label: str | None, max_x:
         quality = _title_quality(title, sheet_label)
         if quality > -900:
             candidates.append((quality, title))
-    return max(candidates, key=lambda item: item[0])[1] if candidates else ""
+    if not candidates:
+        return ""
+
+    best = max(candidates, key=lambda item: item[0])[1]
+    normalized = re.sub(r"\s*[/|]+\s*", " ", best)
+    plan_title = re.search(
+        r"\b((?:BASEMENT|GROUND|FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH|\d+(?:ST|ND|RD|TH))\s+"
+        r"(?:LEVEL\s+)?(?:FLOOR|ROOF|CEILING)\s*PLAN)\b",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    return plan_title.group(1) if plan_title else best
+
+
+def _resolve_tesseract_command() -> str:
+    global _TESSERACT_COMMAND, _TESSERACT_RESOLVED
+    if _TESSERACT_RESOLVED:
+        return _TESSERACT_COMMAND or ""
+
+    script_dir = Path(__file__).resolve().parent
+    candidates = [
+        os.environ.get("TESSERACT_CMD", ""),
+        str(script_dir / "tesseract" / "tesseract.exe"),
+        str(script_dir.parent / "Tools" / "tesseract" / "tesseract.exe"),
+        shutil.which("tesseract") or "",
+        shutil.which("tesseract.exe") or "",
+    ]
+    _TESSERACT_COMMAND = next(
+        (candidate for candidate in candidates if candidate and Path(candidate).is_file()),
+        None,
+    )
+    _TESSERACT_RESOLVED = True
+    return _TESSERACT_COMMAND or ""
+
+
+def _template_region_ocr_text(
+    page: fitz.Page,
+    rect: tuple[float, float, float, float] | None,
+    psm: int,
+) -> str:
+    if not rect:
+        return ""
+    command = _resolve_tesseract_command()
+    if not command:
+        return ""
+
+    document_name = str(getattr(page.parent, "name", "") or "")
+    try:
+        source_stat = Path(document_name).stat()
+        source_fingerprint = (source_stat.st_size, source_stat.st_mtime_ns)
+    except OSError:
+        source_fingerprint = (0, 0)
+    cache_key = (
+        document_name,
+        source_fingerprint,
+        int(page.number),
+        tuple(round(float(value), 2) for value in rect),
+        int(psm),
+    )
+    cached = _TEMPLATE_OCR_CACHE.get(cache_key)
+    if cached is not None:
+        _TEMPLATE_OCR_CACHE.move_to_end(cache_key)
+        return cached
+
+    try:
+        clip = fitz.Rect(*rect)
+        pixmap = page.get_pixmap(
+            matrix=fitz.Matrix(4.0, 4.0),
+            clip=clip,
+            colorspace=fitz.csGRAY,
+            alpha=False,
+            annots=False,
+        )
+        completed = subprocess.run(
+            [command, "stdin", "stdout", "-l", "eng", "--psm", str(psm), "--dpi", "288"],
+            input=pixmap.tobytes("png"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=12,
+        )
+        if completed.returncode != 0:
+            return ""
+        decoded = completed.stdout.decode("utf-8", errors="replace")
+        text = "\n".join(
+            " ".join(line.split())
+            for line in decoded.splitlines()
+            if line.strip()
+        )
+        _TEMPLATE_OCR_CACHE[cache_key] = text
+        _TEMPLATE_OCR_CACHE.move_to_end(cache_key)
+        while len(_TEMPLATE_OCR_CACHE) > _MAX_TEMPLATE_OCR_CACHE:
+            _TEMPLATE_OCR_CACHE.popitem(last=False)
+        return text
+    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError):
+        return ""
 
 
 def _template_region(req: dict, name: str, max_x: float, max_y: float) -> tuple[float, float, float, float] | None:
@@ -3888,7 +3990,13 @@ def _template_region(req: dict, name: str, max_x: float, max_y: float) -> tuple[
     return max(0.0, left), max(0.0, top), min(max_x, right), min(max_y, bottom)
 
 
-def _template_sheet_label(req: dict, words: list, max_x: float, max_y: float) -> str:
+def _template_sheet_label(
+    req: dict,
+    page: fitz.Page,
+    words: list,
+    max_x: float,
+    max_y: float,
+) -> str:
     rect = _template_region(req, "sheet_number_rect", max_x, max_y)
     if not rect:
         return ""
@@ -3897,26 +4005,175 @@ def _template_sheet_label(req: dict, words: list, max_x: float, max_y: float) ->
         label = _index_label_from_line(str(word[4]))
         if label and SHEET_LABEL_RE.fullmatch(label):
             return label
-    label = _index_label_from_line(_words_text(region_words))
+    region_text = _words_text(region_words)
+    label = _index_label_from_line(region_text)
+    candidates = _sheet_label_candidates(region_text)
+    if candidates:
+        return candidates[0]
+    if label and SHEET_LABEL_RE.fullmatch(label):
+        return label
+
+    left, top, right, bottom = rect
+    label_rect = (
+        left + (right - left) * 0.15,
+        top + (bottom - top) * 0.72,
+        right - (right - left) * 0.15,
+        bottom - (bottom - top) * 0.08,
+    )
+    label_ocr = _template_region_ocr_text(page, label_rect, 7)
+    candidates = _sheet_label_candidates(label_ocr)
+    if candidates:
+        return candidates[0]
+    label = _index_label_from_line(label_ocr)
+    if label and SHEET_LABEL_RE.fullmatch(label):
+        return label
+
+    ocr_text = _template_region_ocr_text(page, rect, 6)
+    label = _index_label_from_line(ocr_text)
+    candidates = _sheet_label_candidates(ocr_text)
+    if candidates:
+        return candidates[0]
     return label if label and SHEET_LABEL_RE.fullmatch(label) else ""
 
 
-def _template_sheet_title(req: dict, words: list, sheet_label: str | None, max_x: float, max_y: float) -> str:
+def _template_sheet_title(
+    req: dict,
+    page: fitz.Page,
+    words: list,
+    sheet_label: str | None,
+    max_x: float,
+    max_y: float,
+) -> str:
     rect = _template_region(req, "sheet_title_rect", max_x, max_y)
     if not rect:
         return ""
     region_words = _words_in_rect(words, *rect)
-    title = _clean_sheet_title(_words_text(region_words))
-    return title if _title_quality(title, sheet_label) > -900 else ""
+    pdf_raw = _words_text(region_words)
+    if sheet_label:
+        pdf_raw = re.sub(re.escape(sheet_label), " ", pdf_raw, flags=re.IGNORECASE)
+    pdf_title = _clean_sheet_title(pdf_raw)
+    pdf_quality = _title_quality(pdf_title, sheet_label)
+    if pdf_quality >= 80:
+        return pdf_title
+
+    ocr_raw = _template_region_ocr_text(page, rect, 6)
+    ocr_title = _template_title_from_ocr(ocr_raw, sheet_label)
+    ocr_quality = _title_quality(ocr_title, sheet_label)
+    best_title, best_quality = max(
+        ((pdf_title, pdf_quality), (ocr_title, ocr_quality)),
+        key=lambda item: item[1],
+    )
+    return best_title if best_quality > -900 else ""
 
 
-def _template_scale(req: dict, words: list, max_x: float, max_y: float) -> tuple[str, str, str]:
+def _template_title_from_ocr(raw: str, sheet_label: str | None) -> str:
+    lines = [line.strip() for line in (raw or "").splitlines() if line.strip()]
+    if not lines:
+        return ""
+
+    candidates: list[tuple[float, str]] = []
+    for start in range(len(lines)):
+        for count in range(1, min(3, len(lines) - start) + 1):
+            candidate = " ".join(lines[start:start + count])
+            if sheet_label:
+                candidate = re.sub(
+                    re.escape(sheet_label),
+                    " ",
+                    candidate,
+                    flags=re.IGNORECASE,
+                )
+            title = _clean_sheet_title(candidate)
+            quality = _title_quality(title, sheet_label)
+            tokens = re.findall(r"[A-Za-z0-9]+", title)
+            quality -= sum(18.0 for token in tokens if len(token) == 1)
+            quality -= max(0, len(tokens) - 10) * 12.0
+            candidates.append((quality, title))
+
+    if not candidates:
+        return ""
+
+    best = max(candidates, key=lambda item: item[0])[1]
+    normalized = re.sub(r"\s*[/|]+\s*", " ", best)
+    normalized = re.sub(r"\bFLOOR\s*PLAN\b", "FLOOR PLAN", normalized, flags=re.IGNORECASE)
+    plan_title = re.search(
+        r"\b((?:BASEMENT|GROUND|FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH|\d+(?:ST|ND|RD|TH))\s+"
+        r"(?:LEVEL\s+)?(?:FLOOR|ROOF|CEILING)\s*PLAN)\b",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    return plan_title.group(1) if plan_title else best
+
+
+def _template_scale(
+    req: dict,
+    page: fitz.Page,
+    words: list,
+    max_x: float,
+    max_y: float,
+) -> tuple[str, str, str]:
     rect = _template_region(req, "scale_rect", max_x, max_y)
     if not rect:
         return "", "", ""
     raw = _words_text(_words_in_rect(words, *rect))
     parsed = _index_scale_from_line(raw)
-    return parsed if parsed else ("", raw, "")
+    if parsed:
+        return parsed
+
+    ocr_raw = _template_region_ocr_text(page, rect, 7)
+    parsed = _index_scale_from_line(ocr_raw)
+    if parsed:
+        return parsed
+
+    ocr_raw = _template_region_ocr_text(page, rect, 6)
+    parsed = _index_scale_from_line(ocr_raw)
+    return parsed if parsed else ("", ocr_raw or raw, "")
+
+
+def _sheet_layout_profile(sheet_label: str | None) -> str:
+    match = re.match(r"^\s*([AS])(?:\s*[-.]?\s*\d)", str(sheet_label or ""), re.IGNORECASE)
+    if not match:
+        return ""
+    return "architectural" if match.group(1).upper() == "A" else "structural"
+
+
+def _request_with_crop_profile(
+    req: dict,
+    page: fitz.Page,
+    words: list,
+    max_x: float,
+    max_y: float,
+    preliminary_label: str | None,
+) -> tuple[dict, str]:
+    catalog = _config_value(req, "crop_templates", default=None)
+    if not isinstance(catalog, dict):
+        return req, ""
+
+    preferred = _sheet_layout_profile(preliminary_label)
+    profiles = ["architectural", "structural"]
+    if preferred == "structural":
+        profiles.reverse()
+    profiles.append("default")
+    seen: set[str] = set()
+    default_request: dict | None = None
+    for profile in profiles:
+        if not profile or profile in seen:
+            continue
+        seen.add(profile)
+        template = _config_value(catalog, profile, default=None)
+        if not isinstance(template, dict):
+            continue
+        candidate = dict(req)
+        candidate["crop_template"] = template
+        if profile == "default":
+            default_request = candidate
+        label = _template_sheet_label(candidate, page, words, max_x, max_y)
+        if not label:
+            continue
+        detected = _sheet_layout_profile(label)
+        if profile == "default" or detected == profile:
+            return candidate, label
+
+    return default_request or req, ""
 
 
 def _precise_title_decision(
@@ -3943,7 +4200,7 @@ def _precise_title_decision(
         )
 
     if _uses_ideal_sheet_metadata(req):
-        template_title = _template_sheet_title(req, words, sheet_label, max_x, max_y)
+        template_title = _template_sheet_title(req, page, words, sheet_label, max_x, max_y)
         _add_title_candidate(
             candidates, template_title, "layout_template", "high", 1500.0,
             f"Saved Sheet Title region: {template_title}", sheet_label,
@@ -4712,7 +4969,11 @@ def _sheetmeta_data_precise_v2(req: dict) -> dict:
         )
         prominent_label_word = None
     if ideal_v3:
-        template_label = _template_sheet_label(req, words, max_x, max_y)
+        req, template_label = _request_with_crop_profile(
+            req, page, words, max_x, max_y, sheet_label,
+        )
+        if not template_label:
+            template_label = _template_sheet_label(req, page, words, max_x, max_y)
         if template_label:
             sheet_label = template_label
     document_index = _document_sheet_index_v3 if ideal_v3 else _document_sheet_index
@@ -4766,7 +5027,7 @@ def _sheetmeta_data_precise_v2(req: dict) -> dict:
         bottom_scale, bottom_scale_raw = None, ""
     body_scales = _precise_body_scales(words, text, max_x, max_y)
     template_scale, template_scale_raw, template_scale_kind = _template_scale(
-        req, words, max_x, max_y,
+        req, page, words, max_x, max_y,
     ) if ideal_v3 else ("", "", "")
     scale_decision = _precise_scale_decision(
         config, effective_override, suffix_decision, title, index_row,
@@ -4885,6 +5146,7 @@ def sheetmeta_batch_data(req: dict) -> dict:
             "page": page_index,
             "sheet_metadata_config": config,
             "crop_template": req.get("crop_template"),
+            "crop_templates": req.get("crop_templates"),
         })
         results.append({
             "page": page_index,

@@ -210,6 +210,10 @@ public partial class MainWindow
         public List<SmartAiRequest> Requests { get; } = [];
     }
 
+    private sealed record PdfMetadataCropTemplateSelection(
+        PdfSheetMetadataCropTemplate Template,
+        PdfSheetMetadataCropProfile Profile);
+
     private void QueuePdfMetadataFallback(TreeViewItem item)
     {
         if (!RequireModule(ModuleId.Ai, "Queue GPT metadata fallback") ||
@@ -236,7 +240,8 @@ public partial class MainWindow
         if (_currentJob == null || pages.Count == 0)
             return result;
 
-        PdfSheetMetadataCropTemplate? cropTemplate = LoadOrOfferPdfMetadataCropTemplate(pages);
+        IReadOnlyDictionary<PdfSheetMetadataCropProfile, PdfSheetMetadataCropTemplate?> cropTemplates =
+            LoadOrOfferPdfMetadataCropTemplates(pages);
 
         foreach (PageInfo page in pages)
         {
@@ -260,6 +265,9 @@ public partial class MainWindow
                     continue;
                 }
 
+                PdfSheetMetadataCropProfile cropProfile =
+                    PdfSheetMetadataCropService.ResolveProfile(metadata, page);
+                cropTemplates.TryGetValue(cropProfile, out PdfSheetMetadataCropTemplate? cropTemplate);
                 string cropsRoot = Path.Combine(_currentJob.AIContextRoot, "crops");
                 string filePrefix = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_sheetmeta_{SafeFileNamePart(page.Name)}";
                 string cropWarning = "";
@@ -383,40 +391,67 @@ public partial class MainWindow
             return;
         }
 
-        PdfSheetMetadataCropTemplate? template = ShowPdfMetadataCropTemplateDialog(page, showSavedMessage: true);
-        if (template != null)
-            TxtStatus.Text = $"Sheet # / Title / Scale layout regions saved from {page.Name}.";
+        PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
+        PdfSheetMetadataCropProfile profile = PdfSheetMetadataCropService.ResolveProfile(metadata, page);
+        PdfMetadataCropTemplateSelection? selection = ShowPdfMetadataCropTemplateDialog(
+            page,
+            showSavedMessage: true,
+            requestedProfile: profile);
+        if (selection != null)
+        {
+            TxtStatus.Text =
+                $"{PdfSheetMetadataCropService.ProfileDisplayName(selection.Profile)} Sheet # / Title / Scale regions saved from {page.Name}.";
+        }
     }
 
-    private PdfSheetMetadataCropTemplate? LoadOrOfferPdfMetadataCropTemplate(IReadOnlyList<PageInfo> pages)
+    private IReadOnlyDictionary<PdfSheetMetadataCropProfile, PdfSheetMetadataCropTemplate?>
+        LoadOrOfferPdfMetadataCropTemplates(IReadOnlyList<PageInfo> pages)
     {
         if (_currentJob == null)
-            return null;
+            return new Dictionary<PdfSheetMetadataCropProfile, PdfSheetMetadataCropTemplate?>();
 
-        PdfSheetMetadataCropTemplate? template = PdfSheetMetadataCropService.LoadTemplate(_currentJob);
-        if (PdfSheetMetadataCropService.HasUsableTemplate(template))
-            return template;
+        var templates = Enum.GetValues<PdfSheetMetadataCropProfile>()
+            .ToDictionary(
+                profile => profile,
+                profile => PdfSheetMetadataCropService.LoadExactJobTemplate(_currentJob, profile));
 
         List<PageInfo> fallbackPages = pages
             .Where(PageNeedsPdfMetadataFallback)
             .ToList();
         if (fallbackPages.Count == 0)
-            return null;
+            return templates;
 
-        MessageBoxResult answer = MessageBox.Show(
-            $"AI Fill still needs help on {fallbackPages.Count} sheet(s)." + Environment.NewLine +
-            "Do you want to pick one representative sheet and draw crop boxes for the sheet number, title, and scale?",
-            "AI Fill Crop Hints",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-        if (answer != MessageBoxResult.Yes)
-            return null;
+        foreach (IGrouping<PdfSheetMetadataCropProfile, PageInfo> group in fallbackPages
+                     .GroupBy(page => PdfSheetMetadataCropService.ResolveProfile(
+                         OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath),
+                         page)))
+        {
+            PdfSheetMetadataCropProfile profile = group.Key;
+            if (PdfSheetMetadataCropService.HasUsableTemplate(templates[profile]))
+                continue;
 
-        PageInfo sample = fallbackPages.FirstOrDefault(page =>
-            _currentPage != null &&
-            IsSamePageFolder(page.FolderPath, _currentPage.FolderPath)) ?? fallbackPages[0];
+            List<PageInfo> profilePages = group.ToList();
+            string profileName = PdfSheetMetadataCropService.ProfileDisplayName(profile);
+            MessageBoxResult answer = MessageBox.Show(
+                $"AI Fill still needs help on {profilePages.Count} {profileName} sheet(s)." + Environment.NewLine +
+                "Show the sheet title + drawing number, then the Scale on one middle sheet?",
+                "AI Fill Crop Hints",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+                continue;
 
-        return ShowPdfMetadataCropTemplateDialog(sample, showSavedMessage: false);
+            PageInfo sample = profilePages[profilePages.Count / 2];
+            PdfMetadataCropTemplateSelection? selection = ShowPdfMetadataCropTemplateDialog(
+                sample,
+                showSavedMessage: false,
+                requestedProfile: profile,
+                guidedNameAndScale: true);
+            if (selection != null)
+                templates[selection.Profile] = selection.Template;
+        }
+
+        return templates;
     }
 
     private bool PageNeedsPdfMetadataFallback(PageInfo page)
@@ -431,10 +466,18 @@ public partial class MainWindow
         return PdfSheetMetadataService.NeedsFallback(metadata);
     }
 
-    private PdfSheetMetadataCropTemplate? ShowPdfMetadataCropTemplateDialog(PageInfo page, bool showSavedMessage)
+    private PdfMetadataCropTemplateSelection? ShowPdfMetadataCropTemplateDialog(
+        PageInfo page,
+        bool showSavedMessage,
+        PdfSheetMetadataCropProfile? requestedProfile = null,
+        bool guidedNameAndScale = false)
     {
         if (_currentJob == null)
             return null;
+
+        PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
+        PdfSheetMetadataCropProfile profile = requestedProfile ??
+                                              PdfSheetMetadataCropService.ResolveProfile(metadata, page);
 
         if (!PdfSheetMetadataCropService.TryRenderPage(page, out PdfLayerRenderResult render, out string error))
         {
@@ -442,10 +485,16 @@ public partial class MainWindow
             return null;
         }
 
+        PdfSheetMetadataCropTemplate? existingTemplate = guidedNameAndScale
+            ? PdfSheetMetadataCropService.LoadExactJobTemplate(_currentJob, profile) ??
+              PdfSheetMetadataCropService.LoadExactGlobalTemplate(profile)
+            : PdfSheetMetadataCropService.LoadTemplate(_currentJob, profile);
         var dialog = new PdfMetadataCropTemplateDialog(
             page,
             render,
-            PdfSheetMetadataCropService.LoadTemplate(_currentJob))
+            existingTemplate,
+            profile,
+            guidedNameAndScale)
         {
             Owner = this,
         };
@@ -454,13 +503,16 @@ public partial class MainWindow
             return null;
 
         dialog.CropTemplate.SourcePageFolder = Path.GetRelativePath(_currentJob.RootPath, page.FolderPath);
-        PdfSheetMetadataCropService.SaveTemplate(_currentJob, dialog.CropTemplate);
+        PdfSheetMetadataCropProfile savedProfile = dialog.SelectedProfile;
+        PdfSheetMetadataCropService.SaveTemplate(_currentJob, savedProfile, dialog.CropTemplate);
         if (showSavedMessage)
         {
-            PostStatusInfo($"Saved metadata layout regions for this job: {PdfSheetMetadataCropService.TemplatePath(_currentJob)}");
+            PostStatusInfo(
+                $"Saved {PdfSheetMetadataCropService.ProfileDisplayName(savedProfile)} metadata regions for this job: " +
+                PdfSheetMetadataCropService.TemplatePath(_currentJob, savedProfile));
         }
 
-        return dialog.CropTemplate;
+        return new PdfMetadataCropTemplateSelection(dialog.CropTemplate, savedProfile);
     }
 
     private static string BuildPdfMetadataCropObservation(

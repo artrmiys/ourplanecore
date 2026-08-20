@@ -25,9 +25,10 @@ public sealed record PdfSheetMetadataAnalysisProgress(
 
 public static partial class PdfSheetMetadataService
 {
-    // Keep one document open for almost the whole permit set. A 128-page chunk
-    // stays below the dedicated 60s metadata timeout on the real Peerless set.
-    private const int SheetMetadataBatchChunkSize = 128;
+    // Large drawing sets can contain pages whose text extraction is unusually
+    // expensive. Keep each worker request bounded so one troublesome PDF never
+    // turns into a multi-minute, all-or-nothing request.
+    private const int SheetMetadataBatchChunkSize = 4;
 
     public static IReadOnlyList<PdfSheetMetadataAnalysisItem> AnalyzePages(
         OurPlanCoreJob job,
@@ -42,7 +43,7 @@ public static partial class PdfSheetMetadataService
 
         var watch = Stopwatch.StartNew();
         SheetMetadataConfig config = SheetMetadataRulesService.Active.Clone();
-        PdfSheetMetadataCropTemplate? cropTemplate = PdfSheetMetadataCropService.LoadTemplate(job);
+        PdfSheetMetadataCropCatalog cropTemplates = PdfSheetMetadataCropService.LoadCatalog(job);
         bool useCache = config.DetectorMode == SheetMetadataDetectorMode.IdealV3 && !forceReanalyze;
         var results = new Dictionary<string, PdfSheetMetadataAnalysisItem>(StringComparer.OrdinalIgnoreCase);
         var pending = new List<PageInfo>();
@@ -52,7 +53,7 @@ public static partial class PdfSheetMetadataService
         foreach (PageInfo page in pages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (useCache && SheetMetadataAnalysisCache.TryLoad(job, page, config, cropTemplate, out PdfSheetMetadata? cached))
+            if (useCache && SheetMetadataAnalysisCache.TryLoad(job, page, config, cropTemplates, out PdfSheetMetadata? cached))
             {
                 NormalizeMetadata(page, cached!, job);
                 if (persistMetadata)
@@ -78,7 +79,7 @@ public static partial class PdfSheetMetadataService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 List<PageInfo> chunk = pdfPages.Skip(offset).Take(SheetMetadataBatchChunkSize).ToList();
-                AnalyzeChunk(job, chunk, config, cropTemplate, persistMetadata, results);
+                AnalyzeChunk(job, chunk, config, cropTemplates, persistMetadata, results);
                 completed += chunk.Count;
                 progress?.Invoke(new PdfSheetMetadataAnalysisProgress(
                     completed, pages.Count, cacheHits, Path.GetFileName(group.Key)));
@@ -114,7 +115,7 @@ public static partial class PdfSheetMetadataService
         OurPlanCoreJob job,
         IReadOnlyList<PageInfo> pages,
         SheetMetadataConfig config,
-        PdfSheetMetadataCropTemplate? cropTemplate,
+        PdfSheetMetadataCropCatalog cropTemplates,
         bool persistMetadata,
         Dictionary<string, PdfSheetMetadataAnalysisItem> results)
     {
@@ -123,14 +124,15 @@ public static partial class PdfSheetMetadataService
             Pdf = pages[0].PdfPath,
             Pages = pages.Select(page => page.PdfPage).ToList(),
             SheetMetadataConfig = config,
-            CropTemplate = cropTemplate,
+            CropTemplate = cropTemplates.Default,
+            CropTemplates = cropTemplates,
         };
 
         if (!PdfLayerRenderService.TryInvokeHelper(
                 "sheetmeta_batch", request, out SheetMetaBatchResponse? response, out string batchError) ||
             response == null || !response.Ok)
         {
-            AnalyzeChunkFallback(job, pages, persistMetadata, results, response?.Error ?? batchError);
+            RecordChunkFailure(pages, results, response?.Error ?? batchError);
             return;
         }
 
@@ -152,7 +154,7 @@ public static partial class PdfSheetMetadataService
 
             PdfSheetMetadata rawMetadata = item.Metadata;
             var stageWatch = Stopwatch.StartNew();
-            SheetMetadataAnalysisCache.TrySave(job, page, config, cropTemplate, rawMetadata);
+            SheetMetadataAnalysisCache.TrySave(job, page, config, cropTemplates, rawMetadata);
             cacheMs += stageWatch.ElapsedMilliseconds;
             stageWatch.Restart();
             NormalizeMetadata(page, rawMetadata, job);
@@ -171,21 +173,21 @@ public static partial class PdfSheetMetadataService
         }
     }
 
-    private static void AnalyzeChunkFallback(
-        OurPlanCoreJob job,
+    private static void RecordChunkFailure(
         IReadOnlyList<PageInfo> pages,
-        bool persistMetadata,
         Dictionary<string, PdfSheetMetadataAnalysisItem> results,
         string batchError)
     {
-        AppLog.Warn($"Sheet metadata batch fell back to per-page analysis: {batchError}");
+        string error = string.IsNullOrWhiteSpace(batchError)
+            ? "Sheet metadata batch failed."
+            : batchError;
+        AppLog.Warn(
+            $"Sheet metadata batch skipped {pages.Count} page(s) after a bounded failure; " +
+            $"no per-page retry will run: {error}");
         foreach (PageInfo page in pages)
         {
-            bool ok = TryAnalyzePage(job, page, out PdfSheetMetadata metadata, out string error);
-            if (ok && persistMetadata)
-                OurPlanCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
             results[page.FolderPath] = new PdfSheetMetadataAnalysisItem(
-                page, ok, ok ? metadata : null, error, false);
+                page, false, null, error, false);
         }
     }
 
@@ -195,6 +197,7 @@ public static partial class PdfSheetMetadataService
         public List<int> Pages { get; set; } = [];
         public SheetMetadataConfig SheetMetadataConfig { get; set; } = SheetMetadataConfig.BuildDefault();
         public PdfSheetMetadataCropTemplate? CropTemplate { get; set; }
+        public PdfSheetMetadataCropCatalog CropTemplates { get; set; } = new();
     }
 
     private sealed class SheetMetaBatchResponse
@@ -215,8 +218,8 @@ public static partial class PdfSheetMetadataService
 
 internal static class SheetMetadataAnalysisCache
 {
-    private const int CacheSchemaVersion = 1;
-    private const string DetectorRevision = "ideal-v3-layout-index-1";
+    private const int CacheSchemaVersion = 2;
+    private const string DetectorRevision = "ideal-v3-layout-profiles-ocr-2";
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
@@ -226,13 +229,13 @@ internal static class SheetMetadataAnalysisCache
         OurPlanCoreJob job,
         PageInfo page,
         SheetMetadataConfig config,
-        PdfSheetMetadataCropTemplate? cropTemplate,
+        PdfSheetMetadataCropCatalog cropTemplates,
         out PdfSheetMetadata? metadata)
     {
         metadata = null;
         try
         {
-            string key = BuildKey(page, config, cropTemplate);
+            string key = BuildKey(page, config, cropTemplates);
             string path = CachePath(job, key);
             if (!File.Exists(path))
                 return false;
@@ -259,14 +262,14 @@ internal static class SheetMetadataAnalysisCache
         OurPlanCoreJob job,
         PageInfo page,
         SheetMetadataConfig config,
-        PdfSheetMetadataCropTemplate? cropTemplate,
+        PdfSheetMetadataCropCatalog cropTemplates,
         PdfSheetMetadata metadata)
     {
         if (config.DetectorMode != SheetMetadataDetectorMode.IdealV3)
             return;
         try
         {
-            string key = BuildKey(page, config, cropTemplate);
+            string key = BuildKey(page, config, cropTemplates);
             var entry = new SheetMetadataCacheEntry
             {
                 SchemaVersion = CacheSchemaVersion,
@@ -284,7 +287,7 @@ internal static class SheetMetadataAnalysisCache
     private static string BuildKey(
         PageInfo page,
         SheetMetadataConfig config,
-        PdfSheetMetadataCropTemplate? cropTemplate)
+        PdfSheetMetadataCropCatalog cropTemplates)
     {
         var info = new FileInfo(page.PdfPath);
         string source = string.Join("\n",
@@ -294,7 +297,7 @@ internal static class SheetMetadataAnalysisCache
             info.Exists ? info.LastWriteTimeUtc.Ticks : 0,
             page.PdfPage,
             JsonSerializer.Serialize(SheetMetadataConfig.UpgradeForCurrentSchema(config), JsonOptions),
-            JsonSerializer.Serialize(cropTemplate, JsonOptions));
+            JsonSerializer.Serialize(cropTemplates, JsonOptions));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source))).ToLowerInvariant();
     }
 

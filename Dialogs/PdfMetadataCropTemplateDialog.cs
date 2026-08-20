@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using SkiaSharp;
 using WpfRectangle = System.Windows.Shapes.Rectangle;
 
@@ -22,12 +23,16 @@ public sealed class PdfMetadataCropTemplateDialog : Window
     private readonly PageInfo _page;
     private readonly PdfLayerRenderResult _render;
     private readonly BitmapSource _bitmap;
+    private readonly PdfSheetMetadataCropProfile _profile;
+    private readonly bool _guidedNameAndScale;
+    private bool _guidedProfileChosen;
     private readonly Canvas _canvas;
     private readonly ScrollViewer _scrollViewer;
     private readonly WpfRectangle _sheetNumberOutline;
     private readonly WpfRectangle _sheetTitleOutline;
     private readonly WpfRectangle _scaleOutline;
     private readonly WpfRectangle _dragOutline;
+    private RadioButton _scaleChoice = null!;
     private TextBlock _status = null!;
     private CropRole _activeRole = CropRole.SheetNumber;
     private Point? _dragStart;
@@ -39,15 +44,35 @@ public sealed class PdfMetadataCropTemplateDialog : Window
     private SKRect? _scaleRect;
 
     public PdfSheetMetadataCropTemplate CropTemplate { get; private set; } = new();
+    public PdfSheetMetadataCropProfile SelectedProfile { get; private set; }
 
     public PdfMetadataCropTemplateDialog(
         PageInfo page,
         PdfLayerRenderResult render,
         PdfSheetMetadataCropTemplate? existingTemplate)
+        : this(
+            page,
+            render,
+            existingTemplate,
+            PdfSheetMetadataCropProfile.Default,
+            guidedNameAndScale: false)
+    {
+    }
+
+    public PdfMetadataCropTemplateDialog(
+        PageInfo page,
+        PdfLayerRenderResult render,
+        PdfSheetMetadataCropTemplate? existingTemplate,
+        PdfSheetMetadataCropProfile profile,
+        bool guidedNameAndScale)
     {
         _page = page;
         _render = render;
         _bitmap = LoadBitmap(render.ImageBytes);
+        _profile = profile;
+        _guidedNameAndScale = guidedNameAndScale;
+        SelectedProfile = profile;
+        _guidedProfileChosen = profile != PdfSheetMetadataCropProfile.Default;
 
         if (existingTemplate != null)
         {
@@ -59,7 +84,11 @@ public sealed class PdfMetadataCropTemplateDialog : Window
                 _scaleRect = PdfSheetMetadataCropService.RectFromRegion(existingTemplate.ScaleRect);
         }
 
-        Title = "Sheet Metadata Layout Regions";
+        Title = guidedNameAndScale
+            ? profile == PdfSheetMetadataCropProfile.Default
+                ? "Sheet Metadata Layout — Choose A / S / Other"
+                : $"Sheet Metadata Layout — {PdfSheetMetadataCropService.ProfileDisplayName(profile)}"
+            : "Sheet Metadata Layout Regions";
         Width = 1120;
         Height = 780;
         MinWidth = 760;
@@ -131,6 +160,9 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         {
             RenderOutlines();
             UpdateStatus();
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.Loaded,
+                new Action(ScrollTowardTitleBlock));
         };
     }
 
@@ -139,51 +171,59 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
         panel.Children.Add(new TextBlock
         {
-            Text = "Draw reusable Sheet #, Sheet Title, and Scale regions on a representative sheet. Left-drag draws; right/middle-drag pans.",
+            Text = _guidedNameAndScale
+                ? "Two quick steps: first draw one box around the complete sheet title and drawing number (for example, FOURTH LEVEL FLOOR PLAN + A1.04), then draw the scale. Left-drag draws; right/middle-drag pans."
+                : "Draw reusable Sheet #, Sheet Title, and Scale regions on a representative sheet. Left-drag draws; right/middle-drag pans.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 6),
         });
 
+        if (_guidedNameAndScale)
+            panel.Children.Add(BuildGuidedProfilePanel());
+
         var tools = new StackPanel { Orientation = Orientation.Horizontal };
-        var sheet = new RadioButton
+        var sheetNumberChoice = new RadioButton
         {
-            Content = "Sheet #",
+            Content = _guidedNameAndScale ? "1. Sheet title + number" : "Sheet #",
             IsChecked = true,
             Margin = new Thickness(0, 0, 12, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        sheet.Checked += (_, _) =>
+        sheetNumberChoice.Checked += (_, _) =>
         {
             _activeRole = CropRole.SheetNumber;
             UpdateStatus();
         };
-        tools.Children.Add(sheet);
+        tools.Children.Add(sheetNumberChoice);
 
-        var title = new RadioButton
+        if (!_guidedNameAndScale)
         {
-            Content = "Sheet Title",
-            Margin = new Thickness(0, 0, 12, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        title.Checked += (_, _) =>
-        {
-            _activeRole = CropRole.SheetTitle;
-            UpdateStatus();
-        };
-        tools.Children.Add(title);
+            var title = new RadioButton
+            {
+                Content = "Sheet Title",
+                Margin = new Thickness(0, 0, 12, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            title.Checked += (_, _) =>
+            {
+                _activeRole = CropRole.SheetTitle;
+                UpdateStatus();
+            };
+            tools.Children.Add(title);
+        }
 
-        var scale = new RadioButton
+        _scaleChoice = new RadioButton
         {
-            Content = "Scale",
+            Content = _guidedNameAndScale ? "2. Scale" : "Scale",
             Margin = new Thickness(0, 0, 18, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        scale.Checked += (_, _) =>
+        _scaleChoice.Checked += (_, _) =>
         {
             _activeRole = CropRole.Scale;
             UpdateStatus();
         };
-        tools.Children.Add(scale);
+        tools.Children.Add(_scaleChoice);
 
         _status = new TextBlock
         {
@@ -193,6 +233,53 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         tools.Children.Add(_status);
         panel.Children.Add(tools);
         return panel;
+    }
+
+    private FrameworkElement BuildGuidedProfilePanel()
+    {
+        if (_profile != PdfSheetMetadataCropProfile.Default)
+        {
+            return new TextBlock
+            {
+                Text = $"Layout profile: {PdfSheetMetadataCropService.ProfileDisplayName(_profile)}",
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 6),
+            };
+        }
+
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 0, 0, 6),
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "This sheet is:",
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0),
+        });
+        AddChoice("Architectural (A)", PdfSheetMetadataCropProfile.Architectural);
+        AddChoice("Structural (S)", PdfSheetMetadataCropProfile.Structural);
+        AddChoice("Other / general", PdfSheetMetadataCropProfile.Default);
+        return panel;
+
+        void AddChoice(string label, PdfSheetMetadataCropProfile profile)
+        {
+            var choice = new RadioButton
+            {
+                Content = label,
+                Margin = new Thickness(0, 0, 12, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            choice.Checked += (_, _) =>
+            {
+                SelectedProfile = profile;
+                _guidedProfileChosen = true;
+                UpdateStatus();
+            };
+            panel.Children.Add(choice);
+        }
     }
 
     private StackPanel BuildBottomButtons()
@@ -223,7 +310,8 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         clearAll.Click += (_, _) =>
         {
             _sheetNumberRect = null;
-            _sheetTitleRect = null;
+            if (!_guidedNameAndScale)
+                _sheetTitleRect = null;
             _scaleRect = null;
             RenderOutlines();
             UpdateStatus();
@@ -287,7 +375,11 @@ public sealed class PdfMetadataCropTemplateDialog : Window
 
         SKRect pdfRect = PixelRectToPdfRect(pixelRect);
         if (_activeRole == CropRole.SheetNumber)
+        {
             _sheetNumberRect = pdfRect;
+            if (_guidedNameAndScale)
+                _scaleChoice.IsChecked = true;
+        }
         else if (_activeRole == CropRole.SheetTitle)
             _sheetTitleRect = pdfRect;
         else
@@ -386,6 +478,28 @@ public sealed class PdfMetadataCropTemplateDialog : Window
 
     private void Accept()
     {
+        if (_guidedNameAndScale && !_guidedProfileChosen)
+        {
+            MessageBox.Show(
+                this,
+                "Choose whether this sheet is Architectural (A), Structural (S), or Other / general.",
+                Title,
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        if (_guidedNameAndScale && (_sheetNumberRect == null || _scaleRect == null))
+        {
+            MessageBox.Show(
+                this,
+                "Complete both steps before saving: draw the sheet title + number region and the scale region.",
+                Title,
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
         if (_sheetNumberRect == null && _sheetTitleRect == null && _scaleRect == null)
         {
             MessageBox.Show(this, "Draw at least one crop box before saving.", "Sheet Metadata Layout Regions",
@@ -402,9 +516,11 @@ public sealed class PdfMetadataCropTemplateDialog : Window
             SheetNumberRect = _sheetNumberRect == null
                 ? new PdfSheetMetadataCropRegion()
                 : PdfSheetMetadataCropService.RegionFromRect(_sheetNumberRect.Value),
-            SheetTitleRect = _sheetTitleRect == null
-                ? new PdfSheetMetadataCropRegion()
-                : PdfSheetMetadataCropService.RegionFromRect(_sheetTitleRect.Value),
+            SheetTitleRect = _guidedNameAndScale
+                ? PdfSheetMetadataCropService.RegionFromRect(_sheetNumberRect!.Value)
+                : _sheetTitleRect == null
+                    ? new PdfSheetMetadataCropRegion()
+                    : PdfSheetMetadataCropService.RegionFromRect(_sheetTitleRect.Value),
             ScaleRect = _scaleRect == null
                 ? new PdfSheetMetadataCropRegion()
                 : PdfSheetMetadataCropService.RegionFromRect(_scaleRect.Value),
@@ -415,7 +531,10 @@ public sealed class PdfMetadataCropTemplateDialog : Window
     private void RenderOutlines()
     {
         RenderOutline(_sheetNumberOutline, _sheetNumberRect);
-        RenderOutline(_sheetTitleOutline, _sheetTitleRect);
+        if (_guidedNameAndScale)
+            _sheetTitleOutline.Visibility = Visibility.Collapsed;
+        else
+            RenderOutline(_sheetTitleOutline, _sheetTitleRect);
         RenderOutline(_scaleOutline, _scaleRect);
     }
 
@@ -433,6 +552,15 @@ public sealed class PdfMetadataCropTemplateDialog : Window
 
     private void UpdateStatus()
     {
+        if (_guidedNameAndScale)
+        {
+            string sheetStep = _sheetNumberRect == null ? "step 1 waiting" : "step 1 set";
+            string scaleStep = _scaleRect == null ? "step 2 waiting" : "step 2 set";
+            string activeStep = _activeRole == CropRole.SheetNumber ? "sheet title + number" : "scale";
+            _status.Text = $"Active: {activeStep}. {sheetStep}; {scaleStep}.";
+            return;
+        }
+
         string active = _activeRole switch
         {
             CropRole.SheetNumber => "sheet number",
@@ -443,6 +571,13 @@ public sealed class PdfMetadataCropTemplateDialog : Window
         string title = _sheetTitleRect == null ? "title missing" : "title set";
         string scale = _scaleRect == null ? "scale missing" : "scale set";
         _status.Text = $"Active: {active}. {sheet}; {title}; {scale}. Left-drag draws; right/middle-drag pans; Shift+wheel scrolls sideways.";
+    }
+
+    private void ScrollTowardTitleBlock()
+    {
+        _scrollViewer.UpdateLayout();
+        _scrollViewer.ScrollToHorizontalOffset(_scrollViewer.ScrollableWidth);
+        _scrollViewer.ScrollToVerticalOffset(_scrollViewer.ScrollableHeight);
     }
 
     private SKRect PixelRectToPdfRect(Rect pixel)

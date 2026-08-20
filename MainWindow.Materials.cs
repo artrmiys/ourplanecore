@@ -241,6 +241,17 @@ public partial class MainWindow
         if (_currentJob == null || sourcePages.Count == 0)
             return new MaterialReportSheetMetadataSummary(0, 0, 0, 0);
 
+        SheetMetadataImportPolicy policy = SheetMetadataRulesService.Active.ImportPolicy;
+        if (policy == SheetMetadataImportPolicy.ManualOnly)
+        {
+            const string status =
+                "PDF import complete. Automatic metadata analysis is off; use Name, Scale, or Name+Scale when needed.";
+            AppLog.Info(
+                $"PDF import sheet metadata skipped by ManualOnly policy; sheets={sourcePages.Count}.");
+            TxtStatus.Text = status;
+            return new MaterialReportSheetMetadataSummary(0, 0, 0, 0);
+        }
+
         try
         {
             MaterialReportSheetMetadataSummary summary = await AnalyzeAndApplySheetMetadataAsync(
@@ -270,6 +281,10 @@ public partial class MainWindow
         OurPlanCoreJob job = _currentJob;
         if (!EnsureExpectedJobWritable(job, "analyze and apply sheet metadata"))
             return new MaterialReportSheetMetadataSummary(0, 0, 0, sourcePages.Count);
+        await OfferPdfMetadataGuidanceIfNeededAsync(job, sourcePages, statusPrefix);
+        if (!EnsureExpectedJobWritable(job, "analyze and apply sheet metadata"))
+            return new MaterialReportSheetMetadataSummary(0, 0, 0, sourcePages.Count);
+
         SheetMetadataImportPolicy policy = SheetMetadataRulesService.Active.ImportPolicy;
         bool persistDuringAnalysis = policy == SheetMetadataImportPolicy.LegacyAutoApply;
         TxtStatus.Text = $"{statusPrefix}: auto naming/scaling source sheets.";
@@ -310,7 +325,9 @@ public partial class MainWindow
                 0,
                 results.Count(result => !result.Ok));
 
-        bool reviewedByUser = policy == SheetMetadataImportPolicy.Preview;
+        bool reviewedByUser = policy is
+            SheetMetadataImportPolicy.Preview or
+            SheetMetadataImportPolicy.ManualOnly;
         if (reviewedByUser)
         {
             var dialog = new PdfMetadataPreviewDialog(rows, $"{statusPrefix}: Name + Scale Review")

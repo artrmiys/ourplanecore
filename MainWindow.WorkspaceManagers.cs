@@ -376,10 +376,14 @@ public partial class MainWindow
             return;
         }
 
+        OurPlanCoreJob job = _currentJob;
+        await OfferPdfMetadataGuidanceIfNeededAsync(job, pages, "Sheet Manager");
+        if (!EnsureExpectedJobWritable(job, "analyze sheets in Sheet Manager"))
+            return;
+
         SaveCurrentPageScale();
         TxtStatus.Text = $"Sheet Manager analyzing {pages.Count} sheet(s)...";
 
-        OurPlanCoreJob job = _currentJob;
         bool persistDuringAnalysis = SheetMetadataRulesService.Active.ImportPolicy ==
                                      SheetMetadataImportPolicy.LegacyAutoApply;
         _sheetManagerAnalysisCts?.Cancel();

@@ -23,6 +23,9 @@ if (args.Length > 0 && args[0] == "sheetmetadata-install-global")
 if (args.Length > 0 && args[0] == "sheetmetadata-install-ideal-global")
     return SheetMetadataConfigHarness.InstallGlobalIdeal();
 
+if (args.Length > 0 && args[0] == "sheetmetadata-disable-import-analysis")
+    return SheetMetadataConfigHarness.DisableAutomaticImportAnalysis();
+
 if (args.Length > 0 && args[0] == "sheetmetadata-v3-benchmark")
     return SheetMetadataV3BenchmarkHarness.Run(args);
 
@@ -381,7 +384,15 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata project learned scale keeps text numeric sync", PdfSheetMetadataWorkflowTests.ProjectLearnedScaleUpdatesTextAndNumericValueTogether),
     ("pdf metadata learned suffix leaves protected scale unchanged", PdfSheetMetadataWorkflowTests.LearnedSuffixDoesNotMutateProtectedScaleDecision),
     ("sheet metadata legacy preview keeps legacy detector", SheetMetadataConfigTests.LegacyPreviewDoesNotSwitchDetector),
-    ("sheet metadata ideal v3 is opt in and preserves policy", SheetMetadataConfigTests.IdealV3IsOptInAndKeepsPrecisePolicyDefaults),
+    ("sheet metadata defaults disable automatic import analysis", SheetMetadataConfigTests.DefaultsDisableAutomaticImportAnalysis),
+    ("sheet metadata manual policy reviews explicit analysis", SheetMetadataConfigTests.ManualPolicySkipsImportButReviewsExplicitAnalysis),
+    ("sheet metadata batch worker skips slow command replay", SheetMetadataConfigTests.BatchWorkerFailureDoesNotReplaySlowFileCommand),
+    ("sheet metadata failed batch stops without per-page retry", PdfSheetMetadataBatchRegressionTests.FailedBatchStopsWithoutPerPageRetry),
+    ("sheet metadata batch is bounded and carries profile catalog", PdfSheetMetadataBatchRegressionTests.BatchIsBoundedAndCarriesProfileCatalog),
+    ("sheet metadata guidance chooses stable profile midpoints", PdfSheetMetadataGuidancePlannerTests.ChoosesStableMiddlePageForEachProfile),
+    ("sheet metadata guidance keeps A and S separate", PdfSheetMetadataGuidancePlannerTests.KeepsArchitecturalAndStructuralProfilesSeparate),
+    ("sheet metadata guidance uses Default only without a discipline", PdfSheetMetadataGuidancePlannerTests.UsesDefaultOnlyWhenNoDisciplineGroupExists),
+    ("sheet metadata guidance skips dedicated profile layouts", PdfSheetMetadataGuidancePlannerTests.SkipsProfilesWithDedicatedTemplates),
     ("sheet metadata schema one restores precise collections", SheetMetadataConfigTests.SchemaOnePreciseMigrationRestoresCollections),
     ("sheet metadata schema two empty rules stay authoritative", SheetMetadataConfigTests.SchemaTwoEmptyRulesRemainAuthoritative),
     ("sheet metadata null rule rows resolve safely", SheetMetadataConfigTests.NullRuleRowsDoNotCrashUpgradeOrResolve),
@@ -608,6 +619,9 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata crop template save load round trips", PdfSheetMetadataCropServiceTests.CropTemplateSaveLoadRoundTrips),
     ("pdf metadata crop template usable when either region exists", PdfSheetMetadataCropServiceTests.CropTemplateUsableWhenEitherRegionExists),
     ("pdf metadata crop template resolves job then global", PdfSheetMetadataCropServiceTests.CropTemplateResolvesJobOverrideThenGlobal),
+    ("pdf metadata crop profiles round trip independently", PdfSheetMetadataCropServiceTests.CropProfileTemplatesRoundTripIndependently),
+    ("pdf metadata crop profiles resolve exact then default", PdfSheetMetadataCropServiceTests.CropProfileResolutionUsesExactThenDefaultFallback),
+    ("pdf metadata crop profile resolver uses metadata and page hints", PdfSheetMetadataCropServiceTests.CropProfileResolverPrioritizesMetadataAndUsesPageHeuristics),
     ("joist rounding aliases normalize", JoistRoundingAliasesNormalize),
     ("joist pitch normalizes common input", JoistPitchNormalizesCommonInput),
     ("joist pitch flat input normalizes empty", JoistPitchFlatInputNormalizesEmpty),

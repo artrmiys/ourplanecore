@@ -1,5 +1,6 @@
 using OurPlanCore;
 using SkiaSharp;
+using System.Text.Json;
 
 internal static class PdfSheetMetadataCropServiceTests
 {
@@ -55,6 +56,189 @@ internal static class PdfSheetMetadataCropServiceTests
         AssertTrue(PdfSheetMetadataCropService.HasUsableTemplate(scaleOnly), "scale region should be usable");
     }
 
+    public static void CropProfileTemplatesRoundTripIndependently()
+    {
+        WithTempJob("Crop Profile Round Trip", job =>
+        {
+            PdfSheetMetadataCropService.SaveTemplate(job, TemplateWithLeft(11));
+            PdfSheetMetadataCropService.SaveTemplate(
+                job,
+                PdfSheetMetadataCropProfile.Architectural,
+                TemplateWithLeft(22));
+            PdfSheetMetadataCropService.SaveTemplate(
+                job,
+                PdfSheetMetadataCropProfile.Structural,
+                TemplateWithLeft(33));
+
+            AssertEqual(
+                "sheet_metadata_crop_template.json",
+                Path.GetFileName(PdfSheetMetadataCropService.TemplatePath(job)),
+                "legacy default path");
+            AssertEqual(
+                "sheet_metadata_crop_template_a.json",
+                Path.GetFileName(PdfSheetMetadataCropService.TemplatePath(job, PdfSheetMetadataCropProfile.Architectural)),
+                "architectural path");
+            AssertEqual(
+                "sheet_metadata_crop_template_s.json",
+                Path.GetFileName(PdfSheetMetadataCropService.TemplatePath(job, PdfSheetMetadataCropProfile.Structural)),
+                "structural path");
+            AssertTemplateLeft(11, PdfSheetMetadataCropService.LoadJobTemplate(job), "legacy default load");
+            AssertTemplateLeft(
+                22,
+                PdfSheetMetadataCropService.LoadExactJobTemplate(job, PdfSheetMetadataCropProfile.Architectural),
+                "exact architectural load");
+            AssertTemplateLeft(
+                33,
+                PdfSheetMetadataCropService.LoadExactJobTemplate(job, PdfSheetMetadataCropProfile.Structural),
+                "exact structural load");
+            AssertTrue(
+                PdfSheetMetadataCropService.HasDedicatedTemplate(job, PdfSheetMetadataCropProfile.Architectural),
+                "architectural profile should be dedicated");
+
+            PdfSheetMetadataCropCatalog catalog = PdfSheetMetadataCropService.LoadCatalog(job);
+            AssertTemplateLeft(11, catalog.TemplateFor(PdfSheetMetadataCropProfile.Default), "catalog default");
+            AssertTemplateLeft(22, catalog.TemplateFor(PdfSheetMetadataCropProfile.Architectural), "catalog architectural");
+            AssertTemplateLeft(33, catalog.TemplateFor(PdfSheetMetadataCropProfile.Structural), "catalog structural");
+            string catalogJson = JsonSerializer.Serialize(catalog);
+            AssertTrue(catalogJson.Contains("\"schema_version\"", StringComparison.Ordinal), "catalog schema field");
+            AssertTrue(catalogJson.Contains("\"architectural\"", StringComparison.Ordinal), "catalog architectural field");
+            AssertTrue(catalogJson.Contains("\"structural\"", StringComparison.Ordinal), "catalog structural field");
+
+            AssertTrue(PdfSheetMetadataCropService.ClearAllJobTemplates(job), "all profile templates should clear");
+            AssertTrue(!File.Exists(PdfSheetMetadataCropService.TemplatePath(job)), "default file should clear");
+            AssertTrue(
+                !File.Exists(PdfSheetMetadataCropService.TemplatePath(job, PdfSheetMetadataCropProfile.Architectural)),
+                "architectural file should clear");
+            AssertTrue(
+                !File.Exists(PdfSheetMetadataCropService.TemplatePath(job, PdfSheetMetadataCropProfile.Structural)),
+                "structural file should clear");
+        });
+    }
+
+    public static void CropProfileResolutionUsesExactThenDefaultFallback()
+    {
+        string globalDefaultPath = PdfSheetMetadataCropService.GlobalTemplatePath();
+        string globalArchitecturalPath = PdfSheetMetadataCropService.GlobalTemplatePath(
+            PdfSheetMetadataCropProfile.Architectural);
+        try
+        {
+            DeleteIfPresent(globalDefaultPath);
+            DeleteIfPresent(globalArchitecturalPath);
+            PdfSheetMetadataCropService.SaveGlobalTemplate(TemplateWithLeft(40));
+
+            WithTempJob("Crop Profile Resolution", job =>
+            {
+                AssertTemplateLeft(
+                    40,
+                    PdfSheetMetadataCropService.LoadTemplate(job, PdfSheetMetadataCropProfile.Architectural),
+                    "global default fallback");
+
+                PdfSheetMetadataCropService.SaveTemplate(job, TemplateWithLeft(30));
+                AssertTemplateLeft(
+                    30,
+                    PdfSheetMetadataCropService.LoadTemplate(job, PdfSheetMetadataCropProfile.Architectural),
+                    "job default fallback");
+
+                PdfSheetMetadataCropService.SaveGlobalTemplate(
+                    PdfSheetMetadataCropProfile.Architectural,
+                    TemplateWithLeft(20));
+                AssertTemplateLeft(
+                    20,
+                    PdfSheetMetadataCropService.LoadTemplate(job, PdfSheetMetadataCropProfile.Architectural),
+                    "exact global before job default");
+
+                PdfSheetMetadataCropService.SaveTemplate(
+                    job,
+                    PdfSheetMetadataCropProfile.Architectural,
+                    TemplateWithLeft(10));
+                AssertTemplateLeft(
+                    10,
+                    PdfSheetMetadataCropService.LoadTemplate(job, PdfSheetMetadataCropProfile.Architectural),
+                    "exact job before exact global");
+                AssertTemplateLeft(
+                    30,
+                    PdfSheetMetadataCropService.LoadTemplate(job, PdfSheetMetadataCropProfile.Structural),
+                    "structural falls back to job default");
+
+                PdfSheetMetadataCropCatalog catalog = PdfSheetMetadataCropService.LoadCatalog(job);
+                AssertTemplateLeft(30, catalog.Default, "resolved catalog default");
+                AssertTemplateLeft(10, catalog.Architectural, "resolved catalog architectural");
+                AssertTemplateLeft(30, catalog.Structural, "resolved catalog structural fallback");
+            });
+        }
+        finally
+        {
+            DeleteIfPresent(globalDefaultPath);
+            DeleteIfPresent(globalArchitecturalPath);
+        }
+    }
+
+    public static void CropProfileResolverPrioritizesMetadataAndUsesPageHeuristics()
+    {
+        var structuralMetadata = new PdfSheetMetadata
+        {
+            SheetLabel = "S2.01",
+            SheetKey = "A9.99",
+        };
+        AssertEqual(
+            PdfSheetMetadataCropProfile.Structural.ToString(),
+            PdfSheetMetadataCropService.ResolveProfile(
+                structuralMetadata,
+                "A1.04 Floor Plan",
+                @"C:\Plans\Architectural.pdf").ToString(),
+            "metadata label should win");
+
+        var architecturalMetadata = new PdfSheetMetadata { SheetKey = "A1.04" };
+        AssertEqual(
+            PdfSheetMetadataCropProfile.Architectural.ToString(),
+            PdfSheetMetadataCropService.ResolveProfile(
+                architecturalMetadata,
+                "S1.01 Foundation",
+                @"C:\Plans\Structural.pdf").ToString(),
+            "metadata key should win over page and PDF names");
+
+        AssertEqual(
+            PdfSheetMetadataCropProfile.Structural.ToString(),
+            PdfSheetMetadataCropService.ResolveProfile(
+                null,
+                "S3.10 Roof Framing Plan",
+                @"C:\Plans\Architectural.pdf").ToString(),
+            "page sheet key heuristic");
+        AssertEqual(
+            PdfSheetMetadataCropProfile.Structural.ToString(),
+            PdfSheetMetadataCropService.ResolveProfile(
+                null,
+                "Second Floor Framing Plan",
+                @"C:\Plans\Architectural.pdf").ToString(),
+            "structural word wins within page name");
+        AssertEqual(
+            PdfSheetMetadataCropProfile.Architectural.ToString(),
+            PdfSheetMetadataCropService.ResolveProfile(
+                null,
+                "Page 14",
+                @"C:\Plans\Architectural Floor Plans.pdf").ToString(),
+            "architectural PDF filename heuristic");
+        AssertEqual(
+            PdfSheetMetadataCropProfile.Structural.ToString(),
+            PdfSheetMetadataCropService.ResolveProfile(
+                null,
+                "Page 14",
+                @"C:\Plans\885 Westminster Pricing Set updated Structurals.pdf").ToString(),
+            "plural Structurals PDF filename heuristic");
+        AssertEqual(
+            PdfSheetMetadataCropProfile.Default.ToString(),
+            PdfSheetMetadataCropService.ResolveProfile(null, "Page 14", @"C:\Plans\Permit Set.pdf").ToString(),
+            "unknown discipline fallback");
+        AssertEqual(
+            "Architectural (A)",
+            PdfSheetMetadataCropService.ProfileDisplayName(PdfSheetMetadataCropProfile.Architectural),
+            "architectural display name");
+        AssertEqual(
+            "Structural (S)",
+            PdfSheetMetadataCropService.ProfileDisplayName(PdfSheetMetadataCropProfile.Structural),
+            "structural display name");
+    }
+
     public static void CropTemplateResolvesJobOverrideThenGlobal()
     {
         string globalPath = PdfSheetMetadataCropService.GlobalTemplatePath();
@@ -108,6 +292,32 @@ internal static class PdfSheetMetadataCropServiceTests
                 // Test cleanup should not mask the real assertion failure.
             }
         }
+    }
+
+    private static PdfSheetMetadataCropTemplate TemplateWithLeft(float left) =>
+        new()
+        {
+            SourcePageName = $"Sheet {left:0}",
+            SheetNumberRect = PdfSheetMetadataCropService.RegionFromRect(
+                new SKRect(left, 10, left + 20, 30)),
+            ScaleRect = PdfSheetMetadataCropService.RegionFromRect(
+                new SKRect(left, 40, left + 20, 60)),
+        };
+
+    private static void AssertTemplateLeft(
+        float expected,
+        PdfSheetMetadataCropTemplate? template,
+        string message)
+    {
+        if (template == null)
+            throw new InvalidOperationException($"{message}: template missing");
+        AssertEqual(expected.ToString("0"), template.SheetNumberRect.Left.ToString("0"), message);
+    }
+
+    private static void DeleteIfPresent(string path)
+    {
+        if (File.Exists(path))
+            File.Delete(path);
     }
 
     private static void AssertEqual(string expected, string actual, string message)

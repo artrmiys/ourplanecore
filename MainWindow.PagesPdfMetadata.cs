@@ -89,10 +89,13 @@ public partial class MainWindow
             return;
         }
 
-        SaveCurrentPageScale();
-        TxtStatus.Text = $"Analyzing PDF metadata for {pages.Count} page(s)...";
-
         OurPlanCoreJob job = _currentJob;
+        SaveCurrentPageScale();
+        await OfferPdfMetadataGuidanceIfNeededAsync(job, pages, "PDF metadata");
+        if (!EnsureExpectedJobWritable(job, "analyze PDF metadata"))
+            return;
+
+        TxtStatus.Text = $"Analyzing PDF metadata for {pages.Count} page(s)...";
         bool persistBeforeReview = (!applyRename && !applyScale) ||
                                    SheetMetadataRulesService.Active.ImportPolicy == SheetMetadataImportPolicy.LegacyAutoApply;
         List<PdfMetadataPageResult> results;

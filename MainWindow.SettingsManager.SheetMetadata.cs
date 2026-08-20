@@ -77,7 +77,7 @@ public partial class MainWindow
     private FrameworkElement BuildSheetMetadataActions()
     {
         var panel = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        panel.Children.Add(MgrButton("Reset", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildDefault(), "Reset to built-in legacy defaults.")));
+        panel.Children.Add(MgrButton("Reset", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildDefault(), "Reset to built-in manual-analysis defaults.")));
         panel.Children.Add(MgrButton("Legacy", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildLegacy(), "Loaded Legacy preset.")));
         panel.Children.Add(MgrButton("Precise v2", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildPreciseV2(), "Loaded Precise v2 preset.")));
         panel.Children.Add(MgrButton("Ideal v3", (_, _) => LoadSheetMetadataPreset(SheetMetadataConfig.BuildIdealV3(), "Loaded recommended Ideal v3 preset."), primary: true));
@@ -86,15 +86,15 @@ public partial class MainWindow
         panel.Children.Add(MgrButton("Clear Job Override", (_, _) => ClearSheetMetadataJobOverride()));
         panel.Children.Add(MgrButton("Apply selected scope...", ApplySheetMetadataSettingsToSelection, primary: true));
         panel.Children.Add(MgrButton("Force reanalyze selected...", ForceReanalyzeSheetMetadataSelection));
-        panel.Children.Add(MgrButton("Edit layout regions...", (_, _) => ConfigurePdfMetadataCropHints()));
-        panel.Children.Add(MgrButton("Save layout Global", (_, _) => SaveSheetMetadataLayoutGlobally()));
+        panel.Children.Add(MgrButton("Edit A/S layout regions...", (_, _) => ConfigurePdfMetadataCropHints()));
+        panel.Children.Add(MgrButton("Save layouts Global", (_, _) => SaveSheetMetadataLayoutGlobally()));
         panel.Children.Add(MgrButton("Reset job layout", (_, _) => ResetSheetMetadataJobLayout()));
 
         var root = new StackPanel();
         root.Children.Add(Header("Deterministic Auto Name / Scale policy"));
         root.Children.Add(new TextBlock
         {
-            Text = "Legacy reproduces current behavior. Precise v2 keeps the existing accurate detector. Ideal v3 adds batched analysis, persistent freshness cache, and layout-aware sheet-index titles. Save globally or override only this job.",
+            Text = "Automatic analysis after PDF import is off by default. Legacy restores the old automatic behavior. Ideal v3 uses bounded batches, a freshness cache, OCR inside your A/S layout regions, and review before changes are applied. Save globally or override only this job.",
             TextWrapping = TextWrapping.Wrap,
             Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
             Margin = new Thickness(0, 0, 0, 6),
@@ -403,15 +403,26 @@ public partial class MainWindow
             return;
         }
 
-        PdfSheetMetadataCropTemplate? template = PdfSheetMetadataCropService.LoadJobTemplate(_currentJob);
-        if (!PdfSheetMetadataCropService.HasUsableTemplate(template))
+        var savedProfiles = new List<string>();
+        foreach (PdfSheetMetadataCropProfile profile in Enum.GetValues<PdfSheetMetadataCropProfile>())
         {
-            ShowSheetMetadataStatus("This job has no layout override. Click Edit layout regions first.");
+            PdfSheetMetadataCropTemplate? template =
+                PdfSheetMetadataCropService.LoadJobTemplate(_currentJob, profile);
+            if (!PdfSheetMetadataCropService.HasUsableTemplate(template))
+                continue;
+
+            PdfSheetMetadataCropService.SaveGlobalTemplate(profile, template!);
+            savedProfiles.Add(PdfSheetMetadataCropService.ProfileDisplayName(profile));
+        }
+
+        if (savedProfiles.Count == 0)
+        {
+            ShowSheetMetadataStatus("This job has no layout override. Click Edit A/S layout regions first.");
             return;
         }
 
-        PdfSheetMetadataCropService.SaveGlobalTemplate(template!);
-        ShowSheetMetadataStatus("Saved Sheet # / Title / Scale layout regions as the global default.");
+        ShowSheetMetadataStatus(
+            $"Saved global Sheet title / number / Scale regions: {string.Join(", ", savedProfiles)}.");
     }
 
     private void ResetSheetMetadataJobLayout()
@@ -422,10 +433,10 @@ public partial class MainWindow
             return;
         }
 
-        bool cleared = PdfSheetMetadataCropService.ClearJobTemplate(_currentJob);
+        bool cleared = PdfSheetMetadataCropService.ClearAllJobTemplates(_currentJob);
         ShowSheetMetadataStatus(cleared
-            ? "Cleared this-job layout override; the global layout (if any) is now active."
-            : "Could not clear this-job layout override.");
+            ? "Cleared this-job A/S layout overrides; global layouts (if any) are now active."
+            : "Could not clear one or more this-job layout overrides.");
     }
 
     private static string CustomSheetMetadataPresetName(SheetMetadataDetectorMode mode) => mode switch

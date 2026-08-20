@@ -14,6 +14,7 @@ public enum SheetMetadataImportPolicy
     AnalyzeOnly,
     Preview,
     AutoApplyHighConfidence,
+    ManualOnly,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -33,7 +34,7 @@ public enum SheetMetadataConfidence
 }
 
 // Deterministic policy shared by PDF sheet-name, suffix, and scale workflows.
-// BuildDefault intentionally remains legacy-compatible; newer detectors are opt-in.
+// New installs use the guided Ideal detector, but leave analysis as a manual action.
 public sealed class SheetMetadataConfig
 {
     public const int CurrentSchemaVersion = 3;
@@ -101,7 +102,7 @@ public sealed class SheetMetadataConfig
         SheetLabelOverrides = SheetLabelOverrides?.OfType<SheetMetadataLabelOverride>().Select(item => item.Clone()).ToList() ?? [],
     };
 
-    public static SheetMetadataConfig BuildDefault() => BuildLegacy();
+    public static SheetMetadataConfig BuildDefault() => BuildIdealV3();
 
     public static SheetMetadataConfig BuildLegacy() => new()
     {
@@ -162,6 +163,7 @@ public sealed class SheetMetadataConfig
         SheetMetadataConfig config = BuildPreciseV2();
         config.PresetName = IdealV3PresetName;
         config.DetectorMode = SheetMetadataDetectorMode.IdealV3;
+        config.ImportPolicy = SheetMetadataImportPolicy.ManualOnly;
         return config;
     }
 

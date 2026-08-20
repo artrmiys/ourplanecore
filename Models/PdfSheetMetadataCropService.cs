@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using SkiaSharp;
 
 namespace OurPlanCore;
@@ -58,12 +59,62 @@ public sealed class PdfSheetMetadataCropRegion
 
 public sealed record PdfSheetMetadataSavedCrop(string Role, string Path, SKRect PdfRect);
 
+public enum PdfSheetMetadataCropProfile
+{
+    Default,
+    Architectural,
+    Structural,
+}
+
+public sealed class PdfSheetMetadataCropCatalog
+{
+    [JsonPropertyName("schema_version")]
+    public int SchemaVersion { get; set; } = 1;
+
+    [JsonPropertyName("default")]
+    public PdfSheetMetadataCropTemplate? Default { get; set; }
+
+    [JsonPropertyName("architectural")]
+    public PdfSheetMetadataCropTemplate? Architectural { get; set; }
+
+    [JsonPropertyName("structural")]
+    public PdfSheetMetadataCropTemplate? Structural { get; set; }
+
+    public PdfSheetMetadataCropTemplate? TemplateFor(PdfSheetMetadataCropProfile profile) => profile switch
+    {
+        PdfSheetMetadataCropProfile.Default => Default,
+        PdfSheetMetadataCropProfile.Architectural => Architectural,
+        PdfSheetMetadataCropProfile.Structural => Structural,
+        _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, null),
+    };
+}
+
 public static class PdfSheetMetadataCropService
 {
+    private const string DefaultTemplateFileName = "sheet_metadata_crop_template.json";
+    private const string ArchitecturalTemplateFileName = "sheet_metadata_crop_template_a.json";
+    private const string StructuralTemplateFileName = "sheet_metadata_crop_template_s.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
     };
+
+    private static readonly Regex StructuralSheetKeyPattern = new(
+        @"^\s*(?:sheet\s+)?s(?=[\s._-]*\d)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex ArchitecturalSheetKeyPattern = new(
+        @"^\s*(?:sheet\s+)?a(?=[\s._-]*\d)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex StructuralWordsPattern = new(
+        @"\b(structurals?|structure|framing|foundation|shear)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex ArchitecturalWordsPattern = new(
+        @"\b(architectural|architecture|floor\s+plans?|unit\s+plans?)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     public static bool TryRenderPage(
         PageInfo page,
@@ -82,21 +133,84 @@ public static class PdfSheetMetadataCropService
     }
 
     public static string TemplatePath(OurPlanCoreJob job) =>
-        Path.Combine(job.AIContextRoot, "sheet_metadata_crop_template.json");
+        TemplatePath(job, PdfSheetMetadataCropProfile.Default);
+
+    public static string TemplatePath(OurPlanCoreJob job, PdfSheetMetadataCropProfile profile) =>
+        Path.Combine(job.AIContextRoot, TemplateFileName(profile));
 
     public static string GlobalTemplatePath() =>
-        Path.Combine(SmartContextStore.GlobalRoot, "presets", "sheet_metadata_crop_template.json");
+        GlobalTemplatePath(PdfSheetMetadataCropProfile.Default);
+
+    public static string GlobalTemplatePath(PdfSheetMetadataCropProfile profile) =>
+        Path.Combine(SmartContextStore.GlobalRoot, "presets", TemplateFileName(profile));
 
     public static PdfSheetMetadataCropTemplate? LoadTemplate(OurPlanCoreJob job)
     {
-        return LoadTemplateFromPath(TemplatePath(job)) ?? LoadTemplateFromPath(GlobalTemplatePath());
+        return LoadTemplate(job, PdfSheetMetadataCropProfile.Default);
     }
 
+    public static PdfSheetMetadataCropTemplate? LoadTemplate(
+        OurPlanCoreJob job,
+        PdfSheetMetadataCropProfile profile)
+    {
+        PdfSheetMetadataCropTemplate? exactJob = LoadExactJobTemplate(job, profile);
+        if (exactJob != null)
+            return exactJob;
+
+        PdfSheetMetadataCropTemplate? exactGlobal = LoadExactGlobalTemplate(profile);
+        if (exactGlobal != null)
+            return exactGlobal;
+
+        if (profile == PdfSheetMetadataCropProfile.Default)
+            return null;
+
+        return LoadExactJobTemplate(job, PdfSheetMetadataCropProfile.Default) ??
+               LoadExactGlobalTemplate(PdfSheetMetadataCropProfile.Default);
+    }
+
+    public static PdfSheetMetadataCropCatalog LoadCatalog(OurPlanCoreJob job) =>
+        new()
+        {
+            Default = LoadTemplate(job, PdfSheetMetadataCropProfile.Default),
+            Architectural = LoadTemplate(job, PdfSheetMetadataCropProfile.Architectural),
+            Structural = LoadTemplate(job, PdfSheetMetadataCropProfile.Structural),
+        };
+
     public static PdfSheetMetadataCropTemplate? LoadJobTemplate(OurPlanCoreJob job) =>
-        LoadTemplateFromPath(TemplatePath(job));
+        LoadExactJobTemplate(job, PdfSheetMetadataCropProfile.Default);
+
+    public static PdfSheetMetadataCropTemplate? LoadJobTemplate(
+        OurPlanCoreJob job,
+        PdfSheetMetadataCropProfile profile) =>
+        LoadExactJobTemplate(job, profile);
 
     public static PdfSheetMetadataCropTemplate? LoadGlobalTemplate() =>
-        LoadTemplateFromPath(GlobalTemplatePath());
+        LoadExactGlobalTemplate(PdfSheetMetadataCropProfile.Default);
+
+    public static PdfSheetMetadataCropTemplate? LoadGlobalTemplate(PdfSheetMetadataCropProfile profile) =>
+        LoadExactGlobalTemplate(profile);
+
+    public static PdfSheetMetadataCropTemplate? LoadExactJobTemplate(
+        OurPlanCoreJob job,
+        PdfSheetMetadataCropProfile profile) =>
+        LoadTemplateFromPath(TemplatePath(job, profile));
+
+    public static PdfSheetMetadataCropTemplate? LoadExactGlobalTemplate(
+        PdfSheetMetadataCropProfile profile) =>
+        LoadTemplateFromPath(GlobalTemplatePath(profile));
+
+    public static bool HasDedicatedTemplate(
+        OurPlanCoreJob job,
+        PdfSheetMetadataCropProfile profile)
+    {
+        return HasUsableTemplate(LoadExactJobTemplate(job, profile)) ||
+               HasUsableTemplate(LoadExactGlobalTemplate(profile));
+    }
+
+    public static bool HasExactJobTemplate(
+        OurPlanCoreJob job,
+        PdfSheetMetadataCropProfile profile) =>
+        HasUsableTemplate(LoadExactJobTemplate(job, profile));
 
     private static PdfSheetMetadataCropTemplate? LoadTemplateFromPath(string path)
     {
@@ -116,16 +230,36 @@ public static class PdfSheetMetadataCropService
 
     public static void SaveTemplate(OurPlanCoreJob job, PdfSheetMetadataCropTemplate template)
     {
-        string path = TemplatePath(job);
+        SaveTemplate(job, PdfSheetMetadataCropProfile.Default, template);
+    }
+
+    public static void SaveTemplate(
+        OurPlanCoreJob job,
+        PdfSheetMetadataCropProfile profile,
+        PdfSheetMetadataCropTemplate template)
+    {
+        string path = TemplatePath(job, profile);
         SaveTemplateToPath(path, template, job.AIContextRoot);
     }
 
     public static void SaveGlobalTemplate(PdfSheetMetadataCropTemplate template) =>
-        SaveTemplateToPath(GlobalTemplatePath(), template, SmartContextStore.GlobalRoot);
+        SaveGlobalTemplate(PdfSheetMetadataCropProfile.Default, template);
+
+    public static void SaveGlobalTemplate(
+        PdfSheetMetadataCropProfile profile,
+        PdfSheetMetadataCropTemplate template) =>
+        SaveTemplateToPath(GlobalTemplatePath(profile), template, SmartContextStore.GlobalRoot);
 
     public static bool ClearJobTemplate(OurPlanCoreJob job)
     {
-        string path = TemplatePath(job);
+        return ClearJobTemplate(job, PdfSheetMetadataCropProfile.Default);
+    }
+
+    public static bool ClearJobTemplate(
+        OurPlanCoreJob job,
+        PdfSheetMetadataCropProfile profile)
+    {
+        string path = TemplatePath(job, profile);
         if (!File.Exists(path))
             return true;
         JobWriteAccess.Demand(path, "clear sheet-metadata crop template");
@@ -139,6 +273,46 @@ public static class PdfSheetMetadataCropService
             AppLog.Warn(ex, $"Sheet metadata crop template could not be cleared from {path}");
             return false;
         }
+    }
+
+    public static bool ClearAllJobTemplates(OurPlanCoreJob job)
+    {
+        bool cleared = true;
+        foreach (PdfSheetMetadataCropProfile profile in Enum.GetValues<PdfSheetMetadataCropProfile>())
+            cleared &= ClearJobTemplate(job, profile);
+        return cleared;
+    }
+
+    public static string ProfileDisplayName(PdfSheetMetadataCropProfile profile) => profile switch
+    {
+        PdfSheetMetadataCropProfile.Default => "Default",
+        PdfSheetMetadataCropProfile.Architectural => "Architectural (A)",
+        PdfSheetMetadataCropProfile.Structural => "Structural (S)",
+        _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, null),
+    };
+
+    public static PdfSheetMetadataCropProfile ResolveProfile(
+        PdfSheetMetadata? metadata,
+        PageInfo page) =>
+        ResolveProfile(metadata, page.Name, page.PdfPath);
+
+    public static PdfSheetMetadataCropProfile ResolveProfile(PageInfo page) =>
+        ResolveProfile(null, page.Name, page.PdfPath);
+
+    public static PdfSheetMetadataCropProfile ResolveProfile(
+        PdfSheetMetadata? metadata,
+        string? pageName,
+        string? pdfPath)
+    {
+        PdfSheetMetadataCropProfile metadataProfile = ResolveMetadataProfile(metadata);
+        if (metadataProfile != PdfSheetMetadataCropProfile.Default)
+            return metadataProfile;
+
+        PdfSheetMetadataCropProfile pageProfile = ResolveHeuristicProfile(pageName);
+        if (pageProfile != PdfSheetMetadataCropProfile.Default)
+            return pageProfile;
+
+        return ResolveHeuristicProfile(Path.GetFileNameWithoutExtension(pdfPath ?? ""));
     }
 
     private static void SaveTemplateToPath(
@@ -345,6 +519,52 @@ public static class PdfSheetMetadataCropService
 
         saved.Add(new PdfSheetMetadataSavedCrop(role, path, rect));
         return true;
+    }
+
+    private static string TemplateFileName(PdfSheetMetadataCropProfile profile) => profile switch
+    {
+        PdfSheetMetadataCropProfile.Default => DefaultTemplateFileName,
+        PdfSheetMetadataCropProfile.Architectural => ArchitecturalTemplateFileName,
+        PdfSheetMetadataCropProfile.Structural => StructuralTemplateFileName,
+        _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, null),
+    };
+
+    private static PdfSheetMetadataCropProfile ResolveMetadataProfile(PdfSheetMetadata? metadata)
+    {
+        if (metadata == null)
+            return PdfSheetMetadataCropProfile.Default;
+
+        PdfSheetMetadataCropProfile labelProfile = ResolveSheetKeyProfile(metadata.SheetLabel);
+        if (labelProfile != PdfSheetMetadataCropProfile.Default)
+            return labelProfile;
+
+        return ResolveSheetKeyProfile(metadata.EffectiveSheetKey);
+    }
+
+    private static PdfSheetMetadataCropProfile ResolveSheetKeyProfile(string? value)
+    {
+        string candidate = (value ?? "").Trim();
+        if (StructuralSheetKeyPattern.IsMatch(candidate))
+            return PdfSheetMetadataCropProfile.Structural;
+        if (ArchitecturalSheetKeyPattern.IsMatch(candidate))
+            return PdfSheetMetadataCropProfile.Architectural;
+
+        return PdfSheetMetadataCropProfile.Default;
+    }
+
+    private static PdfSheetMetadataCropProfile ResolveHeuristicProfile(string? value)
+    {
+        string candidate = (value ?? "").Trim();
+        PdfSheetMetadataCropProfile sheetKeyProfile = ResolveSheetKeyProfile(candidate);
+        if (sheetKeyProfile != PdfSheetMetadataCropProfile.Default)
+            return sheetKeyProfile;
+
+        if (StructuralWordsPattern.IsMatch(candidate))
+            return PdfSheetMetadataCropProfile.Structural;
+        if (ArchitecturalWordsPattern.IsMatch(candidate))
+            return PdfSheetMetadataCropProfile.Architectural;
+
+        return PdfSheetMetadataCropProfile.Default;
     }
 
     private static bool IsUsableRegion(PdfSheetMetadataCropRegion? region)

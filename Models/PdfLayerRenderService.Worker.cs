@@ -54,13 +54,16 @@ public static partial class PdfLayerRenderService
                 return true;
 
             string workerError = error;
-            bool fallbackOk = TryRunFileCommand(action, request, inputPath, outputPath, out response, out error);
             if (string.Equals(action, "sheetmeta_batch", StringComparison.Ordinal))
             {
-                AppLog.Info(
-                    $"PyMuPDF sheetmeta_batch worker fallback; worker_error={workerError}; " +
-                    $"file_ok={fallbackOk}; file_error={error}");
+                AppLog.Warn(
+                    $"PyMuPDF sheetmeta_batch worker failed; slow file-command replay disabled; " +
+                    $"worker_error={workerError}");
+                error = workerError;
+                return false;
             }
+
+            bool fallbackOk = TryRunFileCommand(action, request, inputPath, outputPath, out response, out error);
             return fallbackOk;
         }
         catch (Exception ex)

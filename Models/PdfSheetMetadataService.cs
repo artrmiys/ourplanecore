@@ -374,6 +374,7 @@ public static partial class PdfSheetMetadataService
             Page = page.PdfPage,
             SheetMetadataConfig = SheetMetadataRulesService.Active.Clone(),
             CropTemplate = job == null ? null : PdfSheetMetadataCropService.LoadTemplate(job),
+            CropTemplates = job == null ? null : PdfSheetMetadataCropService.LoadCatalog(job),
         };
 
         if (!PdfLayerRenderService.TryInvokeHelper("sheetmeta", request, out SheetMetaResponse? response, out error))
@@ -1000,6 +1001,9 @@ public static partial class PdfSheetMetadataService
 
         [JsonPropertyName("crop_template")]
         public PdfSheetMetadataCropTemplate? CropTemplate { get; set; }
+
+        [JsonPropertyName("crop_templates")]
+        public PdfSheetMetadataCropCatalog? CropTemplates { get; set; }
     }
 
     private sealed class SheetMetaResponse

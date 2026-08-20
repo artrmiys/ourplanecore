@@ -3,17 +3,86 @@ using OurPlanCore;
 
 internal static class SheetMetadataConfigTests
 {
-    public static void IdealV3IsOptInAndKeepsPrecisePolicyDefaults()
+    public static void DefaultsDisableAutomaticImportAnalysis()
     {
         SheetMetadataConfig builtIn = SheetMetadataConfig.BuildDefault();
+        SheetMetadataConfig legacy = SheetMetadataConfig.BuildLegacy();
+        SheetMetadataConfig precise = SheetMetadataConfig.BuildPreciseV2();
         SheetMetadataConfig ideal = SheetMetadataConfig.BuildIdealV3();
 
-        AssertEqual(SheetMetadataDetectorMode.Legacy, builtIn.DetectorMode, "built-in default must remain legacy");
+        AssertEqual(SheetMetadataDetectorMode.IdealV3, builtIn.DetectorMode, "built-in default must use guided Ideal v3");
+        AssertEqual(SheetMetadataImportPolicy.ManualOnly, builtIn.ImportPolicy, "built-in default must skip import analysis");
+        AssertEqual(SheetMetadataImportPolicy.LegacyAutoApply, legacy.ImportPolicy, "explicit Legacy preset must keep migration behavior");
+        AssertEqual(SheetMetadataImportPolicy.Preview, precise.ImportPolicy, "Precise preset must keep its reviewed workflow");
         AssertEqual(SheetMetadataDetectorMode.IdealV3, ideal.DetectorMode, "Ideal preset must select the v3 detector");
-        AssertEqual(SheetMetadataImportPolicy.Preview, ideal.ImportPolicy, "Ideal preset must review before apply");
+        AssertEqual(SheetMetadataImportPolicy.ManualOnly, ideal.ImportPolicy, "Ideal preset must skip import analysis by default");
         AssertTrue(ideal.EnableSheetIndexEvidence, "Ideal preset must use sheet-index evidence");
         AssertTrue(ideal.PreserveExistingManualName, "Ideal preset must preserve reviewed names");
         AssertEqual(SheetMetadataConfig.IdealV3PresetName, ideal.PresetName, "Ideal preset name");
+    }
+
+    public static void ManualPolicySkipsImportButReviewsExplicitAnalysis()
+    {
+        string materials = File.ReadAllText(RepoFile("MainWindow.Materials.cs"));
+        int importStart = materials.IndexOf(
+            "private async Task<MaterialReportSheetMetadataSummary> TryApplySheetMetadataAfterPdfImportAsync(",
+            StringComparison.Ordinal);
+        AssertTrue(importStart >= 0, "metadata import flow must exist");
+        int explicitStart = materials.IndexOf(
+            "private async Task<MaterialReportSheetMetadataSummary> AnalyzeAndApplySheetMetadataAsync(",
+            importStart,
+            StringComparison.Ordinal);
+        AssertTrue(explicitStart > importStart, "explicit metadata analysis flow must follow PDF import flow");
+        string importFlow = materials[importStart..explicitStart];
+
+        int manualGuard = importFlow.IndexOf(
+            "if (policy == SheetMetadataImportPolicy.ManualOnly)",
+            StringComparison.Ordinal);
+        int analyzerCall = importFlow.IndexOf(
+            "await AnalyzeAndApplySheetMetadataAsync(",
+            StringComparison.Ordinal);
+        AssertTrue(manualGuard >= 0 && analyzerCall > manualGuard, "ManualOnly must return before automatic PDF analysis starts");
+        AssertTrue(importFlow.Contains("PDF import sheet metadata skipped by ManualOnly policy", StringComparison.Ordinal),
+            "manual-only import skip must be visible in the runtime log");
+
+        int explicitEnd = materials.IndexOf("private void RefreshMaterialsManager()", explicitStart, StringComparison.Ordinal);
+        AssertTrue(explicitEnd > explicitStart, "explicit metadata analysis flow must have a stable boundary");
+        string explicitFlow = materials[explicitStart..explicitEnd];
+        AssertTrue(
+            explicitFlow.Contains("SheetMetadataImportPolicy.ManualOnly;", StringComparison.Ordinal) &&
+            explicitFlow.Contains("if (reviewedByUser)", StringComparison.Ordinal),
+            "an explicit Analyze action under ManualOnly must open the review flow before applying results");
+
+        string manager = File.ReadAllText(RepoFile("MainWindow.WorkspaceManagers.cs"));
+        int managerOffer = manager.IndexOf("await OfferPdfMetadataGuidanceIfNeededAsync(", StringComparison.Ordinal);
+        int managerAnalyze = manager.IndexOf("() => AnalyzePdfPages(job, pages", managerOffer, StringComparison.Ordinal);
+        AssertTrue(
+            managerOffer >= 0 && managerAnalyze > managerOffer,
+            "Sheet Manager Name / Scale actions must run the same bounded A/S guidance before full analysis");
+
+        string dialog = File.ReadAllText(RepoFile("Dialogs/PdfMetadataCropTemplateDialog.cs"));
+        AssertTrue(
+            dialog.Contains("This sheet is:", StringComparison.Ordinal) &&
+            dialog.Contains("SelectedProfile = profile", StringComparison.Ordinal),
+            "an unresolved mixed set must let the user explicitly classify the representative sheet as A/S/Other");
+    }
+
+    public static void BatchWorkerFailureDoesNotReplaySlowFileCommand()
+    {
+        string worker = File.ReadAllText(RepoFile("Models/PdfLayerRenderService.Worker.cs"));
+        int helperStart = worker.IndexOf("internal static bool TryInvokeHelper<TRequest, TResponse>(", StringComparison.Ordinal);
+        AssertTrue(helperStart >= 0, "shared PDF helper invocation flow must exist");
+        int helperEnd = worker.IndexOf("private static bool TryInvokeWorker<TRequest, TResponse>(", helperStart, StringComparison.Ordinal);
+        AssertTrue(helperEnd > helperStart, "shared PDF helper invocation flow must have a stable boundary");
+        string helper = worker[helperStart..helperEnd];
+
+        int batchGuard = helper.IndexOf("string.Equals(action, \"sheetmeta_batch\"", StringComparison.Ordinal);
+        int stop = helper.IndexOf("return false;", batchGuard, StringComparison.Ordinal);
+        int fileFallback = helper.IndexOf("TryRunFileCommand(action", StringComparison.Ordinal);
+        AssertTrue(batchGuard >= 0 && stop > batchGuard && fileFallback > stop,
+            "sheetmeta_batch worker failure must stop before the slow file-command fallback");
+        AssertTrue(helper.Contains("slow file-command replay disabled", StringComparison.Ordinal),
+            "disabled batch replay must leave an actionable runtime log message");
     }
 
     public static void LegacyPreviewDoesNotSwitchDetector()
@@ -135,9 +204,9 @@ internal static class SheetMetadataConfigTests
         }
 
         AssertEqual(
-            SheetMetadataDetectorMode.Legacy,
+            SheetMetadataDetectorMode.IdealV3,
             SettingsPresetStore.ResolveSheetMetadata(null).DetectorMode,
-            "built-in default must remain legacy");
+            "built-in default must use guided Ideal v3");
     }
 
     public static void TerminalPolicyAndCloneAreEditableAndDeep()
@@ -199,6 +268,20 @@ internal static class SheetMetadataConfigTests
 
     private static SheetSuffixRule RequiredRule(IEnumerable<SheetSuffixRule> rules, string id) =>
         rules.Single(rule => string.Equals(rule.Id, id, StringComparison.Ordinal));
+
+    private static string RepoFile(string relativePath)
+    {
+        DirectoryInfo? current = new(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            string candidate = Path.Combine(current.FullName, relativePath);
+            if (File.Exists(candidate) && File.Exists(Path.Combine(current.FullName, "ourplancore.csproj")))
+                return candidate;
+            current = current.Parent;
+        }
+
+        throw new FileNotFoundException($"Repository file not found: {relativePath}");
+    }
 
     private static void WithTempJob(string name, Action<OurPlanCoreJob> action)
     {
