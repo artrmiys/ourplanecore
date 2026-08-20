@@ -17,12 +17,24 @@ internal static class OurPlanPackageHardeningTests
         bool IsTransient(string path) =>
             predicate.Invoke(null, [root, path]) is true;
         const string token = "0123456789abcdef0123456789abcdef";
+        string leaseTemp = Path.Combine(
+            root,
+            $".{JobLeaseFileStore.LeaseFileName}.{token}.tmp");
+        string guardTemp = Path.Combine(
+            root,
+            $".{JobLeaseFileStore.GuardFileName}.{token}.tmp");
         string markerTemp = Path.Combine(
             root,
             $".{OurPlanPackageFormat.WorkspaceMarkerFileName}.{token}.tmp");
         string claimTemp = Path.Combine(
             root,
             $".{OurPlanPackageFormat.WorkspaceClaimFileName}.{token}.tmp");
+        string leaseReplaceTemp = Path.Combine(
+            root,
+            $"{JobLeaseFileStore.LeaseFileName}~RF25433af.TMP");
+        string guardReplaceTemp = Path.Combine(
+            root,
+            $"{JobLeaseFileStore.GuardFileName}~RF25433af.TMP");
         string markerReplaceTemp = Path.Combine(
             root,
             $"{OurPlanPackageFormat.WorkspaceMarkerFileName}~RF25433af.TMP");
@@ -33,11 +45,23 @@ internal static class OurPlanPackageHardeningTests
         string projectReplaceTemp = Path.Combine(root, "source.json~RF25433af.TMP");
 
         AssertTrue(
+            IsTransient(leaseTemp),
+            "lease heartbeat atomic temp must not dirty the package session");
+        AssertTrue(
+            IsTransient(guardTemp),
+            "lease guard atomic temp must not dirty the package session");
+        AssertTrue(
             IsTransient(markerTemp),
             "workspace marker atomic temp must not dirty the package session");
         AssertTrue(
             IsTransient(claimTemp),
             "workspace claim atomic temp must not dirty the package session");
+        AssertTrue(
+            IsTransient(leaseReplaceTemp),
+            "lease heartbeat File.Replace temp must not dirty the package session");
+        AssertTrue(
+            IsTransient(guardReplaceTemp),
+            "lease guard File.Replace temp must not dirty the package session");
         AssertTrue(
             IsTransient(markerReplaceTemp),
             "workspace marker File.Replace temp must not dirty the package session");

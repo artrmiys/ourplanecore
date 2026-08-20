@@ -415,6 +415,7 @@ var tests = new List<(string Name, Action Run)>
     ("autosave reload flushes before replacing takeoff instances", AutosaveLifecycleRegressionTests.ReloadFlushesBeforeReplacingTakeoffInstances),
     ("autosave job switch stops when current job cannot flush", AutosaveLifecycleRegressionTests.JobSwitchStopsWhenCurrentJobCannotFlush),
     ("autosave window close cancels while takeoffs remain pending", AutosaveLifecycleRegressionTests.WindowCloseIsCanceledWhileTakeoffsRemainPending),
+    ("package window close saves current file without choice", AutosaveLifecycleRegressionTests.PackageWindowCloseSavesCurrentFileWithoutChoice),
     ("job lease schema v2 round trips required fields", JobLeaseServiceTests.SchemaV2RoundTripsAllRequiredFields),
     ("job lease reads legacy v1 lock", JobLeaseServiceTests.LegacyV1LockIsReadCompatible),
     ("job lease active local owner blocks second instance", JobLeaseServiceTests.ActiveLocalLeaseBlocksSecondInstance),

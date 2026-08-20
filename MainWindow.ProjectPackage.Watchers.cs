@@ -63,16 +63,28 @@ public partial class MainWindow
         string fileName = Path.GetFileName(path);
         return first.Equals(".snapshots", StringComparison.OrdinalIgnoreCase) ||
                first.Equals(".undo", StringComparison.OrdinalIgnoreCase) ||
-               fileName.Equals(".~lock", StringComparison.OrdinalIgnoreCase) ||
-               fileName.Equals(".~lock.guard", StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals(JobLeaseFileStore.LeaseFileName, StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals(JobLeaseFileStore.GuardFileName, StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals(OurPlanPackageFormat.WorkspaceClaimFileName, StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals(OurPlanPackageFormat.WorkspaceMarkerFileName, StringComparison.OrdinalIgnoreCase) ||
+               IsWorkspaceControlAtomicTemp(
+                   fileName,
+                   JobLeaseFileStore.LeaseFileName) ||
+               IsWorkspaceControlAtomicTemp(
+                   fileName,
+                   JobLeaseFileStore.GuardFileName) ||
                IsWorkspaceControlAtomicTemp(
                    fileName,
                    OurPlanPackageFormat.WorkspaceClaimFileName) ||
                IsWorkspaceControlAtomicTemp(
                    fileName,
                    OurPlanPackageFormat.WorkspaceMarkerFileName) ||
+               IsWorkspaceControlReplaceTemp(
+                   fileName,
+                   JobLeaseFileStore.LeaseFileName) ||
+               IsWorkspaceControlReplaceTemp(
+                   fileName,
+                   JobLeaseFileStore.GuardFileName) ||
                IsWorkspaceControlReplaceTemp(
                    fileName,
                    OurPlanPackageFormat.WorkspaceClaimFileName) ||

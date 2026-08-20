@@ -68,6 +68,23 @@ internal static class AutosaveLifecycleRegressionTests
         AssertFalse(shell.Contains("FlushTakeoffAutosaves();", StringComparison.Ordinal), "OnClosed must not perform the first final flush");
     }
 
+    public static void PackageWindowCloseSavesCurrentFileWithoutChoice()
+    {
+        string bounds = File.ReadAllText(RepoFile("MainWindow.WindowBounds.cs"));
+        int closing = bounds.IndexOf("protected override void OnClosing(CancelEventArgs e)", StringComparison.Ordinal);
+        int closed = bounds.IndexOf("protected override void OnClosed(EventArgs e)", closing, StringComparison.Ordinal);
+        string closePath = bounds[closing..closed];
+
+        AssertTrue(
+            closePath.Contains(
+                "TrySaveCurrentPackage(\"close OurPlanCore\", showDialog: true)",
+                StringComparison.Ordinal),
+            "package close must save automatically to the current .ourplan file");
+        AssertFalse(
+            closePath.Contains("ResolveFailedPackageCheckpointBeforeExit(", StringComparison.Ordinal),
+            "package close must not ask the user to choose Save As or local recovery");
+    }
+
     private static string RepoFile(string relativePath)
     {
         DirectoryInfo? current = new(AppContext.BaseDirectory);

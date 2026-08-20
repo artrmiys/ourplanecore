@@ -160,8 +160,7 @@ public partial class MainWindow
                 }
                 _currentPackageSession!.HasUnpackagedChanges = true;
             }
-            if (!TrySaveCurrentPackage("close OurPlanCore", showDialog: false) &&
-                !ResolveFailedPackageCheckpointBeforeExit("close OurPlanCore"))
+            if (!TrySaveCurrentPackage("close OurPlanCore", showDialog: true))
             {
                 ReleaseClosingPackageCheckpoint();
                 e.Cancel = true;
