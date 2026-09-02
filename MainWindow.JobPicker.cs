@@ -65,9 +65,7 @@ public partial class MainWindow
                     ? recent.ThumbnailPath
                     : JobThumbnailService.ExistingThumbnailPath(path),
                 lastOpenedUtc: ParseRecentJobTime(recent.LastOpenedUtc),
-                sourceLabel: OurPlanPackageFormat.HasPackageExtension(path)
-                    ? $"OurPlan file · {BuildSourceLabel(rootPath, fallback: "Recent")}"
-                    : $"Legacy folder · {BuildSourceLabel(rootPath, fallback: "Recent")}",
+                sourceLabel: BuildSourceLabel(rootPath, fallback: "Recent"),
                 isPinned: recent.IsPinned,
                 isRecent: true,
                 rootPath: rootPath);
@@ -95,7 +93,7 @@ public partial class MainWindow
                     path: folder,
                     thumbnailPath: JobThumbnailService.ExistingThumbnailPath(folder),
                     lastOpenedUtc: ReadJobDataMtimeUtc(folder),
-                    sourceLabel: $"Legacy folder · {sourceLabel}",
+                    sourceLabel: sourceLabel,
                     isPinned: false,
                     isRecent: false,
                     rootPath: rootPath);
@@ -110,7 +108,7 @@ public partial class MainWindow
                     path: package,
                     thumbnailPath: JobThumbnailService.ExistingThumbnailPath(package),
                     lastOpenedUtc: ReadJobDataMtimeUtc(package),
-                    sourceLabel: $"OurPlan file · {sourceLabel}",
+                    sourceLabel: sourceLabel,
                     isPinned: false,
                     isRecent: false,
                     rootPath: rootPath);
@@ -131,7 +129,7 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            AppLog.Warn(ex, $"Could not enumerate legacy projects in '{rootPath}'.");
+            AppLog.Warn(ex, $"Could not enumerate folder projects in '{rootPath}'.");
             return [];
         }
     }
@@ -149,7 +147,7 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            AppLog.Warn(ex, $"Could not enumerate OurPlan project files in '{rootPath}'.");
+            AppLog.Warn(ex, $"Could not enumerate project files in '{rootPath}'.");
             return [];
         }
     }
@@ -248,7 +246,7 @@ public partial class MainWindow
 
     private void OpenJobFromFolderDialog()
     {
-        string? folder = SelectFolder("Select OurPlanCore job folder", _settings.JobsRootPath);
+        string? folder = SelectFolder("Select an existing project folder", _settings.JobsRootPath);
         if (folder == null)
             return;
 
@@ -298,14 +296,8 @@ public partial class MainWindow
         HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath, dialog.SelectedJobsRootPath);
     }
 
-    private void CreateJobFromDialog(string? preferredParent = null, bool forceOurPlan = false)
+    private void CreateJobFromDialog(string? preferredParent = null)
     {
-        if (!forceOurPlan && UseLegacyFolderForNewProjects())
-        {
-            CreateLegacyJobFromDialog(preferredParent);
-            return;
-        }
-
         string? pdfFolder = SelectFolder("Select folder with PDFs for the new project", NewJobInitialFolder(preferredParent));
         if (pdfFolder == null)
             return;
@@ -317,49 +309,12 @@ public partial class MainWindow
             return;
         }
 
-        string? name = ShowInputDialog("Project name:", DefaultNewJobName(pdfFolder), "New OurPlan Project");
+        string? name = ShowInputDialog("Project name:", DefaultNewJobName(pdfFolder), "New Project");
         if (string.IsNullOrWhiteSpace(name))
             return;
 
         if (CreateNewPackageProject(name, out OurPlanCoreJob? createdJob, preferredParent) && createdJob != null)
             QueuePdfImportForNewJob(pdfPaths, pdfFolder, createdJob);
-    }
-
-    private void CreateLegacyJobFromDialog(string? preferredParent = null)
-    {
-        string? pdfFolder = SelectFolder("Select folder with PDFs for the new job", NewJobInitialFolder(preferredParent));
-        if (pdfFolder == null)
-            return;
-
-        IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(pdfFolder);
-        if (pdfPaths.Count == 0)
-        {
-            PostStatusInfo("No PDF files were found in the selected folder or its subfolders.");
-            return;
-        }
-
-        string? name = ShowInputDialog("Job name:", DefaultNewJobName(pdfFolder), "New Job");
-        if (string.IsNullOrWhiteSpace(name))
-            return;
-
-        string parent = ResolveNewJobParent(preferredParent) ?? SampleJobService.DefaultJobsRoot;
-
-        try
-        {
-            Directory.CreateDirectory(parent);
-            _settings.JobsRootPath = parent;
-            AppSettingsStore.AddJobsRoot(_settings, parent);
-            SaveAppSettings();
-            var job = OurPlanCoreJobStore.CreateJob(parent, name);
-            if (!OpenJob(job.RootPath))
-                return;
-            QueuePdfImportForNewJob(pdfPaths, pdfFolder, job);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Cannot create job:\n{ex.Message}", "New Job",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-        }
     }
 
     private void QueuePdfImportForNewJob(
@@ -390,47 +345,14 @@ public partial class MainWindow
             System.Windows.Threading.DispatcherPriority.ContextIdle);
     }
 
-    private void CreateBlankJobFromDialog(string? preferredParent = null, bool forceOurPlan = false)
+    private void CreateBlankJobFromDialog(string? preferredParent = null)
     {
-        if (!forceOurPlan && UseLegacyFolderForNewProjects())
-        {
-            CreateLegacyBlankJobFromDialog(preferredParent);
-            return;
-        }
-
-        string? name = ShowInputDialog("Project name:", "New Project", "Blank OurPlan Project");
+        string? name = ShowInputDialog("Project name:", "New Project", "Blank Project");
         if (string.IsNullOrWhiteSpace(name))
             return;
 
         if (CreateNewPackageProject(name, out OurPlanCoreJob? job, preferredParent) && job != null)
-            TxtStatus.Text = $"Blank OurPlan project created: {job.Name}. Use Blank Sheet to add an empty sheet.";
-    }
-
-    private void CreateLegacyBlankJobFromDialog(string? preferredParent = null)
-    {
-        string? name = ShowInputDialog("Job name:", "New Job", "Blank Job");
-        if (string.IsNullOrWhiteSpace(name))
-            return;
-
-        string parent = ResolveNewJobParent(preferredParent) ?? SampleJobService.DefaultJobsRoot;
-
-        try
-        {
-            Directory.CreateDirectory(parent);
-            _settings.JobsRootPath = parent;
-            AppSettingsStore.AddJobsRoot(_settings, parent);
-            SaveAppSettings();
-
-            OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, name);
-            if (!OpenJob(job.RootPath))
-                return;
-            TxtStatus.Text = $"Blank job created: {job.Name}. Use Blank Sheet to add an empty sheet.";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Cannot create blank job:\n{ex.Message}", "Blank Job",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+            TxtStatus.Text = $"Blank project created: {job.Name}. Use Blank Sheet to add an empty sheet.";
     }
 
     private static string DefaultNewJobName(string pdfFolder)
@@ -503,38 +425,6 @@ public partial class MainWindow
 
     private void CreateSampleJob(string? preferredParent = null)
     {
-        if (!UseLegacyFolderForNewProjects())
-        {
-            CreateOurPlanSampleJob(preferredParent);
-            return;
-        }
-
-        string parent = !string.IsNullOrWhiteSpace(preferredParent) && Directory.Exists(preferredParent)
-            ? preferredParent
-            : Directory.Exists(_settings.JobsRootPath)
-            ? _settings.JobsRootPath
-            : SampleJobService.DefaultJobsRoot;
-
-        try
-        {
-            Directory.CreateDirectory(parent);
-            _settings.JobsRootPath = parent;
-            AppSettingsStore.AddJobsRoot(_settings, parent);
-            SaveAppSettings();
-            OurPlanCoreJob job = SampleJobService.CreateSampleJob(parent);
-            if (!OpenJob(job.RootPath))
-                return;
-            TxtStatus.Text = $"Sample job created: {job.Name}.";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Cannot create sample job:\n{ex.Message}", "Sample Job",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private void CreateOurPlanSampleJob(string? preferredParent = null)
-    {
         string parent = !string.IsNullOrWhiteSpace(preferredParent) && Directory.Exists(preferredParent)
             ? preferredParent
             : Directory.Exists(_settings.JobsRootPath)
@@ -587,13 +477,13 @@ public partial class MainWindow
             createdSession.HasUnpackagedChanges = true;
             if (!TrySaveCurrentPackage("sample project initialization"))
                 return;
-            TxtStatus.Text = $"Sample OurPlan project created: {managedJob.Name}.";
+            TxtStatus.Text = $"Sample project created: {managedJob.Name}.";
         }
         catch (Exception ex)
         {
-            AppLog.Error(ex, "OurPlan sample project creation failed.");
+            AppLog.Error(ex, "Sample project creation failed.");
             MessageBox.Show(
-                $"Cannot create sample OurPlan project:\n{ex.Message}",
+                $"Cannot create sample project:\n{ex.Message}",
                 "Sample Project",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -614,9 +504,9 @@ public partial class MainWindow
         for (int index = 2; ; index++)
         {
             string safeName = OurPlanCoreJobStore.SanitizeName(displayName, 120);
-            string legacyPath = Path.Combine(parent, safeName);
-            string packagePath = legacyPath + OurPlanPackageFormat.Extension;
-            if (!Directory.Exists(legacyPath) &&
+            string folderPath = Path.Combine(parent, safeName);
+            string packagePath = folderPath + OurPlanPackageFormat.Extension;
+            if (!Directory.Exists(folderPath) &&
                 !Directory.Exists(packagePath) &&
                 !File.Exists(packagePath))
             {

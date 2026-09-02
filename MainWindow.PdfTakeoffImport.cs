@@ -180,6 +180,7 @@ public partial class MainWindow
         IReadOnlyList<string> pdfPaths,
         OurPlanCoreJob? expectedTargetJob)
     {
+        PreparePdfTakeoffProjectDestination(options);
         var (pagesFolderPreview, takeoffsFolderPreview) = PreviewPdfTakeoffImportDestinations(options);
         var run = new PdfTakeoffImportRunResult
         {
@@ -448,26 +449,15 @@ public partial class MainWindow
             ? SampleJobService.DefaultJobsRoot
             : options.JobsRootPath;
         Directory.CreateDirectory(parent);
-        string jobName = UniquePdfTakeoffJobName(parent, options.JobName);
-        options.JobName = jobName;
+        string jobName = options.JobName;
+        string packagePath = PdfTakeoffPackagePath(parent, jobName);
         _settings.JobsRootPath = parent;
         AppSettingsStore.AddJobsRoot(_settings, parent);
         SaveAppSettings();
 
-        if (!UseLegacyFolderForNewProjects())
-        {
-            return CreateNewPackageProject(jobName, out OurPlanCoreJob? packageJob, parent)
-                ? packageJob
-                : null;
-        }
-
-        OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, jobName);
-        if (!OpenJob(job.RootPath))
-            throw new InvalidOperationException("The new PDF takeoff job could not be opened because the current job has unsaved changes.");
-
-        if (_currentJob == null || !SameJobPath(_currentJob.RootPath, job.RootPath))
-            throw new InvalidOperationException("The new PDF takeoff job was created but is no longer the active target job.");
-        return _currentJob;
+        return CreateNewPackageProjectAtPath(jobName, packagePath, out OurPlanCoreJob? packageJob)
+            ? packageJob
+            : null;
     }
 
     private bool EnsurePdfTakeoffImportTargetWritable(
@@ -495,22 +485,27 @@ public partial class MainWindow
         string parent = string.IsNullOrWhiteSpace(options.JobsRootPath)
             ? SampleJobService.DefaultJobsRoot
             : options.JobsRootPath;
-        string jobName = UniquePdfTakeoffJobName(parent, options.JobName);
-        if (!UseLegacyFolderForNewProjects())
-        {
-            string packagePath = Path.Combine(
-                parent,
-                OurPlanCoreJobStore.SanitizeName(jobName, 120) + OurPlanPackageFormat.Extension);
-            return (
-                $"{packagePath} :: Pages\\{PdfTakeoffImportFolderName}",
-                $"{packagePath} :: Takeoffs\\{PdfTakeoffImportFolderName}");
-        }
-
-        string jobRoot = Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(jobName, 120));
+        string packagePath = PdfTakeoffPackagePath(parent, options.JobName);
         return (
-            Path.Combine(jobRoot, "Pages", PdfTakeoffImportFolderName),
-            Path.Combine(jobRoot, "Takeoffs", PdfTakeoffImportFolderName));
+            $"{packagePath} :: Pages\\{PdfTakeoffImportFolderName}",
+            $"{packagePath} :: Takeoffs\\{PdfTakeoffImportFolderName}");
     }
+
+    private static void PreparePdfTakeoffProjectDestination(PdfTakeoffImportOptions options)
+    {
+        if (options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob)
+            return;
+
+        string parent = string.IsNullOrWhiteSpace(options.JobsRootPath)
+            ? SampleJobService.DefaultJobsRoot
+            : options.JobsRootPath;
+        options.JobName = UniquePdfTakeoffJobName(parent, options.JobName);
+    }
+
+    private static string PdfTakeoffPackagePath(string parent, string jobName) =>
+        Path.Combine(
+            parent,
+            OurPlanCoreJobStore.SanitizeName(jobName, 120) + OurPlanPackageFormat.Extension);
 
     private static string UniquePdfTakeoffJobName(string parent, string requestedName)
     {
@@ -520,9 +515,14 @@ public partial class MainWindow
         string candidate = baseName;
         for (int i = 2; ; i++)
         {
-            string folder = Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(candidate, 120));
-            if (!Directory.Exists(folder))
+            string folderPath = Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(candidate, 120));
+            string packagePath = folderPath + OurPlanPackageFormat.Extension;
+            if (!Directory.Exists(folderPath) &&
+                !Directory.Exists(packagePath) &&
+                !File.Exists(packagePath))
+            {
                 return candidate;
+            }
             candidate = $"{baseName} ({i})";
         }
     }

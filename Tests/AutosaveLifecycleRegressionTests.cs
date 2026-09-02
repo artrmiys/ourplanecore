@@ -85,56 +85,113 @@ internal static class AutosaveLifecycleRegressionTests
             "package close must not ask the user to choose Save As or local recovery");
     }
 
-    public static void SaveAsMenuExposesPortableFileAndLegacyFolderCopy()
+    public static void SaveAsUiPaletteAndShortcutExposeOneContextSensitiveAction()
     {
         string xaml = File.ReadAllText(RepoFile("MainWindow.xaml"));
-        string menu = File.ReadAllText(RepoFile("MainWindow.ExportMenu.cs"));
+        string exportMenu = File.ReadAllText(RepoFile("MainWindow.ExportMenu.cs"));
+        string palette = File.ReadAllText(RepoFile("MainWindow.CommandPalette.cs"));
+        string shell = File.ReadAllText(RepoFile("MainWindow.xaml.cs"));
+        string package = File.ReadAllText(RepoFile("MainWindow.ProjectPackage.cs"));
+        string shortcuts = File.ReadAllText(RepoFile(Path.Combine("Models", "KeyboardShortcutCatalog.cs")));
         int jobGroup = xaml.IndexOf("<!-- GROUP: JOB -->", StringComparison.Ordinal);
         int saveAsButton = xaml.IndexOf("x:Name=\"BtnMainSaveAs\"", jobGroup, StringComparison.Ordinal);
         int pdfGroup = xaml.IndexOf("<!-- GROUP: PDF -->", saveAsButton, StringComparison.Ordinal);
+        string button = jobGroup >= 0 && saveAsButton > jobGroup && pdfGroup > saveAsButton
+            ? xaml[saveAsButton..pdfGroup]
+            : "";
 
         AssertTrue(
             jobGroup >= 0 && saveAsButton > jobGroup && pdfGroup > saveAsButton,
             "the visible Save As button must stay in the top Main JOB ribbon group");
         AssertTrue(
-            xaml.Contains("Click=\"BtnSaveAsMenu_Click\"", StringComparison.Ordinal) &&
-            xaml.Contains("<TextBlock Text=\"Save As\"", StringComparison.Ordinal),
-            "the JOB ribbon must expose the Save As menu button");
-
-        int handlerStart = menu.IndexOf("private void BtnSaveAsMenu_Click", StringComparison.Ordinal);
-        int exportHandler = handlerStart >= 0
-            ? menu.IndexOf("private void BtnRightExportMenu_Click", handlerStart, StringComparison.Ordinal)
-            : -1;
-        int helperStart = exportHandler >= 0
-            ? menu.IndexOf("private void AddSaveAsMenuItems", exportHandler, StringComparison.Ordinal)
-            : -1;
-        string handler = handlerStart >= 0 && exportHandler > handlerStart
-            ? menu[handlerStart..exportHandler]
-            : "";
-        string helper = helperStart >= 0 ? menu[helperStart..] : "";
-
-        AssertTrue(
-            handler.Contains("AddSaveAsMenuItems(menu);", StringComparison.Ordinal),
-            "the visible Save As button must build the shared project-format menu");
+            button.Contains("Command=\"{x:Static ApplicationCommands.SaveAs}\"", StringComparison.Ordinal) &&
+            button.Contains("<TextBlock Text=\"Save As\"", StringComparison.Ordinal) &&
+            !button.Contains("MenuChevronIcon", StringComparison.Ordinal),
+            "the JOB ribbon must expose one direct Save As command without a format dropdown");
         AssertFalse(
-            handler.Contains("EnsureCurrentJobWritable", StringComparison.Ordinal),
-            "the chooser must not block package recovery before the user selects a format");
+            xaml.Contains("BtnSaveAsMenu_Click", StringComparison.Ordinal) ||
+            exportMenu.Contains("AddSaveAsMenuItems", StringComparison.Ordinal) ||
+            exportMenu.Contains("One portable file", StringComparison.Ordinal) ||
+            exportMenu.Contains("Legacy folder copy", StringComparison.Ordinal),
+            "Save As surfaces must not expose separate format choices");
         AssertTrue(
-            helper.Contains("\"One portable file (.ourplan)...\"", StringComparison.Ordinal) &&
-            helper.Contains("SaveAsOurPlanProject", StringComparison.Ordinal) &&
-            helper.Contains(
-                "hasJob && (IsCurrentJobWritable || HasCurrentPackageSession)",
+            exportMenu.Contains(
+                "MakeMenuItem(\"Save As...\", CanSaveAsCurrentProject, SaveAsCurrentProject)",
                 StringComparison.Ordinal),
-            "the Save As menu must route the portable-file choice to the existing package workflow");
+            "the secondary export menu must route its one Save As row through the context-sensitive command");
         AssertTrue(
-            helper.Contains("\"Legacy folder copy...\"", StringComparison.Ordinal) &&
-            helper.Contains("hasJob && IsCurrentJobWritable", StringComparison.Ordinal) &&
-            helper.Contains("SaveLegacyFolderCopy", StringComparison.Ordinal),
-            "the Save As menu must route a writable legacy copy to the existing export workflow");
+            CountOccurrences(palette, "\"file.saveAs\"") == 2 &&
+            palette.Contains("\"Save As\"", StringComparison.Ordinal) &&
+            palette.Contains("\"Ctrl+Shift+S\"", StringComparison.Ordinal) &&
+            palette.Contains("case \"file.saveAs\": SaveAsCurrentProject();", StringComparison.Ordinal),
+            "the command palette must define and dispatch exactly one Save As action with its shortcut");
+        AssertFalse(
+            palette.Contains("file.saveAsOurPlan", StringComparison.Ordinal) ||
+            palette.Contains("file.saveLegacyCopy", StringComparison.Ordinal),
+            "the command palette must not retain format-specific Save As commands");
         AssertTrue(
-            helper.Contains("the current project stays active", StringComparison.Ordinal) &&
-            helper.Contains("SetShowOnDisabled", StringComparison.Ordinal),
-            "the legacy choice must explain that it creates a copy without switching projects");
+            shell.Contains("ApplicationCommands.SaveAs", StringComparison.Ordinal) &&
+            shell.Contains("(_, _) => SaveAsCurrentProject()", StringComparison.Ordinal) &&
+            shell.Contains("e.CanExecute = CanSaveAsCurrentProject", StringComparison.Ordinal),
+            "Ctrl+Shift+S and the ribbon command must share the context-sensitive Save As dispatcher");
+        AssertTrue(
+            shortcuts.Contains(
+                "Item(\"Ctrl+Shift+S\", \"Save the current project to a new location\")",
+                StringComparison.Ordinal) &&
+            !shortcuts.Contains("Save As OurPlan project", StringComparison.Ordinal),
+            "shortcut help must describe one format-preserving Save As action");
+        AssertTrue(
+            package.Contains("private bool CanSaveAsCurrentProject", StringComparison.Ordinal) &&
+            package.Contains("private void SaveAsCurrentProject()", StringComparison.Ordinal),
+            "Save As availability and dispatch must have one shared context-sensitive owner");
+    }
+
+    public static void LegacySaveAsKeepsFolderFormatAndSwitchesToDestination()
+    {
+        string package = File.ReadAllText(RepoFile("MainWindow.ProjectPackage.cs"));
+        int dispatchStart = package.IndexOf("private void SaveAsCurrentProject()", StringComparison.Ordinal);
+        int openDialog = package.IndexOf("private void OpenOurPlanProjectDialog()", dispatchStart, StringComparison.Ordinal);
+        string dispatch = dispatchStart >= 0 && openDialog > dispatchStart
+            ? package[dispatchStart..openDialog]
+            : "";
+        int legacyStart = package.IndexOf("private void SaveLegacyFolderAs()", StringComparison.Ordinal);
+        int packageCreate = package.IndexOf("private bool CreateNewPackageProject(", legacyStart, StringComparison.Ordinal);
+        string legacy = legacyStart >= 0 && packageCreate > legacyStart
+            ? package[legacyStart..packageCreate]
+            : "";
+        int copy = legacy.IndexOf("OurPlanPackageWorkspace.ExportLegacyCopy", StringComparison.Ordinal);
+        int switchJob = legacy.IndexOf(
+            "OpenJob(destination, copiedPage, currentJobPrepared: true)",
+            StringComparison.Ordinal);
+
+        AssertTrue(
+            dispatch.Contains("if (HasCurrentPackageSession)", StringComparison.Ordinal) &&
+            dispatch.Contains("SaveAsOurPlanProject();", StringComparison.Ordinal) &&
+            dispatch.Contains("SaveLegacyFolderAs();", StringComparison.Ordinal),
+            "the one Save As command must preserve package projects as packages and folder projects as folders");
+        AssertTrue(
+            legacy.Contains("string destination = Path.Combine(parent", StringComparison.Ordinal) &&
+            !legacy.Contains("OurPlanPackageFormat.Extension", StringComparison.Ordinal) &&
+            !legacy.Contains("SaveAsOurPlanProject", StringComparison.Ordinal),
+            "folder-project Save As must choose a destination folder without converting it to .ourplan");
+        AssertTrue(
+            legacy.Contains("TrySaveCurrentJobData(\"save project as\")", StringComparison.Ordinal) &&
+            legacy.Contains("PrepareCurrentJobForSwitch()", StringComparison.Ordinal) &&
+            copy >= 0 &&
+            switchJob > copy,
+            "folder-project Save As must persist current data, copy durable files, and then open the copied destination as the active project");
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 
     private static string RepoFile(string relativePath)

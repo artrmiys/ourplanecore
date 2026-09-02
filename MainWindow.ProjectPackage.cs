@@ -27,12 +27,40 @@ public partial class MainWindow
     private string CurrentDocumentPath() =>
         HasCurrentPackageSession ? _currentPackageSession!.PackagePath : _currentJob?.RootPath ?? "";
 
+    private bool CanSaveAsCurrentProject =>
+        _currentJob != null && (HasCurrentPackageSession || IsCurrentJobWritable);
+
+    private string SaveAsDisabledReason() => _currentJob == null
+        ? "Open or create a project first."
+        : CanSaveAsCurrentProject
+            ? ""
+            : "This project folder is open read-only and cannot be saved to a new location.";
+
+    private void SaveAsCurrentProject()
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "No project is open - nothing to save.";
+            return;
+        }
+
+        if (HasCurrentPackageSession)
+        {
+            SaveAsOurPlanProject();
+            return;
+        }
+
+        if (!EnsureCurrentJobWritable("save this project to a new location"))
+            return;
+        SaveLegacyFolderAs();
+    }
+
     private void OpenOurPlanProjectDialog()
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Open OurPlan Project",
-            Filter = "OurPlan projects (*.ourplan)|*.ourplan|All files (*.*)|*.*",
+            Title = "Open Project",
+            Filter = "Project files (*.ourplan)|*.ourplan|All files (*.*)|*.*",
             DefaultExt = OurPlanPackageFormat.Extension,
             CheckFileExists = true,
             Multiselect = false,
@@ -52,7 +80,7 @@ public partial class MainWindow
             return OpenJob(path, initialPageFolder);
 
         MessageBox.Show(
-            $"The project does not exist or is not a supported .ourplan file / legacy job folder:\n{path}",
+            $"The project does not exist or is not a supported .ourplan file or project folder:\n{path}",
             "Open Project",
             MessageBoxButton.OK,
             MessageBoxImage.Error);
@@ -329,7 +357,7 @@ public partial class MainWindow
             {
                 MessageBox.Show(
                     $"The .ourplan file changed outside this window and was not overwritten.\n\n" +
-                    $"Your complete working copy is preserved locally. Use Save As OurPlan Project to keep it under a new name.\n\n{ex.Message}",
+                    $"Your complete working copy is preserved locally. Use Save As to keep it under a new name.\n\n{ex.Message}",
                     "OurPlan Project Conflict",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -362,7 +390,7 @@ public partial class MainWindow
 
     private void SaveAsOurPlanProject()
     {
-        if (_currentJob == null)
+        if (_currentJob == null || !HasCurrentPackageSession)
             return;
         using JobFileWriteActivity.PackageCheckpointScope copyCheckpoint =
             JobFileWriteActivity.BeginPackageCheckpoint();
@@ -373,28 +401,16 @@ public partial class MainWindow
         if (dialog.ShowDialog(this) != true)
             return;
         OurPlanCoreJob sourceJob = _currentJob;
-        OurPlanPackageSession? sourcePackage = HasCurrentPackageSession
-            ? _currentPackageSession
-            : null;
-        string? pageRelative = _currentPage != null &&
-                               OurPlanCoreJobStore.IsSameOrDescendant(
-                                   sourceJob.PagesRoot,
-                                   _currentPage.FolderPath)
-            ? Path.GetRelativePath(sourceJob.PagesRoot, _currentPage.FolderPath)
-            : null;
+        OurPlanPackageSession sourcePackage = _currentPackageSession!;
         try
         {
             Mouse.OverrideCursor = Cursors.Wait;
-            OurPlanPackageSession session = sourcePackage != null
-                ? SavePackageWorkspaceAs(sourceJob, sourcePackage, dialog.FileName)
-                : ConvertLegacyJobToPackage(sourceJob, dialog.FileName, pageRelative);
-            if (sourcePackage != null)
-            {
-                sourcePackage.DirtyStateChanged = null;
-                sourcePackage.MarkerSessionOpen = false;
-                _currentPackageSession = session;
-                StartPackageWorkspaceWatcher(session);
-            }
+            OurPlanPackageSession session =
+                SavePackageWorkspaceAs(sourceJob, sourcePackage, dialog.FileName);
+            sourcePackage.DirtyStateChanged = null;
+            sourcePackage.MarkerSessionOpen = false;
+            _currentPackageSession = session;
+            StartPackageWorkspaceWatcher(session);
 
             _packageSaveStatus = session.HasUnpackagedChanges
                 ? "Save: Pending"
@@ -410,15 +426,15 @@ public partial class MainWindow
             PersistCurrentDocumentIdentity();
             RefreshJobHeaderLabels();
             TxtStatus.Text = session.HasUnpackagedChanges
-                ? $"OurPlan project copy created, but the newest initialization changes remain in local recovery: {session.PackagePath}."
-                : $"Saved as OurPlan project: {session.PackagePath}.";
+                ? $"Project copy created, but the newest initialization changes remain in local recovery: {session.PackagePath}."
+                : $"Saved project as: {session.PackagePath}.";
         }
         catch (Exception ex)
         {
             AppLog.Error(ex, "Save As OurPlan Project failed.");
             MessageBox.Show(
-                $"Cannot save the OurPlan project copy.\n\n{ex.Message}",
-                "Save As OurPlan Project",
+                $"Cannot save the project copy.\n\n{ex.Message}",
+                "Save As",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
@@ -440,93 +456,69 @@ public partial class MainWindow
             sourceSession,
             projectId: sourceSession.ProjectId));
 
-    private OurPlanPackageSession ConvertLegacyJobToPackage(
-        OurPlanCoreJob sourceJob,
-        string destination,
-        string? pageRelative)
+    private void SaveLegacyFolderAs()
     {
-        (OurPlanCoreJob managedJob, string projectId, _) = RunResponsivePackageOperation(
-            () => OurPlanPackageWorkspace.CreateManagedCopyFromJob(sourceJob.RootPath, sourceJob.Name));
-        OurPlanPackageSession session;
-        try
-        {
-            session = RunResponsivePackageOperation(() =>
-                OurPlanPackageWriter.SaveAs(
-                    managedJob.RootPath,
-                    destination,
-                    sourceJob.Name,
-                    overwriteExisting: File.Exists(destination),
-                    projectId: projectId));
-        }
-        catch
-        {
-            OurPlanPackageWorkspace.AbandonUnpublishedWorkspace(managedJob.RootPath, projectId);
-            throw;
-        }
-        _openingPackageSession = session;
-        try
-        {
-            string? pageToOpen = ResolveManagedPage(managedJob, pageRelative);
-            // A legacy conversion changes workspaces, so its final switch must also close
-            // detached sheets and checkpoint any writes that started while the copy was built.
-            if (!OpenJob(managedJob.RootPath, pageToOpen))
-            {
-                OurPlanPackageWorkspace.MarkSessionClosed(session);
-                throw new IOException(
-                    $"The .ourplan file was created at '{session.PackagePath}', but its managed working copy could not be opened.");
-            }
-            session.HasUnpackagedChanges = true;
-            TrySaveCurrentPackage("Save As initialization");
-            return session;
-        }
-        finally
-        {
-            _openingPackageSession = null;
-        }
-    }
+        if (_currentJob == null || HasCurrentPackageSession ||
+            !EnsureCurrentJobWritable("save this project to a new location"))
+            return;
 
-    private static string? ResolveManagedPage(OurPlanCoreJob job, string? relative)
-    {
-        if (string.IsNullOrWhiteSpace(relative))
-            return null;
-        string candidate = Path.GetFullPath(Path.Combine(job.PagesRoot, relative));
-        return Directory.Exists(candidate) &&
-               OurPlanCoreJobStore.IsSameOrDescendant(job.PagesRoot, candidate)
-            ? candidate
+        OurPlanCoreJob sourceJob = _currentJob;
+        string? pageRelative = _currentPage != null &&
+                               OurPlanCoreJobStore.IsSameOrDescendant(
+                                   sourceJob.RootPath,
+                                   _currentPage.FolderPath)
+            ? Path.GetRelativePath(sourceJob.RootPath, _currentPage.FolderPath)
             : null;
-    }
-
-    private void SaveLegacyFolderCopy()
-    {
-        if (_currentJob == null || !EnsureCurrentJobWritable("save a legacy folder copy"))
-            return;
-        if (!TrySaveCurrentJobData("save legacy folder copy"))
-            return;
-
-        string? parent = SelectFolder("Select parent folder for the legacy project copy", InitialProjectArtifactDirectory());
+        string? parent = SelectFolder(
+            "Select parent folder for the project copy",
+            InitialProjectArtifactDirectory());
         if (parent == null)
             return;
-        string? name = ShowInputDialog("Legacy project folder name:", _currentJob.Name, "Save Legacy Folder Copy");
+        string? name = ShowInputDialog("Project folder name:", sourceJob.Name, "Save As");
         if (string.IsNullOrWhiteSpace(name))
             return;
 
         string destination = Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(name.Trim(), 120));
+        using JobFileWriteActivity.PackageCheckpointScope copyCheckpoint =
+            JobFileWriteActivity.BeginPackageCheckpoint();
+        if (copyCheckpoint.HadActiveWriters ||
+            !EnsureExpectedJobWritable(
+                sourceJob,
+                "save this project to a new location",
+                showDialog: true) ||
+            !TrySaveCurrentJobData("save project as") ||
+            !PrepareCurrentJobForSwitch())
+        {
+            return;
+        }
+
         try
         {
             Mouse.OverrideCursor = Cursors.Wait;
             RunResponsivePackageOperation(() =>
             {
-                OurPlanPackageWorkspace.ExportLegacyCopy(_currentJob.RootPath, destination);
+                OurPlanPackageWorkspace.ExportLegacyCopy(sourceJob.RootPath, destination);
                 return true;
             });
-            TxtStatus.Text = $"Legacy project copy saved: {destination}.";
+            string? copiedPage = ResolveCopiedProjectPage(destination, pageRelative);
+            if (!OpenJob(destination, copiedPage, currentJobPrepared: true))
+            {
+                MessageBox.Show(
+                    $"The project copy was created, but it could not be opened. " +
+                    $"The original project remains active.\n\n{destination}",
+                    "Save As",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+            TxtStatus.Text = $"Saved project as: {destination}.";
         }
         catch (Exception ex)
         {
             AppLog.Error(ex, "Save legacy folder copy failed.");
             MessageBox.Show(
-                $"Cannot save the legacy project copy.\n\n{ex.Message}",
-                "Save Legacy Folder Copy",
+                $"Cannot save the project copy.\n\n{ex.Message}",
+                "Save As",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
@@ -536,15 +528,46 @@ public partial class MainWindow
         }
     }
 
+    private static string? ResolveCopiedProjectPage(string destinationRoot, string? relative)
+    {
+        if (string.IsNullOrWhiteSpace(relative))
+            return null;
+        string candidate = Path.GetFullPath(Path.Combine(destinationRoot, relative));
+        return Directory.Exists(candidate) &&
+               OurPlanCoreJobStore.IsSameOrDescendant(destinationRoot, candidate)
+            ? candidate
+            : null;
+    }
+
     private bool CreateNewPackageProject(
         string displayName,
         out OurPlanCoreJob? job,
         string? preferredParent = null)
     {
-        job = null;
         var dialog = CreateOurPlanSaveDialog(displayName, preferredParent);
         if (dialog.ShowDialog(this) != true)
+        {
+            job = null;
             return false;
+        }
+
+        return CreateNewPackageProjectAtPath(
+            displayName,
+            dialog.FileName,
+            out job,
+            overwriteExisting: File.Exists(dialog.FileName));
+    }
+
+    private bool CreateNewPackageProjectAtPath(
+        string displayName,
+        string packagePath,
+        out OurPlanCoreJob? job,
+        bool overwriteExisting = false)
+    {
+        job = null;
+        string destination = Path.GetFullPath(packagePath);
+        if (!OurPlanPackageFormat.HasPackageExtension(destination))
+            throw new ArgumentException("A new project path must use the .ourplan extension.", nameof(packagePath));
         if (!PrepareCurrentJobForSwitch())
             return false;
 
@@ -560,9 +583,9 @@ public partial class MainWindow
                     {
                         OurPlanPackageSession newSession = OurPlanPackageWriter.SaveAs(
                             newJob.RootPath,
-                            dialog.FileName,
+                            destination,
                             displayName,
-                            overwriteExisting: File.Exists(dialog.FileName),
+                            overwriteExisting,
                             projectId: projectId);
                         return (newJob, newSession);
                     }
@@ -585,10 +608,10 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            AppLog.Error(ex, "New OurPlan project creation failed.");
+            AppLog.Error(ex, "New project creation failed.");
             MessageBox.Show(
-                $"Cannot create the OurPlan project.\n\n{ex.Message}",
-                "New OurPlan Project",
+                $"Cannot create the project.\n\n{ex.Message}",
+                "New Project",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             return false;
@@ -609,8 +632,8 @@ public partial class MainWindow
             120);
         return new SaveFileDialog
         {
-            Title = "Save OurPlan Project",
-            Filter = "OurPlan projects (*.ourplan)|*.ourplan",
+            Title = "Save Project",
+            Filter = "Project files (*.ourplan)|*.ourplan",
             DefaultExt = OurPlanPackageFormat.Extension,
             AddExtension = true,
             OverwritePrompt = true,

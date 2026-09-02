@@ -41,38 +41,7 @@ public partial class MainWindow
             return;
 
         PlanSwiftImportOptions options = dialog.ImportOptions;
-        if (!UseLegacyFolderForNewProjects())
-        {
-            await ImportPlanSwiftJobAsOurPlanAsync(options);
-            return;
-        }
-
-        PlanSwiftImportResult result;
-        using (ShowBusyOverlay("Importing PlanSwift job..."))
-        {
-            await WaitForBusyOverlayRenderAsync();
-            TxtStatus.Text = "Importing PlanSwift job. The source folder is read-only.";
-            result = await Task.Run(() => PlanSwiftProjectImporter.Import(options));
-        }
-
-        string destinationParent = Path.GetDirectoryName(result.DestinationJobPath) ?? options.DestinationParentPath;
-        _settings.JobsRootPath = destinationParent;
-        AppSettingsStore.AddJobsRoot(_settings, destinationParent);
-        SaveAppSettings();
-
-        if (!OpenJob(result.DestinationJobPath))
-        {
-            TxtStatus.Text = "PlanSwift import completed, but the current job could not be closed safely.";
-            return;
-        }
-
-        string reportPath = PlanSwiftImportReportPath(result.DestinationJobPath);
-        TxtStatus.Text =
-            $"Imported job: {result.PagesImported} page(s), " +
-            $"{result.TakeoffFoldersImported} takeoff folder(s), " +
-            $"{result.TakeoffItemsImported} takeoff item(s), " +
-            $"{result.MeasurementsImported} measurement(s). Report: {reportPath}";
-        ShowPlanSwiftImportResult(result, reportPath);
+        await ImportPlanSwiftJobAsOurPlanAsync(options);
     }
 
     private async Task ImportPlanSwiftJobAsOurPlanAsync(PlanSwiftImportOptions sourceOptions)
@@ -93,7 +62,7 @@ public partial class MainWindow
             reservation = OurPlanPackageWorkspace.ReserveManagedWorkspace(displayName);
             PlanSwiftImportOptions managedOptions = ForManagedPlanSwiftImport(sourceOptions, reservation);
             PlanSwiftImportResult result;
-            using (ShowBusyOverlay("Importing PlanSwift job into an OurPlan project..."))
+            using (ShowBusyOverlay("Importing PlanSwift job into a new project..."))
             {
                 await WaitForBusyOverlayRenderAsync();
                 TxtStatus.Text = "Importing PlanSwift job. The source folder is read-only.";
@@ -116,7 +85,7 @@ public partial class MainWindow
             if (!OpenJob(managedJob.RootPath))
             {
                 OurPlanPackageWorkspace.MarkSessionClosed(packageSession);
-                throw new IOException("The imported OurPlan project could not be opened safely.");
+                throw new IOException("The imported project could not be opened safely.");
             }
             packageSession.HasUnpackagedChanges = true;
             if (!TrySaveCurrentPackage("PlanSwift import initialization"))
@@ -136,7 +105,7 @@ public partial class MainWindow
             }
             string reportPath = PlanSwiftImportReportPath(managedJob.RootPath);
             TxtStatus.Text =
-                $"Imported OurPlan project: {result.PagesImported} page(s), " +
+                $"Imported project: {result.PagesImported} page(s), " +
                 $"{result.TakeoffFoldersImported} takeoff folder(s), " +
                 $"{result.TakeoffItemsImported} takeoff item(s), " +
                 $"{result.MeasurementsImported} measurement(s).";

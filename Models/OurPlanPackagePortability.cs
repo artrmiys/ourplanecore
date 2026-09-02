@@ -722,7 +722,7 @@ internal static partial class OurPlanPackagePortability
         string resolved) =>
         new(
             $"Page metadata '{metadataPath}' has an external '{propertyName}' reference: {resolved}. " +
-            "Copy the referenced project data inside the job before saving as .ourplan.");
+            "Copy the referenced project data inside the job before copying or packaging the project.");
 
     private static string NormalizeRoot(string path) =>
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));

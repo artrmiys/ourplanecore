@@ -355,7 +355,10 @@ public partial class MainWindow : Window
         InputBindings.Add(new KeyBinding(OpenRecentJobsCommand, Key.O, ModifierKeys.Control | ModifierKeys.Shift));
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, (_, _) => BtnSave_Click(null!, null!)));
         InputBindings.Add(new KeyBinding(ApplicationCommands.Save, Key.S, ModifierKeys.Control));
-        CommandBindings.Add(new CommandBinding(ApplicationCommands.SaveAs, (_, _) => SaveAsOurPlanProject()));
+        CommandBindings.Add(new CommandBinding(
+            ApplicationCommands.SaveAs,
+            (_, _) => SaveAsCurrentProject(),
+            (_, e) => e.CanExecute = CanSaveAsCurrentProject));
         InputBindings.Add(new KeyBinding(ApplicationCommands.SaveAs, Key.S, ModifierKeys.Control | ModifierKeys.Shift));
         CommandBindings.Add(new CommandBinding(OpenCommandPaletteCommand, (_, _) => ShowCommandPalette()));
         InputBindings.Add(new KeyBinding(OpenCommandPaletteCommand, Key.P, ModifierKeys.Control | ModifierKeys.Shift));

@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using OurPlanCore;
 
-internal static class OurPlanPackageTests
+internal static partial class OurPlanPackageTests
 {
     public static void NewProjectsDefaultToOurPlanFormat()
     {

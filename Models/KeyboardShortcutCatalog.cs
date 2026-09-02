@@ -27,7 +27,7 @@ public static class KeyboardShortcutCatalog
                 Item("Ctrl+O", "Open / import a job"),
                 Item("Ctrl+Shift+O", "Open Recent Jobs"),
                 Item("Ctrl+S", "Save the current job"),
-                Item("Ctrl+Shift+S", "Save As OurPlan project"),
+                Item("Ctrl+Shift+S", "Save the current project to a new location"),
                 Item("Ctrl+M", "Merge selected measurement segments"),
                 Item("Ctrl+Shift+M", "Split measurements / Count marks"),
                 Item("Ctrl+Shift+P", "Open Command Palette"),

@@ -59,15 +59,14 @@
                                         </StackPanel>
                                     </Button>
                                     <Button x:Name="BtnMainSaveAs"
-                                            Click="BtnSaveAsMenu_Click"
+                                            Command="{x:Static ApplicationCommands.SaveAs}"
                                             Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Save the current project as one .ourplan file or a legacy folder copy"
+                                            ToolTip="Save the current project to a new location"
                                             AutomationProperties.Name="Save As project">
                                         <StackPanel Orientation="Horizontal"
                                                     TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconExport}"/>
                                             <TextBlock Text="Save As" VerticalAlignment="Center"/>
-                                            <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>

@@ -50,12 +50,12 @@
                            ToolTip="Create a guided sample project in the configured Jobs folder"/>
                 <TextBlock Text=" · " Margin="6,0" FontSize="11"
                            Foreground="{DynamicResource SecondaryForegroundBrush}"/>
-                <TextBlock x:Name="BrowsePackageLink" Text="Open .ourplan..."
+                <TextBlock x:Name="BrowsePackageLink" Text="Open project file..."
                            Cursor="Hand" FontSize="11" Margin="8,0,0,0"
                            Foreground="{DynamicResource SecondaryForegroundBrush}"
                            TextDecorations="Underline"
                            MouseLeftButtonUp="BrowsePackageLink_Click"
-                           ToolTip="Browse for a single-file OurPlan project"/>
+                           ToolTip="Browse for a project file (.ourplan)"/>
                 <TextBlock x:Name="ManageLink" Text="Manage folders…"
                            Cursor="Hand" FontSize="11"
                            Foreground="{DynamicResource SecondaryForegroundBrush}"
@@ -77,12 +77,12 @@
                 <Button x:Name="NewJobButton" Content="PDF project"
                         Style="{StaticResource TopCommandButton}"
                         MinWidth="80" Padding="14,2" Height="26"
-                        ToolTip="Create a new project from PDFs using the default Project Storage format"
+                        ToolTip="Create a new project from PDFs"
                         Click="NewJobButton_Click"/>
                 <Button x:Name="BlankJobButton" Content="Blank project"
                         Style="{StaticResource TopCommandButton}"
                         MinWidth="86" Padding="14,2" Height="26"
-                        ToolTip="Create an empty project using the default Project Storage format"
+                        ToolTip="Create an empty project"
                         Click="BlankJobButton_Click"/>
                 <Button x:Name="CancelButton" Content="Cancel"
                         Style="{StaticResource TopCommandButton}"

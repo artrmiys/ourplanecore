@@ -26,47 +26,20 @@ public partial class MainWindow
     private Button? _projectStorageAnalyzeButton;
     private Button? _projectStoragePreviewButton;
     private Button? _projectStorageCompactButton;
-    private ComboBox? _newProjectStorageFormatCombo;
 
     private FrameworkElement BuildProjectStoragePanel()
     {
         var root = new DockPanel { Margin = new Thickness(2) };
 
         var formatPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
-        formatPanel.Children.Add(Header("Default format for new projects"));
+        formatPanel.Children.Add(Header("Project format"));
         formatPanel.Children.Add(new TextBlock
         {
-            Text = "OurPlan Project stores a portable project as one .ourplan file. Legacy folder remains available for compatibility.",
+            Text = "New projects are always saved as one portable .ourplan file. " +
+                   "Existing folder projects keep their current format and continue to open and save in place.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 6),
         });
-        var formatRow = new WrapPanel();
-        _newProjectStorageFormatCombo = new ComboBox
-        {
-            Width = 310,
-            Margin = new Thickness(0, 0, 8, 0),
-            ItemsSource = new[]
-            {
-                "OurPlan Project (*.ourplan) — Recommended",
-                "Legacy project folder",
-            },
-            SelectedIndex = UseLegacyFolderForNewProjects() ? 1 : 0,
-        };
-        _newProjectStorageFormatCombo.SelectionChanged += (_, _) =>
-        {
-            _settings.NewProjectStorageFormat = _newProjectStorageFormatCombo.SelectedIndex == 1
-                ? "LegacyFolder"
-                : "OurPlan";
-            SaveAppSettings();
-        };
-        formatRow.Children.Add(_newProjectStorageFormatCombo);
-        formatRow.Children.Add(MgrButton("Reset recommended", (_, _) =>
-        {
-            _settings.NewProjectStorageFormat = "OurPlan";
-            _newProjectStorageFormatCombo.SelectedIndex = 0;
-            SaveAppSettings();
-        }));
-        formatPanel.Children.Add(formatRow);
         DockPanel.SetDock(formatPanel, Dock.Top);
         root.Children.Add(formatPanel);
 
@@ -143,12 +116,6 @@ public partial class MainWindow
         BindProjectStorageSettings();
         return root;
     }
-
-    private bool UseLegacyFolderForNewProjects() =>
-        string.Equals(
-            _settings.NewProjectStorageFormat,
-            "LegacyFolder",
-            StringComparison.OrdinalIgnoreCase);
 
     private static TextBlock StorageTextBlock() => new()
     {

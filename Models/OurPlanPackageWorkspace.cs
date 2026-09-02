@@ -473,19 +473,20 @@ public static partial class OurPlanPackageWorkspace
         string source = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspaceRoot));
         string destination = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destinationRoot));
         if (Directory.Exists(destination) || File.Exists(destination))
-            throw new IOException($"The legacy export destination already exists: {destination}");
+            throw new IOException($"The project copy destination already exists: {destination}");
         if (destination.StartsWith(source + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new IOException("The legacy copy cannot be created inside the active working project.");
+            throw new IOException("The project copy cannot be created inside the active working project.");
 
         string? parent = Path.GetDirectoryName(destination);
         if (string.IsNullOrWhiteSpace(parent))
-            throw new IOException("The legacy export destination has no parent folder.");
+            throw new IOException("The project copy destination has no parent folder.");
         Directory.CreateDirectory(parent);
         string stage = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.tmp");
         try
         {
             Directory.CreateDirectory(stage);
             CopyDurableFilesStable(source, stage);
+            OurPlanPackagePortability.RebaseInternalReferences(source, stage);
             Directory.Move(stage, destination);
         }
         catch
