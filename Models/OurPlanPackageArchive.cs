@@ -29,13 +29,7 @@ public static class OurPlanPackageArchive
 
         try
         {
-            using var stream = new FileStream(
-                fullPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                1024 * 1024,
-                FileOptions.SequentialScan);
+            using FileStream stream = OpenPackageReadStream(fullPath);
             PreflightArchiveEntryCount(stream);
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
             OurPlanPackageManifest manifest = ReadAndValidateManifest(archive);
@@ -77,13 +71,7 @@ public static class OurPlanPackageArchive
 
         try
         {
-            using var stream = new FileStream(
-                packageFullPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                1024 * 1024,
-                FileOptions.SequentialScan);
+            using FileStream stream = OpenPackageReadStream(packageFullPath);
             PreflightArchiveEntryCount(stream);
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
             OurPlanPackageManifest manifest = ReadAndValidateManifest(archive);
@@ -130,6 +118,15 @@ public static class OurPlanPackageArchive
             throw;
         }
     }
+
+    internal static FileStream OpenPackageReadStream(string path) =>
+        new(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            1024 * 1024,
+            FileOptions.SequentialScan);
 
     internal static OurPlanPackageManifest ReadAndValidateManifest(ZipArchive archive)
     {

@@ -4,6 +4,19 @@ namespace OurPlanCore;
 
 public static partial class OurPlanPackageWriter
 {
+    private const int SharingViolationHResult = unchecked((int)0x80070020);
+    private const int LockViolationHResult = unchecked((int)0x80070021);
+    private const int UnableToRemoveReplacedHResult = unchecked((int)0x80070497);
+    private const int UnableToMoveReplacementHResult = unchecked((int)0x80070498);
+
+    private static readonly TimeSpan[] ReplaceRetryDelays =
+    [
+        TimeSpan.FromMilliseconds(100),
+        TimeSpan.FromMilliseconds(250),
+        TimeSpan.FromMilliseconds(500),
+        TimeSpan.FromMilliseconds(1000),
+    ];
+
     private static DestinationState CaptureExpectedDestination(string targetPath, PublishContext context)
     {
         bool exists = File.Exists(targetPath);
@@ -98,7 +111,19 @@ public static partial class OurPlanPackageWriter
         string rollbackPath = Path.Combine(
             stagingDirectory,
             $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.rollback.tmp");
-        File.Replace(tempPath, targetPath, rollbackPath, ignoreMetadataErrors: true);
+        int retryCount = ExecuteTransientReplaceWithRetry(
+            () => File.Replace(tempPath, targetPath, rollbackPath, ignoreMetadataErrors: true),
+            () => EnsureReplaceRetryState(
+                tempPath,
+                targetPath,
+                rollbackPath,
+                original));
+        if (retryCount > 0)
+        {
+            AppLog.Info(
+                $"OurPlan package replace succeeded after {retryCount} transient retry attempt(s): " +
+                $"'{targetPath}'.");
+        }
         if (RollbackMatchesExpectedDestination(rollbackPath, original))
         {
             TryDeleteTemp(rollbackPath);
@@ -109,6 +134,54 @@ public static partial class OurPlanPackageWriter
         throw new OurPlanPackageConflictException(
             "The project changed during the final replace. The displaced external version was preserved at " +
             $"'{preservedPath}' and was not overwritten again.");
+    }
+
+    internal static int ExecuteTransientReplaceWithRetry(
+        Action replace,
+        Action validateRetryState,
+        Action<TimeSpan>? wait = null)
+    {
+        ArgumentNullException.ThrowIfNull(replace);
+        ArgumentNullException.ThrowIfNull(validateRetryState);
+        wait ??= static delay => Thread.Sleep(delay);
+
+        for (int retryCount = 0; ; retryCount++)
+        {
+            try
+            {
+                replace();
+                return retryCount;
+            }
+            catch (IOException ex) when (
+                IsTransientReplaceFailure(ex) &&
+                retryCount < ReplaceRetryDelays.Length)
+            {
+                wait(ReplaceRetryDelays[retryCount]);
+                validateRetryState();
+            }
+        }
+    }
+
+    internal static bool IsTransientReplaceFailure(IOException exception) =>
+        exception.HResult is
+            SharingViolationHResult or
+            LockViolationHResult or
+            UnableToRemoveReplacedHResult or
+            UnableToMoveReplacementHResult;
+
+    private static void EnsureReplaceRetryState(
+        string tempPath,
+        string targetPath,
+        string rollbackPath,
+        DestinationState original)
+    {
+        if (!File.Exists(tempPath) || File.Exists(rollbackPath))
+        {
+            throw new OurPlanPackageConflictException(
+                "The package replacement state changed during a retry. " +
+                "The local working copy remains preserved.");
+        }
+        EnsureDestinationUnchanged(targetPath, original);
     }
 
     private static bool RollbackMatchesExpectedDestination(
