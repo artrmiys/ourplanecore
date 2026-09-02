@@ -11,6 +11,7 @@ public partial class MainWindow
         if (_currentJob == null)
             return true;
 
+        SupersedeAutomaticPackageCheckpoint();
         if (!EnsureNoActiveJobFileWriters("switch projects"))
             return false;
 
@@ -248,11 +249,14 @@ public partial class MainWindow
         if (!HasCurrentPackageSession || _currentJob == null)
             return false;
 
+        string continueAction = operation.StartsWith("close", StringComparison.OrdinalIgnoreCase)
+            ? "close the app"
+            : "continue";
         MessageBoxResult choice = MessageBox.Show(
             this,
             "The current .ourplan file could not be updated, but the complete working copy is preserved locally.\n\n" +
-            "Yes = save the working copy as a new .ourplan file.\n" +
-            "No = leave it in local recovery and continue.\n" +
+            "Yes = retry the same .ourplan file now.\n" +
+            $"No = leave it in local recovery and {continueAction}.\n" +
             "Cancel = keep this project open.",
             "OurPlan Checkpoint Not Written",
             MessageBoxButton.YesNoCancel,
@@ -267,7 +271,7 @@ public partial class MainWindow
             return true;
         }
 
-        return TrySaveCurrentWorkspaceAsNewPackage(operation);
+        return TrySaveCurrentPackage(operation, showDialog: false);
     }
 
     private bool TrySaveCurrentWorkspaceAsNewPackage(string operation)

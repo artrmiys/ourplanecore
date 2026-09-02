@@ -13,9 +13,14 @@ internal static partial class OurPlanPackageTests
         ];
         foreach (int hResult in retryable)
         {
+            var failure = new IOException("retry", hResult);
             AssertTrue(
-                OurPlanPackageWriter.IsTransientReplaceFailure(new IOException("retry", hResult)),
+                OurPlanPackageWriter.IsTransientReplaceFailure(failure),
                 $"safe replace failure was not retryable: 0x{hResult:X8}");
+            AssertEqual(
+                hResult is unchecked((int)0x80070497) or unchecked((int)0x80070498),
+                OurPlanPackageWriter.IsGuardedRenameFallbackFailure(failure),
+                $"guarded rename classification: 0x{hResult:X8}");
         }
 
         int[] permanent =
@@ -125,6 +130,31 @@ internal static partial class OurPlanPackageTests
         AssertEqual(TimeSpan.FromMilliseconds(1000), waits[3], "fourth retry delay");
     }
 
+    public static void PersistentReplaceFailureRoutesThroughOverwriteFallback()
+    {
+        int replaceAttempts = 0;
+        int validations = 0;
+        int fallbackCalls = 0;
+
+        (int retryCount, bool usedFallback) = OurPlanPackageWriter.ExecuteReplaceWithFallback(
+            () =>
+            {
+                replaceAttempts++;
+                throw new IOException(
+                    "replace unavailable",
+                    unchecked((int)0x80070497));
+            },
+            () => validations++,
+            () => fallbackCalls++,
+            _ => { });
+
+        AssertTrue(usedFallback, "persistent replacement failure did not use fallback");
+        AssertEqual(4, retryCount, "fallback retry count");
+        AssertEqual(5, replaceAttempts, "replace attempts before fallback");
+        AssertEqual(5, validations, "state validations before fallback");
+        AssertEqual(1, fallbackCalls, "fallback invocation count");
+    }
+
     public static void PackageReadHandleAllowsAtomicReplacement()
     {
         string root = Path.Combine(Path.GetTempPath(), "ourplan_read_share", Guid.NewGuid().ToString("N"));
@@ -143,6 +173,87 @@ internal static partial class OurPlanPackageTests
             reader.Position = 0;
             using var text = new StreamReader(reader, leaveOpen: true);
             AssertEqual("old package", text.ReadToEnd(), "open reader kept the original file identity");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    public static void GuardedOverwriteFallbackPublishesAndPreservesRollback()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "ourplan_guarded_swap", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string target = Path.Combine(root, "project.ourplan");
+        string replacement = Path.Combine(root, "replacement.tmp");
+        string rollback = Path.Combine(root, "rollback.tmp");
+        File.WriteAllText(target, "old package");
+        File.WriteAllText(replacement, "new package");
+        int validations = 0;
+
+        try
+        {
+            int rollbackValidations = 0;
+            OurPlanPackageWriter.ExecuteGuardedOverwriteSwap(
+                replacement,
+                target,
+                rollback,
+                () => validations++,
+                () => rollbackValidations++);
+
+            AssertEqual(3, validations, "guarded overwrite destination validations");
+            AssertEqual(1, rollbackValidations, "guarded overwrite rollback validations");
+            AssertEqual("new package", File.ReadAllText(target), "guarded overwrite target contents");
+            AssertEqual("old package", File.ReadAllText(rollback), "guarded overwrite rollback contents");
+            AssertFalse(File.Exists(replacement), "guarded overwrite replacement was consumed");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    public static void GuardedOverwriteFallbackNeverRemovesTargetBeforePublish()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "ourplan_guarded_rollback", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string target = Path.Combine(root, "project.ourplan");
+        string replacement = Path.Combine(root, "replacement.tmp");
+        string rollback = Path.Combine(root, "rollback.tmp");
+        File.WriteAllText(target, "old package");
+        File.WriteAllText(replacement, "new package");
+        bool targetPresentDuringPublish = false;
+        IOException? caught = null;
+
+        try
+        {
+            try
+            {
+                OurPlanPackageWriter.ExecuteGuardedOverwriteSwap(
+                    replacement,
+                    target,
+                    rollback,
+                    () => { },
+                    () => { },
+                    (source, destination, overwrite) =>
+                    {
+                        targetPresentDuringPublish = File.Exists(destination) &&
+                                                     File.ReadAllText(destination) == "old package";
+                        AssertTrue(overwrite, "final move was not an overwrite");
+                        throw new IOException("simulated publish overwrite failure");
+                    });
+            }
+            catch (IOException ex)
+            {
+                caught = ex;
+            }
+
+            AssertTrue(caught != null, "guarded swap publish failure was not returned");
+            AssertTrue(targetPresentDuringPublish, "target disappeared before final overwrite");
+            AssertEqual("old package", File.ReadAllText(target), "failed overwrite changed target");
+            AssertFalse(File.Exists(rollback), "failed overwrite left a redundant rollback");
+            AssertTrue(File.Exists(replacement), "failed overwrite lost the verified replacement");
+            AssertEqual(2, Directory.GetFiles(root).Length, "failed overwrite leftover file count");
         }
         finally
         {

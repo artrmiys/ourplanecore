@@ -25,6 +25,8 @@ public partial class MainWindow
         Interlocked.Exchange(ref _packageWorkspaceGeneration, 0);
         watcher.EnableRaisingEvents = true;
         StartPackageArtifactWatcher(session);
+        if (session.HasUnpackagedChanges)
+            QueueAutomaticPackageCheckpoint(session);
     }
 
     private void PackageWorkspaceChanged(object sender, FileSystemEventArgs e)
@@ -38,11 +40,21 @@ public partial class MainWindow
 
         Interlocked.Increment(ref _packageWorkspaceGeneration);
         session.HasUnpackagedChanges = true;
-        _packageSaveStatus = "Save: Pending";
+        long autosaveEpoch = Interlocked.Read(ref _packageAutosaveScheduleEpoch);
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            TxtStatusSave.ToolTip =
-                "Saved in the local recovery workspace. Press Ctrl+S to update the .ourplan file and its cloud copy.";
+            if (!ReferenceEquals(session, _currentPackageSession) ||
+                !ReferenceEquals(sender, _packageWorkspaceWatcher) ||
+                autosaveEpoch != Interlocked.Read(ref _packageAutosaveScheduleEpoch))
+            {
+                return;
+            }
+            if (!_packageAutosaveBlocked)
+                _packageSaveStatus = "Save: Pending";
+            ScheduleAutomaticPackageCheckpoint(
+                session,
+                waitForQuietPeriod: true,
+                retryDelay: TimeSpan.Zero);
             UpdateStatusBarSegments();
         }));
     }
@@ -124,6 +136,8 @@ public partial class MainWindow
 
     private void StopPackageWorkspaceWatcher()
     {
+        SupersedeAutomaticPackageCheckpoint();
+        ResetAutomaticPackageCheckpointScheduler();
         CancellationTokenSource? artifactCheck = Interlocked.Exchange(
             ref _packageArtifactCheckCts,
             null);
@@ -271,6 +285,8 @@ public partial class MainWindow
                         bool recoveringFromConflict =
                             _packageSaveStatus.Equals("Save: Conflict", StringComparison.OrdinalIgnoreCase) ||
                             _packageSaveStatus.Equals("Save: Watch restarted", StringComparison.OrdinalIgnoreCase);
+                        if (recoveringFromConflict)
+                            _packageAutosaveBlocked = false;
                         try
                         {
                             OurPlanPackageWorkspace.AcceptEquivalentPackageFingerprint(
@@ -281,19 +297,31 @@ public partial class MainWindow
                         {
                             AppLog.Warn(ex, "Could not record an equivalent cloud package fingerprint.");
                         }
-                        _packageSaveStatus = session.HasUnpackagedChanges
-                            ? "Save: Pending"
-                            : "Save: Saved";
+                        if (!_packageAutosaveBlocked)
+                        {
+                            _packageSaveStatus = session.HasUnpackagedChanges
+                                ? "Save: Pending"
+                                : "Save: Saved";
+                        }
                         if (recoveringFromConflict)
                         {
                             TxtStatus.Text = session.HasUnpackagedChanges
-                                ? "The cloud project file is current; local changes still need Ctrl+S."
+                                ? "The cloud project file is current; local changes will save automatically."
                                 : "The cloud project file is current again.";
                         }
                         UpdateStatusBarSegments();
+                        if (session.HasUnpackagedChanges)
+                        {
+                            ScheduleAutomaticPackageCheckpoint(
+                                session,
+                                waitForQuietPeriod: true,
+                                retryDelay: TimeSpan.Zero);
+                        }
                         return;
                     }
 
+                    CancelScheduledAutomaticPackageCheckpoint();
+                    _packageAutosaveBlocked = true;
                     _packageSaveStatus = "Save: Conflict";
                     TxtStatus.Text = inspection.Status switch
                     {

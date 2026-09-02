@@ -75,6 +75,15 @@ internal static class JobFileWriteActivity
         }
     }
 
+    public static bool HasActivePackageCheckpoints
+    {
+        get
+        {
+            lock (Gate)
+                return _packageCheckpoints > 0;
+        }
+    }
+
     public sealed class PackageCheckpointScope : IDisposable
     {
         private int _disposed;

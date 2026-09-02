@@ -34,6 +34,8 @@ public partial class MainWindow
     private T RunResponsivePackageOperation<T>(Func<T> operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
+        if (Dispatcher.CheckAccess())
+            SupersedeAutomaticPackageCheckpoint();
         if (Interlocked.CompareExchange(ref _packageOperationActive, 1, 0) != 0)
             throw new IOException("Another OurPlan project package operation is already running.");
         if (!Dispatcher.CheckAccess())

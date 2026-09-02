@@ -53,6 +53,7 @@ public static partial class OurPlanPackageWriter
             outcome.Manifest,
             outcome.Fingerprint,
             outcome.FileStates);
+        DeletePublishedRollback(outcome.RollbackPath);
         return session;
     }
 
@@ -98,6 +99,7 @@ public static partial class OurPlanPackageWriter
             outcome.Manifest,
             outcome.Fingerprint,
             outcome.FileStates);
+        DeletePublishedRollback(outcome.RollbackPath);
         return outcome.Result;
     }
 
@@ -172,6 +174,7 @@ public static partial class OurPlanPackageWriter
                 outcome.Manifest,
                 outcome.Fingerprint,
                 outcome.FileStates);
+            DeletePublishedRollback(outcome.RollbackPath);
         }
         catch
         {
@@ -201,7 +204,7 @@ public static partial class OurPlanPackageWriter
             JobFileWriteActivity.BeginPackageCheckpoint();
         if (checkpoint.HadActiveWriters)
         {
-            throw new IOException(
+            throw new OurPlanPackageTransientException(
                 "A background project writer is still active. Wait for it to finish, then save again.");
         }
 
@@ -270,11 +273,34 @@ public static partial class OurPlanPackageWriter
             OurPlanPackageArchive.ReadManifest(tempPath, verifyObjects: true);
             EnsureWorkspaceUnchanged(workspace, hashedFiles);
             EnsureDestinationUnchanged(targetPath, initialDestination);
-            ReplaceAtomically(tempPath, targetPath, initialDestination, stagingDirectory);
-            OurPlanPackageFingerprint publishedFingerprint = ValidatePublishedTarget(
+            string? rollbackPath = ReplaceAtomically(
+                tempPath,
                 targetPath,
-                manifest);
-
+                initialDestination,
+                stagingDirectory);
+            OurPlanPackageFingerprint publishedFingerprint;
+            try
+            {
+                publishedFingerprint = ValidatePublishedTarget(targetPath, manifest);
+            }
+            catch (OurPlanPackageConflictException ex)
+            {
+                string rollbackDetail = string.IsNullOrWhiteSpace(rollbackPath)
+                    ? "The complete local working copy remains recoverable."
+                    : $"The prior project file remains preserved at '{rollbackPath}'.";
+                throw new OurPlanPackageConflictException(
+                    $"The published project file failed final validation. {rollbackDetail}",
+                    ex);
+            }
+            catch (Exception ex)
+            {
+                string rollbackDetail = string.IsNullOrWhiteSpace(rollbackPath)
+                    ? "The complete local working copy remains recoverable."
+                    : $"The prior project file remains preserved at '{rollbackPath}'.";
+                throw new OurPlanPackageException(
+                    $"The published project file failed final validation. {rollbackDetail}",
+                    ex);
+            }
             long sourceBytes = manifest.Files.Sum(file => file.Length);
             OurPlanPackageSaveResult result = new(
                 targetPath,
@@ -284,7 +310,12 @@ public static partial class OurPlanPackageWriter
                 sourceBytes,
                 new FileInfo(targetPath).Length);
             TryDeleteEmptyPublishStaging(stagingDirectory);
-            return BuildOutcome(result, manifest, hashedFiles, publishedFingerprint);
+            return BuildOutcome(
+                result,
+                manifest,
+                hashedFiles,
+                publishedFingerprint,
+                rollbackPath);
         }
         catch
         {
@@ -354,7 +385,7 @@ public static partial class OurPlanPackageWriter
             if (before.Length != source.Length ||
                 before.LastWriteUtcTicks != source.LastWriteUtcTicks)
             {
-                throw new IOException(
+                throw new OurPlanPackageTransientException(
                     $"Project file changed before it could be packed: {source.LogicalPath}. Save again.");
             }
 
@@ -399,7 +430,7 @@ public static partial class OurPlanPackageWriter
                   before.LastWriteUtcTicks == after.LastWriteUtcTicks;
             if (!stable)
             {
-                throw new IOException(
+                throw new OurPlanPackageTransientException(
                     $"Project file changed while it was being packed: {source.LogicalPath}. Save again.");
             }
             string workspaceSha256 = contentOverride
@@ -412,7 +443,7 @@ public static partial class OurPlanPackageWriter
                   after.LastWriteUtcTicks == finalWorkspaceStamp.LastWriteUtcTicks;
             if (!workspaceStillStable)
             {
-                throw new IOException(
+                throw new OurPlanPackageTransientException(
                     $"Project file changed while it was being packed: {source.LogicalPath}. Save again.");
             }
             long manifestTicks = previous.TryGetValue(source.LogicalPath, out OurPlanPackageFileManifest? prior) &&
@@ -472,7 +503,8 @@ public static partial class OurPlanPackageWriter
     {
         IReadOnlyList<OurPlanPackageSourceFile> current = OurPlanPackageFileSelector.Collect(workspace);
         if (current.Count != original.Count)
-            throw new IOException("The project changed while it was being packed. Save again.");
+            throw new OurPlanPackageTransientException(
+                "The project changed while it was being packed. Save again.");
 
         for (int index = 0; index < original.Count; index++)
         {
@@ -481,7 +513,7 @@ public static partial class OurPlanPackageWriter
             if (!before.Source.LogicalPath.Equals(after.LogicalPath, StringComparison.OrdinalIgnoreCase) ||
                 before.Source.Length != after.Length)
             {
-                throw new IOException(
+                throw new OurPlanPackageTransientException(
                     $"The project changed while it was being packed: {before.Source.LogicalPath}. Save again.");
             }
 
@@ -494,7 +526,7 @@ public static partial class OurPlanPackageWriter
                       before.WorkspaceSha256,
                       StringComparison.OrdinalIgnoreCase);
             if (!stable)
-                throw new IOException(
+                throw new OurPlanPackageTransientException(
                     $"The project changed while it was being packed: {before.Source.LogicalPath}. Save again.");
         }
     }
@@ -515,7 +547,8 @@ public static partial class OurPlanPackageWriter
         OurPlanPackageSaveResult result,
         OurPlanPackageManifest manifest,
         IReadOnlyList<HashedSourceFile> files,
-        OurPlanPackageFingerprint fingerprint) =>
+        OurPlanPackageFingerprint fingerprint,
+        string? rollbackPath = null) =>
         new(
             result,
             manifest,
@@ -525,7 +558,18 @@ public static partial class OurPlanPackageWriter
                     file.StableStamp,
                     file.WorkspaceSha256),
                 StringComparer.OrdinalIgnoreCase),
-            fingerprint);
+            fingerprint,
+            rollbackPath);
+
+    private static void DeletePublishedRollback(string? rollbackPath)
+    {
+        if (string.IsNullOrWhiteSpace(rollbackPath))
+            return;
+        TryDeleteTemp(rollbackPath);
+        string? stagingDirectory = Path.GetDirectoryName(rollbackPath);
+        if (!string.IsNullOrWhiteSpace(stagingDirectory))
+            TryDeleteEmptyPublishStaging(stagingDirectory);
+    }
 
     private static CompressionLevel CompressionFor(string path) =>
         AlreadyCompressedExtensions.Contains(Path.GetExtension(path))
@@ -588,7 +632,8 @@ public static partial class OurPlanPackageWriter
         OurPlanPackageSaveResult Result,
         OurPlanPackageManifest Manifest,
         IReadOnlyDictionary<string, OurPlanSavedWorkspaceFileState> FileStates,
-        OurPlanPackageFingerprint Fingerprint);
+        OurPlanPackageFingerprint Fingerprint,
+        string? RollbackPath);
 
     private sealed record PublishContext(
         string ProjectId,

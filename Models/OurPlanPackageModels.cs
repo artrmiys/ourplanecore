@@ -278,9 +278,26 @@ public class OurPlanPackageException : IOException
     }
 }
 
+public sealed class OurPlanPackageTransientException : OurPlanPackageException
+{
+    public OurPlanPackageTransientException(string message) : base(message)
+    {
+    }
+
+    public OurPlanPackageTransientException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
 public sealed class OurPlanPackageConflictException : OurPlanPackageException
 {
     public OurPlanPackageConflictException(string message) : base(message)
+    {
+    }
+
+    public OurPlanPackageConflictException(string message, Exception innerException)
+        : base(message, innerException)
     {
     }
 }

@@ -488,7 +488,7 @@ public static partial class OurPlanPackageWorkspace
             ? before.SameGeneration(after)
             : before.Length == after.Length && before.LastWriteUtcTicks == after.LastWriteUtcTicks;
         if (!stable)
-            throw new IOException($"File changed while it was being verified: {path}");
+            throw new OurPlanPackageTransientException($"File changed while it was being verified: {path}");
         return hash;
     }
 
@@ -531,7 +531,7 @@ public static partial class OurPlanPackageWorkspace
             FileOptions.SequentialScan);
         byte[] destinationHash = SHA256.HashData(copied);
         if (!sourceHash.AsSpan().SequenceEqual(destinationHash))
-            throw new IOException($"Copied file failed byte-exact verification: {source}");
+            throw new OurPlanPackageTransientException($"Copied file failed byte-exact verification: {source}");
     }
 
     private static string ResolveWorkspaceFile(string workspace, string logicalPath)

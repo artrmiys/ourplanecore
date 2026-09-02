@@ -97,6 +97,7 @@ public partial class MainWindow
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        SupersedeAutomaticPackageCheckpoint();
         if (!EnsureNoActiveJobFileWriters("close OurPlanCore"))
         {
             e.Cancel = true;
@@ -160,7 +161,8 @@ public partial class MainWindow
                 }
                 _currentPackageSession!.HasUnpackagedChanges = true;
             }
-            if (!TrySaveCurrentPackage("close OurPlanCore", showDialog: true))
+            if (!TrySaveCurrentPackage("close OurPlanCore", showDialog: false) &&
+                !ResolveFailedPackageCheckpointBeforeExit("close OurPlanCore"))
             {
                 ReleaseClosingPackageCheckpoint();
                 e.Cancel = true;

@@ -77,12 +77,29 @@ internal static class AutosaveLifecycleRegressionTests
 
         AssertTrue(
             closePath.Contains(
-                "TrySaveCurrentPackage(\"close OurPlanCore\", showDialog: true)",
+                "TrySaveCurrentPackage(\"close OurPlanCore\", showDialog: false)",
                 StringComparison.Ordinal),
             "package close must save automatically to the current .ourplan file");
-        AssertFalse(
+        AssertTrue(
             closePath.Contains("ResolveFailedPackageCheckpointBeforeExit(", StringComparison.Ordinal),
-            "package close must not ask the user to choose Save As or local recovery");
+            "failed close save must allow a preserved-recovery exit");
+
+        string recovery = File.ReadAllText(RepoFile("MainWindow.JobRecovery.cs"));
+        int recoveryStart = recovery.IndexOf(
+            "private bool ResolveFailedPackageCheckpointBeforeExit",
+            StringComparison.Ordinal);
+        int recoveryEnd = recovery.IndexOf(
+            "private bool TrySaveCurrentWorkspaceAsNewPackage",
+            recoveryStart,
+            StringComparison.Ordinal);
+        string failedCheckpoint = recovery[recoveryStart..recoveryEnd];
+        AssertTrue(
+            failedCheckpoint.Contains("retry the same .ourplan file", StringComparison.Ordinal) &&
+            failedCheckpoint.Contains("TrySaveCurrentPackage(operation, showDialog: false)", StringComparison.Ordinal),
+            "failed close retry must target the same project file");
+        AssertFalse(
+            failedCheckpoint.Contains("TrySaveCurrentWorkspaceAsNewPackage", StringComparison.Ordinal),
+            "failed close retry must not force Save As");
     }
 
     public static void SaveAsUiPaletteAndShortcutExposeOneContextSensitiveAction()

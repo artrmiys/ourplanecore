@@ -16,6 +16,7 @@ public partial class MainWindow
         if (!EnsureCurrentJobWritable("save changes"))
             return;
 
+        SupersedeAutomaticPackageCheckpoint();
         if (!TrySaveCurrentJobData("manual save"))
             return;
 

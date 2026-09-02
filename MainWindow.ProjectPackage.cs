@@ -240,7 +240,7 @@ public partial class MainWindow
             _currentPackageSession = _openingPackageSession;
             StartPackageWorkspaceWatcher(_openingPackageSession);
             _packageSaveStatus = _openingPackageSession.IsRecoverySession
-                ? "Save: Recovery - use Save As"
+                ? "Save: Recovery - press Ctrl+S to update this file"
                 : _openingPackageSession.HasUnpackagedChanges
                     ? "Save: Pending"
                     : CanUpdatePackageArtifact(_openingPackageSession.PackagePath)
@@ -267,6 +267,7 @@ public partial class MainWindow
     {
         if (!HasCurrentPackageSession)
             return true;
+        SupersedeAutomaticPackageCheckpoint();
         if (!IsCurrentJobWritable)
         {
             _currentPackageSession!.HasUnpackagedChanges = true;
@@ -292,10 +293,15 @@ public partial class MainWindow
             _packageSaveStatus = "Save: Pending";
             TxtStatus.Text = "Another project package operation is still running.";
             UpdateStatusBarSegments();
+            ScheduleAutomaticPackageCheckpoint(
+                _currentPackageSession,
+                waitForQuietPeriod: false,
+                retryDelay: OurPlanPackageAutosaveSchedule.BusyRetryDelay);
             return false;
         }
 
         OurPlanPackageSession session = _currentPackageSession!;
+        _packageAutosaveBlocked = false;
         try
         {
             CancelPendingPackageArtifactInspection();
@@ -331,7 +337,11 @@ public partial class MainWindow
                 UpdateStatusBarSegments();
             }
             if (!stable || result == null)
-                throw new IOException("The project kept changing while it was being packed. Wait for background work to finish and save again.");
+            {
+                throw new OurPlanPackageTransientException(
+                    "The project kept changing while it was being packed. Wait for background work to finish and save again.");
+            }
+            PromoteRecoveredPackageSessionAfterSamePathSave(session);
             PersistCurrentDocumentIdentity();
             TxtStatus.Text =
                 $"Saved to {Path.GetFileName(result.PackagePath)} " +
@@ -343,12 +353,15 @@ public partial class MainWindow
                 $"uniqueObjects={result.UniqueObjectCount}, bytes={result.PackageBytes}.");
             _packageSaveStatus = $"Save: Saved {DateTime.Now:HH:mm:ss}";
             TxtStatusSave.ToolTip = session.PackagePath;
+            ResetAutomaticPackageCheckpointScheduler();
             UpdateStatusBarSegments();
             return true;
         }
         catch (OurPlanPackageConflictException ex)
         {
             session.HasUnpackagedChanges = true;
+            _packageAutosaveBlocked = true;
+            CancelScheduledAutomaticPackageCheckpoint();
             AppLog.Warn(ex, $"OurPlan package conflict during {operation}.");
             TxtStatus.Text = "Save conflict - working copy preserved.";
             _packageSaveStatus = "Save: Conflict";
@@ -371,6 +384,19 @@ public partial class MainWindow
             TxtStatus.Text = "Package save failed - working copy preserved.";
             _packageSaveStatus = "Save: Failed";
             UpdateStatusBarSegments();
+            bool transientFailure = ShouldRetryAutomaticPackageCheckpoint(ex);
+            _packageAutosaveBlocked = !transientFailure;
+            if (transientFailure)
+            {
+                ScheduleAutomaticPackageCheckpoint(
+                    session,
+                    waitForQuietPeriod: false,
+                    retryDelay: OurPlanPackageAutosaveSchedule.FailureRetryDelay(1));
+            }
+            else
+            {
+                CancelScheduledAutomaticPackageCheckpoint();
+            }
             if (showDialog)
             {
                 MessageBox.Show(
@@ -392,6 +418,7 @@ public partial class MainWindow
     {
         if (_currentJob == null || !HasCurrentPackageSession)
             return;
+        SupersedeAutomaticPackageCheckpoint();
         using JobFileWriteActivity.PackageCheckpointScope copyCheckpoint =
             JobFileWriteActivity.BeginPackageCheckpoint();
         if (copyCheckpoint.HadActiveWriters || !PrepareCurrentJobForPackageCopy())

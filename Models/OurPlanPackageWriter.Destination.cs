@@ -96,7 +96,7 @@ public static partial class OurPlanPackageWriter
         }
     }
 
-    private static void ReplaceAtomically(
+    private static string? ReplaceAtomically(
         string tempPath,
         string targetPath,
         DestinationState original,
@@ -105,19 +105,38 @@ public static partial class OurPlanPackageWriter
         if (!original.Exists)
         {
             File.Move(tempPath, targetPath);
-            return;
+            return null;
         }
 
         string rollbackPath = Path.Combine(
             stagingDirectory,
             $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.rollback.tmp");
-        int retryCount = ExecuteTransientReplaceWithRetry(
+        (int retryCount, bool usedFallback) = ExecuteReplaceWithFallback(
             () => File.Replace(tempPath, targetPath, rollbackPath, ignoreMetadataErrors: true),
             () => EnsureReplaceRetryState(
                 tempPath,
                 targetPath,
                 rollbackPath,
-                original));
+                original),
+            () => ExecuteGuardedOverwriteSwap(
+                tempPath,
+                targetPath,
+                rollbackPath,
+                () => EnsureDestinationUnchanged(targetPath, original),
+                () =>
+                {
+                    if (!RollbackMatchesExpectedDestination(rollbackPath, original))
+                    {
+                        throw new OurPlanPackageConflictException(
+                            "The fallback rollback copy did not exactly match the prior project file.");
+                    }
+                }));
+        if (usedFallback)
+        {
+            AppLog.Info(
+                $"Windows ReplaceFile stayed unavailable for '{targetPath}'. " +
+                "Published the verified package with the guarded overwrite fallback.");
+        }
         if (retryCount > 0)
         {
             AppLog.Info(
@@ -125,15 +144,36 @@ public static partial class OurPlanPackageWriter
                 $"'{targetPath}'.");
         }
         if (RollbackMatchesExpectedDestination(rollbackPath, original))
-        {
-            TryDeleteTemp(rollbackPath);
-            return;
-        }
+            return rollbackPath;
 
         string preservedPath = PreserveConflictFile(rollbackPath, targetPath);
         throw new OurPlanPackageConflictException(
             "The project changed during the final replace. The displaced external version was preserved at " +
             $"'{preservedPath}' and was not overwritten again.");
+    }
+
+    internal static (int RetryCount, bool UsedFallback) ExecuteReplaceWithFallback(
+        Action replace,
+        Action validateRetryState,
+        Action fallback,
+        Action<TimeSpan>? wait = null)
+    {
+        ArgumentNullException.ThrowIfNull(fallback);
+        try
+        {
+            return (
+                ExecuteTransientReplaceWithRetry(
+                    replace,
+                    validateRetryState,
+                    wait),
+                false);
+        }
+        catch (IOException ex) when (IsGuardedRenameFallbackFailure(ex))
+        {
+            validateRetryState();
+            fallback();
+            return (ReplaceRetryDelays.Length, true);
+        }
     }
 
     internal static int ExecuteTransientReplaceWithRetry(
@@ -168,6 +208,100 @@ public static partial class OurPlanPackageWriter
             LockViolationHResult or
             UnableToRemoveReplacedHResult or
             UnableToMoveReplacementHResult;
+
+    internal static bool IsGuardedRenameFallbackFailure(IOException exception) =>
+        exception.HResult is
+            UnableToRemoveReplacedHResult or
+            UnableToMoveReplacementHResult;
+
+    internal static void ExecuteGuardedOverwriteSwap(
+        string replacementPath,
+        string targetPath,
+        string rollbackPath,
+        Action validateDestination,
+        Action validateRollback,
+        Action<string, string, bool>? move = null)
+    {
+        ArgumentNullException.ThrowIfNull(validateDestination);
+        ArgumentNullException.ThrowIfNull(validateRollback);
+        move ??= static (source, destination, overwrite) => File.Move(source, destination, overwrite);
+
+        if (!File.Exists(replacementPath) || !File.Exists(targetPath) || File.Exists(rollbackPath))
+        {
+            throw new OurPlanPackageConflictException(
+                "The guarded package replacement state is no longer valid. " +
+                "The local working copy remains preserved.");
+        }
+
+        string targetDirectory = Path.GetDirectoryName(targetPath) ?? ".";
+        string candidatePath = Path.Combine(
+            targetDirectory,
+            $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+        bool published = false;
+        try
+        {
+            CopyFileDurably(replacementPath, candidatePath);
+            EnsureFilesExactlyMatch(replacementPath, candidatePath, "verified replacement copy");
+            validateDestination();
+            CopyFileDurably(targetPath, rollbackPath);
+            validateDestination();
+            validateRollback();
+            EnsureFilesExactlyMatch(replacementPath, candidatePath, "verified replacement copy");
+            validateDestination();
+
+            // Candidate and target are deliberately in the same directory. The final
+            // overwrite is therefore one filesystem rename, so the visible .ourplan
+            // path never has the remove-then-add gap that triggered the original loss.
+            move(candidatePath, targetPath, true);
+            published = true;
+            TryDeleteTemp(replacementPath);
+        }
+        catch
+        {
+            if (!published)
+            {
+                TryDeleteTemp(candidatePath);
+                try
+                {
+                    validateDestination();
+                    TryDeleteTemp(rollbackPath);
+                }
+                catch
+                {
+                    // The destination no longer matches the version we copied. Keep
+                    // the verified rollback for explicit conflict recovery.
+                }
+            }
+            throw;
+        }
+    }
+
+    private static void CopyFileDurably(string sourcePath, string destinationPath)
+    {
+        File.Copy(sourcePath, destinationPath, overwrite: false);
+        using var stream = new FileStream(
+            destinationPath,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.Read,
+            1,
+            FileOptions.WriteThrough);
+        stream.Flush(flushToDisk: true);
+    }
+
+    private static void EnsureFilesExactlyMatch(
+        string expectedPath,
+        string actualPath,
+        string label)
+    {
+        var expected = new FileInfo(expectedPath);
+        var actual = new FileInfo(actualPath);
+        if (expected.Length != actual.Length ||
+            !HashFile(expectedPath).Equals(HashFile(actualPath), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new IOException($"The {label} failed byte-exact verification.");
+        }
+    }
 
     private static void EnsureReplaceRetryState(
         string tempPath,
