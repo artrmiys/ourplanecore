@@ -91,35 +91,7 @@ public static partial class PdfExporter
                     using (renderedPage)
                     {
                         SKCanvas canvas = document.BeginPage(renderedPage.WidthPt, renderedPage.HeightPt);
-                        canvas.Clear(ExportPaperColor);
-                        DrawExportPaperUnderlay(canvas, renderedPage.WidthPt, renderedPage.HeightPt);
-                        canvas.DrawBitmap(renderedPage.Bitmap, new SKRect(0, 0, renderedPage.WidthPt, renderedPage.HeightPt));
-
-                        if (overlayRenderer != null)
-                        {
-                            (bool overlayOk, string overlayError) = overlayRenderer(canvas, page, renderedPage.WidthPt, renderedPage.HeightPt);
-                            if (!overlayOk)
-                            {
-                                string warning = $"Overlay skipped on '{page.Name}': {overlayError}";
-                                warnings.Add(warning);
-                                AppLog.Warn($"Skipping overlay during PDF export for '{page.Name}': {overlayError}");
-                            }
-                        }
-
-                    if (options.IncludeMeasurements)
-                        DrawMeasurements(
-                            canvas,
-                            input.MeasurementLayers ?? input.Takeoffs,
-                            page,
-                            options,
-                            new SKRect(0, 0, renderedPage.WidthPt, renderedPage.HeightPt));
-                    if (options.IncludeAnnotations)
-                        DrawAnnotations(canvas, input.Annotations, page.ScaleMetersPerPt, options);
-                        if (options.IncludeLegend)
-                        {
-                            DrawSheetHeader(canvas, renderedPage.WidthPt, renderedPage.HeightPt, page, options);
-                            DrawLegend(canvas, renderedPage.WidthPt, renderedPage.HeightPt, input.Takeoffs, page, options);
-                        }
+                        DrawExportContent(canvas, input, renderedPage, options, overlayRenderer, warnings);
 
                         document.EndPage();
                     }

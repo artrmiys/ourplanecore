@@ -100,7 +100,8 @@ public partial class MainWindow
                 item.JoistDirectionFollowsAreaRotation != joistEdit.DirectionFollowsAreaRotation ||
                 item.JoistAddEndJoist != joistEdit.AddEndJoist ||
                 item.JoistShowLabels != joistEdit.ShowLabels ||
-                item.JoistDetailedLabels != joistEdit.DetailedLabels;
+                item.JoistDetailedLabels != joistEdit.DetailedLabels ||
+                item.JoistMoveNote != joistEdit.MoveNote;
             bool wasJoistArea = item.IsJoistArea;
             bool joistShowLabelsChangedByDialog = item.JoistShowLabels != joistEdit.ShowLabels;
             item.IsJoistTakeoff = joistEdit.Enabled && OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
@@ -115,7 +116,11 @@ public partial class MainWindow
             if (item.IsJoistArea && joistShowLabelsChangedByDialog)
                 item.JoistShowLabelsUserSet = true;
             item.JoistDetailedLabels = joistEdit.DetailedLabels;
+            item.JoistMoveNote = joistEdit.MoveNote;
             OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            if (joistChanged)
+                foreach (DetachedSheetWindow window in _detachedSheetWindows)
+                    RefreshDetachedTakeoffDisplay(window, _viewport.UnitMode);
             if (colorChanged)
             {
                 foreach (Measurement measurement in item.Measurements)
@@ -189,7 +194,8 @@ public partial class MainWindow
             JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
             initialJoistRounding,
             initialJoistShowLabels,
-            initialJoistDetailedLabels);
+            initialJoistDetailedLabels,
+            item.JoistMoveNote);
 
         var dialog = new Window
         {
@@ -229,7 +235,7 @@ public partial class MainWindow
         };
         joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
         joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (int i = 0; i < 9; i++)
+        for (int i = 0; i < 10; i++)
             joistPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         AddLabeledTextBox(joistPanel, 0, "Joist type:", out TextBox joistTypeBox, item.JoistType);
@@ -354,6 +360,17 @@ public partial class MainWindow
         Grid.SetRow(joistDetailedLabelsBox, 8);
         Grid.SetColumn(joistDetailedLabelsBox, 1);
         joistPanel.Children.Add(joistDetailedLabelsBox);
+
+        var joistMoveNoteBox = new CheckBox
+        {
+            Content = "Move joist note",
+            IsChecked = item.JoistMoveNote,
+            Margin = new Thickness(0, 3, 0, 3),
+            ToolTip = "In Select mode, drag each area's summary table. Turn off to lock its saved position. Ctrl+Z undoes a move.",
+        };
+        Grid.SetRow(joistMoveNoteBox, 9);
+        Grid.SetColumn(joistMoveNoteBox, 1);
+        joistPanel.Children.Add(joistMoveNoteBox);
 
         joistEnabledBox.Checked += (_, _) => joistPanel.IsEnabled = isAreaTakeoff;
         joistEnabledBox.Unchecked += (_, _) => joistPanel.IsEnabled = false;
@@ -602,7 +619,8 @@ public partial class MainWindow
                 joistPitch,
                 joistRounding,
                 joistLabelsBox.IsChecked == true,
-                joistDetailedLabels);
+                joistDetailedLabels,
+                joistMoveNoteBox.IsChecked == true);
             dialog.DialogResult = true;
         };
         dialog.Loaded += (_, _) => { nameBox.Focus(); nameBox.SelectAll(); };

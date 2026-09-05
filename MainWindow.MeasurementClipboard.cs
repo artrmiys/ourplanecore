@@ -448,6 +448,10 @@ public partial class MainWindow
             JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(entry.MeasurementJoist.LengthRounding),
             JoistShowLabels = entry.MeasurementJoist.ShowLabels,
             JoistDetailedLabels = entry.MeasurementJoist.DetailedLabels,
+            JoistMoveNote = entry.MeasurementJoist.MoveNote,
+            JoistNoteOffsetX = entry.MeasurementJoist.NoteOffsetX,
+            JoistNoteOffsetY = entry.MeasurementJoist.NoteOffsetY,
+            JoistNotePositionSet = entry.MeasurementJoist.NotePositionSet,
             ExtraJoists = entry.MeasurementJoist.ExtraJoists
                 .Select(extra => new JoistExtraSegment
                 {
@@ -573,7 +577,8 @@ public partial class MainWindow
                 .Select(extra => new JoistExtraClipboard(
                     new SKPoint(extra.Start.X, extra.Start.Y),
                     new SKPoint(extra.End.X, extra.End.Y)))
-                .ToList());
+                .ToList(),
+            measurement.JoistMoveNote, measurement.JoistNoteOffsetX, measurement.JoistNoteOffsetY, measurement.JoistNotePositionSet);
 
     private static TakeoffJoistClipboard CaptureTakeoffJoistClipboard(TakeoffItem? item, Measurement measurement)
     {
@@ -589,7 +594,8 @@ public partial class MainWindow
                 JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
                 JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                 item.JoistShowLabels,
-                item.JoistDetailedLabels);
+                item.JoistDetailedLabels,
+                item.JoistMoveNote);
         }
 
         return new TakeoffJoistClipboard(
@@ -602,7 +608,8 @@ public partial class MainWindow
             JoistTakeoffCalculator.NormalizePitch(measurement.JoistPitch),
             JoistTakeoffCalculator.NormalizeLengthRounding(measurement.JoistLengthRounding),
             measurement.JoistShowLabels,
-            measurement.JoistDetailedLabels);
+            measurement.JoistDetailedLabels,
+            measurement.JoistMoveNote);
     }
 
     private static void ApplyTakeoffJoistClipboard(
@@ -621,6 +628,7 @@ public partial class MainWindow
         target.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joist.LengthRounding);
         target.JoistShowLabels = joist.ShowLabels;
         target.JoistDetailedLabels = joist.DetailedLabels;
+        target.JoistMoveNote = joist.MoveNote;
     }
 
     private TakeoffItem? FindTakeoffItemForMeasurement(Measurement measurement)

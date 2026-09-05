@@ -1,11 +1,25 @@
 using System;
 using System.Globalization;
+using SkiaSharp;
 
 namespace OurPlanCore;
 
 public static class BeamTakeoffService
 {
     public const string DefaultNamePrefix = "Beam";
+
+    public static SKPoint DimensionOffset(SKPoint start, SKPoint end, SKPoint count, float distance)
+    {
+        SKPoint delta = end - start;
+        float length = MathF.Sqrt(delta.X * delta.X + delta.Y * delta.Y);
+        if (length <= 0 || !float.IsFinite(distance))
+            return SKPoint.Empty;
+        SKPoint normal = new(-delta.Y / length, delta.X / length);
+        SKPoint centerToCount = count - new SKPoint((start.X + end.X) / 2, (start.Y + end.Y) / 2);
+        if (normal.X * centerToCount.X + normal.Y * centerToCount.Y > 0)
+            normal = new SKPoint(-normal.X, -normal.Y);
+        return new SKPoint(normal.X * distance, normal.Y * distance);
+    }
 
     public static double RoundOrderLengthFeet(double feet)
     {

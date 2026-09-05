@@ -93,6 +93,7 @@ internal static class TakeoffStore
             JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(OurPlanCoreJobStore.ReadProperty(folder, "JoistLengthRounding")),
             JoistShowLabels = ParseJoistShowLabels(joistShowLabels, joistShowLabelsUserSet, measurementType, isJoistTakeoff),
             JoistShowLabelsUserSet = ParseBool(joistShowLabelsUserSet),
+            JoistMoveNote = ParseBool(OurPlanCoreJobStore.ReadProperty(folder, "JoistMoveNote")),
             JoistDetailedLabels = ParseBool(OurPlanCoreJobStore.ReadProperty(folder, "JoistDetailedLabels"), fallback: true),
             MultiLineOffsets = ParseMultiLineOffsets(OurPlanCoreJobStore.ReadProperty(folder, "MultiLineOffsets"), folder),
         };
@@ -129,6 +130,7 @@ internal static class TakeoffStore
             new KeyValuePair<string, string>("JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding)),
             new KeyValuePair<string, string>("JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("JoistShowLabelsUserSet", item.JoistShowLabelsUserSet.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistMoveNote", item.JoistMoveNote.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("JoistDetailedLabels", item.JoistDetailedLabels.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("MultiLineOffsets", SerializeMultiLineOffsets(item.MultiLineOffsets, item.FolderPath)),
             new KeyValuePair<string, string>("MeasurementCount", item.Measurements.Count.ToString()),
@@ -168,6 +170,7 @@ internal static class TakeoffStore
             measurement.JoistLengthRounding = rounding;
             measurement.JoistShowLabels = item.JoistShowLabels;
             measurement.JoistDetailedLabels = item.JoistDetailedLabels;
+            measurement.JoistMoveNote = item.JoistMoveNote;
         }
     }
 
@@ -386,6 +389,9 @@ internal static class TakeoffStore
             JoistStartEdgeEnabled = dto.JoistStartEdgeEnabled,
             JoistEndEdgeEnabled = dto.JoistEndEdgeEnabled,
             JoistEdgeOverridesSet = dto.JoistEdgeOverridesSet,
+            JoistNoteOffsetX = float.IsFinite(dto.JoistNoteOffsetX) ? dto.JoistNoteOffsetX : 0,
+            JoistNoteOffsetY = float.IsFinite(dto.JoistNoteOffsetY) ? dto.JoistNoteOffsetY : 0,
+            JoistNotePositionSet = dto.JoistNotePositionSet,
             ExtraJoists = (dto.ExtraJoists ?? [])
                 .Select(ToExtraJoist)
                 .ToList(),
@@ -415,6 +421,9 @@ internal static class TakeoffStore
             JoistStartEdgeEnabled = measurement.JoistStartEdgeEnabled,
             JoistEndEdgeEnabled = measurement.JoistEndEdgeEnabled,
             JoistEdgeOverridesSet = measurement.JoistEdgeOverridesSet,
+            JoistNoteOffsetX = measurement.JoistNoteOffsetX,
+            JoistNoteOffsetY = measurement.JoistNoteOffsetY,
+            JoistNotePositionSet = measurement.JoistNotePositionSet,
             ExtraJoists = (measurement.ExtraJoists ?? [])
                 .Select(ToExtraJoistDto)
                 .ToList(),

@@ -313,6 +313,7 @@ public partial class MainWindow
             return;
 
         AppSettingsStore.Save(_settings);
+        QueuePdfOutputPreview();
     }
 
     private void ApplySidePanelWidths()

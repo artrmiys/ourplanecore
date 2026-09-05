@@ -28,6 +28,7 @@ internal sealed class ProjectFile
         public string          JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
         public bool?           JoistShowLabels { get; set; }
         public bool            JoistShowLabelsUserSet { get; set; }
+        public bool JoistMoveNote { get; set; }
         public bool?           JoistDetailedLabels { get; set; } = true;
         public List<MeasDto>   Measurements { get; set; } = [];
     }
@@ -46,6 +47,9 @@ internal sealed class ProjectFile
         public bool         JoistStartEdgeEnabled { get; set; } = true;
         public bool         JoistEndEdgeEnabled { get; set; }
         public bool         JoistEdgeOverridesSet { get; set; }
+        public float JoistNoteOffsetX { get; set; }
+        public float JoistNoteOffsetY { get; set; }
+        public bool JoistNotePositionSet { get; set; }
         public List<ExtraJoistDto> ExtraJoists { get; set; } = [];
         public List<PtDto>  Points     { get; set; } = [];
         public List<List<PtDto>> Holes { get; set; } = [];
@@ -95,6 +99,7 @@ internal sealed class ProjectFile
                 JoistShowLabels = item.JoistShowLabels,
                 JoistShowLabelsUserSet = item.JoistShowLabelsUserSet,
                 JoistDetailedLabels = item.JoistDetailedLabels,
+                JoistMoveNote = item.JoistMoveNote,
             };
             foreach (var m in item.Measurements)
             {
@@ -112,6 +117,9 @@ internal sealed class ProjectFile
                     JoistStartEdgeEnabled = m.JoistStartEdgeEnabled,
                     JoistEndEdgeEnabled = m.JoistEndEdgeEnabled,
                     JoistEdgeOverridesSet = m.JoistEdgeOverridesSet,
+                    JoistNoteOffsetX = m.JoistNoteOffsetX,
+                    JoistNoteOffsetY = m.JoistNoteOffsetY,
+                    JoistNotePositionSet = m.JoistNotePositionSet,
                     ExtraJoists = (m.ExtraJoists ?? [])
                         .Select(ToExtraJoistDto)
                         .ToList(),
@@ -170,6 +178,7 @@ internal sealed class ProjectFile
                     dto.IsJoistTakeoff),
                 JoistShowLabelsUserSet = dto.JoistShowLabelsUserSet,
                 JoistDetailedLabels = dto.JoistDetailedLabels ?? true,
+                JoistMoveNote = dto.JoistMoveNote,
             };
             foreach (var md in dto.Measurements)
             {
@@ -187,6 +196,9 @@ internal sealed class ProjectFile
                     JoistStartEdgeEnabled = md.JoistStartEdgeEnabled,
                     JoistEndEdgeEnabled = md.JoistEndEdgeEnabled,
                     JoistEdgeOverridesSet = md.JoistEdgeOverridesSet,
+                    JoistNoteOffsetX = md.JoistNoteOffsetX,
+                    JoistNoteOffsetY = md.JoistNoteOffsetY,
+                    JoistNotePositionSet = md.JoistNotePositionSet,
                     ExtraJoists = (md.ExtraJoists ?? [])
                         .Select(ToExtraJoist)
                         .ToList(),

@@ -24,6 +24,7 @@ public sealed class TakeoffItem
     public bool JoistShowLabels { get; set; }
     public bool JoistShowLabelsUserSet { get; set; }
     public bool JoistDetailedLabels { get; set; } = true;
+    public bool JoistMoveNote { get; set; }
 
     public List<Measurement> Measurements { get; } = [];
 

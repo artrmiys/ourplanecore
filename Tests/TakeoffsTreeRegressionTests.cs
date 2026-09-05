@@ -1597,7 +1597,7 @@ internal static class TakeoffsTreeRegressionTests
             "orange transform handles should keep top-left anchored for right/bottom scale paths while preserving legacy centered/left behavior");
 
         string rendering = ReadRepoFile("Controls/PdfViewport.MeasurementRendering.cs");
-        string pdfExporter = ReadRepoFile("Models/PdfExporter.cs");
+        string pdfExporter = ReadRepoFile("Models/PdfExporter.Preview.cs");
         AssertTrue(
             rendering.Contains("LayerOrderedMeasurements", StringComparison.Ordinal) &&
             rendering.Contains("\"area\" => 0", StringComparison.Ordinal) &&

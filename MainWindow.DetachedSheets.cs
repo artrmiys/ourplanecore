@@ -83,6 +83,8 @@ public partial class MainWindow
         viewport.PageAnnotationTextRequested += RequestPageAnnotationText;
         viewport.OrthoChanged += SynchronizeOrthoAcrossViewports;
         viewport.JoistDirectionCaptured += (area, start, end) => OnDetachedJoistDirectionCaptured(window, area, start, end, unitMode);
+        viewport.BeamMeasurementCompleted += request => OnBeamMeasurementCompleted(viewport, window.Page, window, request);
+        viewport.OpeningMeasurementCompleted += request => OnOpeningMeasurementCompleted(viewport, window.Page, window, request);
         // A focused detached window gets the SAME global shortcuts as the main
         // window (Space record toggle, T new takeoff, F4 scale, F5 page setup,
         // bookmark sequence, Ctrl+O/M/S...). MainWindow's handler never fires
@@ -319,7 +321,7 @@ public partial class MainWindow
     // clears its selection and raises empty selection-changed events. Those
     // must not wipe the Takeoffs tree selection, so every refresh goes through
     // this guard.
-    private void RefreshDetachedTakeoffDisplay(DetachedSheetWindow window, UnitMode unitMode)
+    private void RefreshDetachedTakeoffDisplay(DetachedSheetWindow window, UnitMode unitMode, bool preserveUndo = false)
     {
         if (_currentJob == null)
             return;
@@ -328,7 +330,7 @@ public partial class MainWindow
         _syncingViewportSelectionFromTakeoffItem = true;
         try
         {
-            window.RefreshTakeoffDisplay(_currentJob, _takeoffItems, _settings, unitMode);
+            window.RefreshTakeoffDisplay(_currentJob, _takeoffItems, _settings, unitMode, clearUndoStack: !preserveUndo);
         }
         finally
         {
@@ -680,7 +682,7 @@ public partial class MainWindow
             RefreshSheetLegend();
         }
 
-        RefreshDetachedTakeoffDisplay(window, unitMode);
+        RefreshDetachedTakeoffDisplay(window, unitMode, preserveUndo: true);
         _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
         RefreshEstimateTable();
         UpdateTotalDisplay();

@@ -381,6 +381,7 @@ public partial class MainWindow
             target.JoistShowLabels = source.JoistShowLabels;
             target.JoistShowLabelsUserSet = source.JoistShowLabelsUserSet;
             target.JoistDetailedLabels = source.JoistDetailedLabels;
+            target.JoistMoveNote = source.JoistMoveNote;
             return;
         }
 
@@ -401,6 +402,7 @@ public partial class MainWindow
         target.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joistMeasurement.JoistLengthRounding);
         target.JoistShowLabels = joistMeasurement.JoistShowLabels;
         target.JoistDetailedLabels = joistMeasurement.JoistDetailedLabels;
+        target.JoistMoveNote = joistMeasurement.JoistMoveNote;
     }
 
     private void MoveSelectedMeasurementsToTakeoff(

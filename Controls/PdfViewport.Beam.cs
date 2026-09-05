@@ -54,7 +54,8 @@ public sealed partial class PdfViewport
             lengthFeet,
             orderLengthFeet,
             orderLengthText,
-            _pageFolder));
+            _pageFolder,
+            annotation.Id));
     }
 
     private void AddOpeningMeasurementPoint(SKPoint pdf)
@@ -149,6 +150,21 @@ public sealed partial class PdfViewport
         RequestRepaint();
         PageAnnotationAdded?.Invoke(annotation);
         return annotation;
+    }
+
+    public void OffsetBeamDimension(BeamMeasurementRequest request, double offsetScreenPx)
+    {
+        PageAnnotation? dimension = _annotations.FirstOrDefault(a => a.Id == request.DimensionId);
+        if (dimension == null || IsReadOnlyMode)
+            return;
+
+        SKPoint offset = BeamTakeoffService.DimensionOffset(
+            request.StartPdf, request.EndPdf, request.CountPointPdf,
+            ScreenToPdfDistance((float)BeamAnnotationConfig.NormalizeDimensionOffset(offsetScreenPx)));
+        PushAnnotationUndoSnapshot(dimension, dimension.Points.ToList(), "move Beam dimension");
+        dimension.Points = [request.StartPdf + offset, request.EndPdf + offset];
+        PageAnnotationChanged?.Invoke(dimension);
+        RequestRepaint();
     }
 
     private SKPoint BeamCountPoint(SKPoint start, SKPoint end)

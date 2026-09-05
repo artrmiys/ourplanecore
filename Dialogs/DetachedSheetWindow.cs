@@ -38,11 +38,12 @@ public sealed class DetachedSheetWindow : Window
         OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> takeoffItems,
         AppSettings settings,
-        UnitMode unitMode)
+        UnitMode unitMode,
+        bool clearUndoStack = true)
     {
         PageInfo page = OurPlanCoreJobStore.TryReadPage(Page.FolderPath) ?? Page;
         ApplyViewportDisplaySettings(settings, unitMode);
-        _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements));
+        _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements), clearUndoStack);
         _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, page, takeoffItems));
         _viewport.SetHiddenMeasurementIds(page.HiddenMeasurements);
         _viewport.SetSheetLegend(settings.ShowSheetLegend

@@ -125,7 +125,8 @@ public static partial class PdfExporter
                     color,
                     centered: true,
                     ExportLabelScale(options),
-                    occupiedLabelBoxes,
+                    measurement.JoistEnabled && measurement.HasJoistNotePosition
+                        ? null : occupiedLabelBoxes,
                     pageBounds);
             }
             return;
@@ -218,6 +219,9 @@ public static partial class PdfExporter
 
     private static SKPoint MeasurementLabelPoint(Measurement measurement)
     {
+        if (measurement.JoistEnabled && measurement.HasJoistNotePosition)
+            return measurement.JoistNoteAnchor();
+
         if (measurement.Points.Count == 0)
             return default;
 

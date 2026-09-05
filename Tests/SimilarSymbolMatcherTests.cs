@@ -1656,8 +1656,8 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("showSimilarReviewOption: true", StringComparison.Ordinal) &&
             beamTool.Contains("Review similar Beam marks on this sheet", StringComparison.Ordinal) &&
             beamTool.Contains("Review similar Opening marks on this sheet", StringComparison.Ordinal) &&
-            beamTool.Contains("StartSimilarCountReview(BuildBeamSimilarCountRequest(request))", StringComparison.Ordinal) &&
-            beamTool.Contains("StartSimilarCountReview(BuildOpeningSimilarCountRequest(request))", StringComparison.Ordinal),
+            beamTool.Contains("StartBeamOpeningSimilarReview(page, BuildBeamSimilarCountRequest(request, page))", StringComparison.Ordinal) &&
+            beamTool.Contains("StartBeamOpeningSimilarReview(page, BuildOpeningSimilarCountRequest(request, page))", StringComparison.Ordinal),
             "Beam and Openings completion should optionally open Similar review against the newly created Count item");
         AssertTrue(
             beamTool.Contains("BuildBeamSimilarCountRequest", StringComparison.Ordinal) &&
@@ -1837,7 +1837,7 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("bool InitialIncludeRotations = false", StringComparison.Ordinal) &&
             viewport.Contains("bool InitialIncludeMirrored = false", StringComparison.Ordinal) &&
             viewport.Contains("PdfPageIndex: pdfPageIndex", StringComparison.Ordinal) &&
-            beamTool.Contains("PageInfo page = _currentPage ?? throw", StringComparison.Ordinal) &&
+            beamTool.Contains("BuildBeamSimilarCountRequest(BeamMeasurementRequest request, PageInfo page)", StringComparison.Ordinal) &&
             beamTool.Contains("PdfPath: page.PdfPath", StringComparison.Ordinal) &&
             beamTool.Contains("PdfPageIndex: page.PdfPage", StringComparison.Ordinal) &&
             beamTool.Contains("AllowExactTextMatches: false", StringComparison.Ordinal) &&

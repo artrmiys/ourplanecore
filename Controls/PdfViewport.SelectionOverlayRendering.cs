@@ -101,7 +101,7 @@ public sealed partial class PdfViewport
         ReferenceEquals(measurement, _selectedMeasurement) ||
         IsMeasurementSelected(measurement) && CanEditMeasurementVertices(measurement);
 
-    private void DrawLabel(SKCanvas canvas, SKPoint pos, string text, string hexColor)
+    private void DrawLabel(SKCanvas canvas, SKPoint pos, string text, string hexColor, bool centered = false)
     {
         if (string.IsNullOrEmpty(text)) return;
 
@@ -121,7 +121,7 @@ public sealed partial class PdfViewport
             GetCachedColor(hexColor, SKColors.DodgerBlue),
             MeasurementLabelFontScreenPx,
             MeasurementLabelPaddingScreenPx,
-            centered: false);
+            centered);
     }
 
     private void DrawScreenTextBox(

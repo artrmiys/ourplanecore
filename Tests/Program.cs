@@ -14,6 +14,19 @@ if (Environment.GetEnvironmentVariable("ONC_BENCH") == "1")
 if (args.Length > 0 && args[0] == "walltrace")
     return WallTraceHarness.Run(args);
 
+if (args.Length > 0 && args[0] == "feedback-tests")
+{
+    UserFeedbackTests.BeamOffsetPreservesLengthAndOpposesCount();
+    UserFeedbackTests.JoistNotePersistsThroughBothFormats();
+    UserFeedbackTests.JoistNoteDragUndoCancelAndReadOnly();
+    UserFeedbackTests.PreviewMatchesExportAndReactsToSettings();
+    Console.WriteLine("4/4 feedback checks passed");
+    return 0;
+}
+
+if (args.Length > 0 && args[0] == "feedback-ui-smoke")
+    return FeedbackUiSmokeHarness.Run();
+
 if (args.Length > 0 && args[0] == "sheetmetadata-golden")
     return SheetMetadataGoldenHarness.Run(args);
 
@@ -55,6 +68,10 @@ Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariab
 
 var tests = new List<(string Name, Action Run)>
 {
+    ("feedback Beam offset opposes Count and preserves length", UserFeedbackTests.BeamOffsetPreservesLengthAndOpposesCount),
+    ("feedback Joist note persists in both formats", UserFeedbackTests.JoistNotePersistsThroughBothFormats),
+    ("feedback Joist note drag undo cancel and read-only", UserFeedbackTests.JoistNoteDragUndoCancelAndReadOnly),
+    ("feedback PDF preview matches export and reacts to settings", UserFeedbackTests.PreviewMatchesExportAndReactsToSettings),
     ("measurement count value and label", MeasurementCountValueAndLabel),
     ("measurement line uses own scale first", MeasurementLineUsesOwnScaleFirst),
     ("measurement area uses fallback scale", MeasurementAreaUsesFallbackScale),

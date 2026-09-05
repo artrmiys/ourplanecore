@@ -151,6 +151,8 @@ public partial class MainWindow
         include.Children.Add(incRow2);
         root.Children.Add(RibbonGroupContainer("INCLUDE", include));
 
+        root.Children.Add(RibbonSep());
+        root.Children.Add(RibbonGroupContainer("PREVIEW", BuildPdfPreviewButton()));
         return root;
     }
 
@@ -249,6 +251,7 @@ public partial class MainWindow
                 _settings.PdfExportAreaFillOpacity = Math.Clamp(v / 100.0, 0.0, 1.0);
                 if (_txtOutputPdfAreaFill != null)
                     _txtOutputPdfAreaFill.Text = Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
+                QueuePdfOutputPreview();
                 _outputScaleDirty = true;
                 TxtStatus.Text = $"Output {OutputScaleLabel(key)}: {Math.Round(v):0}%.";
                 return;
@@ -268,6 +271,7 @@ public partial class MainWindow
                 return;
         }
 
+        QueuePdfOutputPreview();
         _outputScaleDirty = true;
         TxtStatus.Text = $"Output {OutputScaleLabel(key)}: {v:0.##}x.";
     }

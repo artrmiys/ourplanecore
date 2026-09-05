@@ -123,6 +123,8 @@ public sealed partial class PdfViewport
 
     private bool IsMeasurementVisible(Measurement measurement, SKRect visiblePdf)
     {
+        if (measurement.JoistEnabled && RectContains(visiblePdf, measurement.JoistNoteAnchor()))
+            return true;
         if (measurement.Points.Count == 0)
             return false;
 

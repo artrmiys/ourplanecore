@@ -135,9 +135,9 @@ public sealed partial class PdfViewport
                 }
                 if (drawDetails)
                     DrawJoistLayout(canvas, m, color, drawLabels);
-                var cen = Centroid(pts);
+                var cen = m.JoistEnabled ? m.JoistNoteAnchor() : Centroid(pts);
                 if (drawLabels && ShouldDrawMeasurementLabel("area"))
-                    DrawLabel(canvas, cen, m.Label(ScaleMetersPerPt, UnitMode), m.Color);
+                    DrawLabel(canvas, cen, m.Label(ScaleMetersPerPt, UnitMode), m.Color, m.JoistEnabled && m.HasJoistNotePosition);
                 break;
         }
     }
@@ -266,7 +266,8 @@ public sealed partial class PdfViewport
         var visibleMeasurements = new List<Measurement>(Math.Min(candidates.Count, 256));
         foreach (Measurement measurement in candidates)
         {
-            if (IsMeasurementSelected(measurement) || IsMeasurementVisible(measurement, visiblePdf))
+            if (IsMeasurementSelected(measurement) || IsMeasurementVisible(measurement, visiblePdf) ||
+                measurement.JoistEnabled && RectContains(visiblePdf, measurement.JoistNoteAnchor()))
                 visibleMeasurements.Add(measurement);
         }
 
@@ -320,9 +321,10 @@ public sealed partial class PdfViewport
             case "area" when points.Count >= 3:
                 if (isJoistArea ? ShouldDrawJoistSummaryLabel() : ShouldDrawMeasurementLabel("area"))
                 {
-                    SKPoint center = Centroid(points);
+                    SKPoint center = isJoistArea ? measurement.JoistNoteAnchor() : Centroid(points);
                     if (RectContains(visiblePdf, center))
-                        DrawLabel(canvas, center, MeasurementLabelText(measurement, joistLayout), measurement.Color);
+                        DrawLabel(canvas, center, MeasurementLabelText(measurement, joistLayout), measurement.Color,
+                            isJoistArea && measurement.HasJoistNotePosition);
                 }
                 break;
         }

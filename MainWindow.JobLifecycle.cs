@@ -253,6 +253,7 @@ public partial class MainWindow
         }
 
         OurPlanCoreJob? previousJob = _currentJob;
+        _pdfOutputPreview?.Close();
         _currentJob = nextJob;
         JobFileWriteActivity.SetCurrentJobRoot(nextJob.RootPath);
         if (previousJob != null && !SameJobPath(previousJob.RootPath, nextJob.RootPath))

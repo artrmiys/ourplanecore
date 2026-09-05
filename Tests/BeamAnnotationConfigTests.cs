@@ -39,7 +39,7 @@ internal static class BeamAnnotationConfigTests
             beam,
             "showBeamAnnotationOption: true",
             "defaultKeepBeamAnnotationLine: _beamAnnotationConfig.KeepLineAnnotation",
-            "_viewport.AddBeamAnnotationLine(");
+            "viewport.AddBeamAnnotationLine(");
         AssertContainsAll(
             viewport,
             "Kind = \"line\"",

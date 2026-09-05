@@ -33,7 +33,10 @@ public sealed partial class PdfViewport
                 CloneExtraJoists(measurement.ExtraJoists),
                 measurement.JoistStartEdgeEnabled,
                 measurement.JoistEndEdgeEnabled,
-                measurement.JoistEdgeOverridesSet))
+                measurement.JoistEdgeOverridesSet,
+                measurement.JoistNoteOffsetX,
+                measurement.JoistNoteOffsetY,
+                measurement.JoistNotePositionSet))
             .ToList();
         var annotationSnapshots = annotations
             .Where(annotation => _annotations.Contains(annotation))
@@ -102,7 +105,10 @@ public sealed partial class PdfViewport
                 CloneExtraJoists(beforeExtraJoists),
                 measurement.JoistStartEdgeEnabled,
                 measurement.JoistEndEdgeEnabled,
-                measurement.JoistEdgeOverridesSet)],
+                measurement.JoistEdgeOverridesSet,
+                measurement.JoistNoteOffsetX,
+                measurement.JoistNoteOffsetY,
+                measurement.JoistNotePositionSet)],
             [],
             [],
             [],
@@ -192,7 +198,10 @@ public sealed partial class PdfViewport
                     : CloneExtraJoists(pair.Key.ExtraJoists),
                 pair.Key.JoistStartEdgeEnabled,
                 pair.Key.JoistEndEdgeEnabled,
-                pair.Key.JoistEdgeOverridesSet))
+                pair.Key.JoistEdgeOverridesSet,
+                pair.Key.JoistNoteOffsetX,
+                pair.Key.JoistNoteOffsetY,
+                pair.Key.JoistNotePositionSet))
             .ToList();
         if (snapshots.Count == 0)
             return;
@@ -273,7 +282,10 @@ public sealed partial class PdfViewport
                     : CloneExtraJoists(pair.Key.ExtraJoists),
                 pair.Key.JoistStartEdgeEnabled,
                 pair.Key.JoistEndEdgeEnabled,
-                pair.Key.JoistEdgeOverridesSet))
+                pair.Key.JoistEdgeOverridesSet,
+                pair.Key.JoistNoteOffsetX,
+                pair.Key.JoistNoteOffsetY,
+                pair.Key.JoistNotePositionSet))
             .ToList();
         var annotationSnapshots = annotationBeforePoints
             .Where(pair => _annotations.Contains(pair.Key))
@@ -428,7 +440,10 @@ public sealed partial class PdfViewport
                     : CloneExtraJoists(pair.Key.ExtraJoists),
                 pair.Key.JoistStartEdgeEnabled,
                 pair.Key.JoistEndEdgeEnabled,
-                pair.Key.JoistEdgeOverridesSet))
+                pair.Key.JoistEdgeOverridesSet,
+                pair.Key.JoistNoteOffsetX,
+                pair.Key.JoistNoteOffsetY,
+                pair.Key.JoistNotePositionSet))
             .ToList();
 
         var addedSnapshots = addedMeasurements
@@ -618,6 +633,9 @@ public sealed partial class PdfViewport
                 snapshot.Target.JoistStartEdgeEnabled = snapshot.JoistStartEdgeEnabled;
                 snapshot.Target.JoistEndEdgeEnabled = snapshot.JoistEndEdgeEnabled;
                 snapshot.Target.JoistEdgeOverridesSet = snapshot.JoistEdgeOverridesSet;
+                snapshot.Target.JoistNoteOffsetX = snapshot.JoistNoteOffsetX;
+                snapshot.Target.JoistNoteOffsetY = snapshot.JoistNoteOffsetY;
+                snapshot.Target.JoistNotePositionSet = snapshot.JoistNotePositionSet;
                 PruneMeasurementVertexSelection(snapshot.Target);
                 PruneCutRegionSelection(snapshot.Target);
                 changedMeasurements.Add(snapshot.Target);
@@ -799,7 +817,10 @@ public sealed partial class PdfViewport
         List<JoistExtraSegment> ExtraJoists,
         bool JoistStartEdgeEnabled,
         bool JoistEndEdgeEnabled,
-        bool JoistEdgeOverridesSet);
+        bool JoistEdgeOverridesSet,
+        float JoistNoteOffsetX,
+        float JoistNoteOffsetY,
+        bool JoistNotePositionSet);
 
     private sealed record AnnotationPointUndo(PageAnnotation Target, List<SKPoint> Points, string Text);
 

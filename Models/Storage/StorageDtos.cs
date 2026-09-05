@@ -73,6 +73,15 @@ internal sealed class MeasurementDto
 
     [JsonPropertyName("extra_joists")]
     public List<JoistExtraSegmentDto> ExtraJoists { get; set; } = [];
+
+    [JsonPropertyName("joist_note_offset_x")]
+    public float JoistNoteOffsetX { get; set; }
+
+    [JsonPropertyName("joist_note_offset_y")]
+    public float JoistNoteOffsetY { get; set; }
+
+    [JsonPropertyName("joist_note_position_set")]
+    public bool JoistNotePositionSet { get; set; }
 }
 
 internal sealed class JoistExtraSegmentDto

@@ -164,6 +164,12 @@ public sealed partial class PdfViewport
             {
                 bool hasInProgressInput = _drawPts.Count > 0 || _scalePts.Count > 0 || _rubberEnd.HasValue;
 
+                if (TryBeginJoistNoteDrag(pdf))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
                 if (TryToggleJoistEdgeControl(pdf))
                 {
                     e.Handled = true;
@@ -365,6 +371,12 @@ public sealed partial class PdfViewport
         }
 
         if (TryUpdateSheetOverlayDrag(ScreenToPdf((float)pos.X, (float)pos.Y)))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (UpdateJoistNoteDrag(ScreenToPdf((float)pos.X, (float)pos.Y)))
         {
             e.Handled = true;
             return;
@@ -726,6 +738,12 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (e.ChangedButton == MouseButton.Left && FinishJoistNoteDrag())
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.ChangedButton == MouseButton.Left && FinishExtraJoistDrag())
         {
             e.Handled = true;
@@ -811,6 +829,7 @@ public sealed partial class PdfViewport
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
+        FinishJoistNoteDrag();
         FinishExtraJoistDrag();
         FinishTransformDrag();
         FinishMeasurementDrag();
@@ -872,6 +891,7 @@ public sealed partial class PdfViewport
         switch (key)
         {
             case Key.Escape:
+                if (FinishJoistNoteDrag(cancel: true)) { e.Handled = true; break; }
                 if (CancelExtraJoistPlacement(postStatus: true)) { e.Handled = true; break; }
                 if (CancelSheetOverlayDrag())
                 {

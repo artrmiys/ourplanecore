@@ -7,6 +7,10 @@ public sealed class BeamAnnotationConfig
     public int SchemaVersion { get; set; } = 1;
     public bool KeepLineAnnotation { get; set; }
     public string LineColor { get; set; } = "#FF0000";
+    public double DimensionOffsetPx { get; set; } = 28;
+
+    public static double NormalizeDimensionOffset(double value) =>
+        double.IsFinite(value) ? Math.Clamp(value, 0, 200) : 28;
 
     public static BeamAnnotationConfig BuildDefault() => new()
     {
@@ -19,6 +23,7 @@ public sealed class BeamAnnotationConfig
         SchemaVersion = 1,
         KeepLineAnnotation = KeepLineAnnotation,
         LineColor = NormalizeColor(LineColor),
+        DimensionOffsetPx = NormalizeDimensionOffset(DimensionOffsetPx),
     };
 
     public static BeamAnnotationConfig UpgradeForCurrentSchema(BeamAnnotationConfig? config) =>

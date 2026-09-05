@@ -35,6 +35,26 @@ public sealed class Measurement
     public string         JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
     public bool           JoistShowLabels { get; set; }
     public bool           JoistDetailedLabels { get; set; } = true;
+    public bool           JoistMoveNote { get; set; }
+    public float          JoistNoteOffsetX { get; set; }
+    public float          JoistNoteOffsetY { get; set; }
+    public bool           JoistNotePositionSet { get; set; }
+    public bool HasJoistNotePosition => JoistNotePositionSet || JoistNoteOffsetX != 0 || JoistNoteOffsetY != 0;
+
+    public SKPoint JoistNoteAnchor() => MeasurementGeometry.Centroid(Points) +
+        new SKPoint(JoistNoteOffsetX, JoistNoteOffsetY);
+
+    internal Measurement Snapshot()
+    {
+        var copy = (Measurement)MemberwiseClone();
+        copy.Points = Points.ToList();
+        copy.Holes = Holes.Select(hole => hole.ToList()).ToList();
+        copy.ExtraJoists = ExtraJoists.Select(extra => new JoistExtraSegment
+        {
+            Id = extra.Id, Start = extra.Start, End = extra.End,
+        }).ToList();
+        return copy;
+    }
     public List<JoistExtraSegment> ExtraJoists { get; set; } = [];
 
     public double Value(double scaleMetersPerPt)

@@ -379,6 +379,8 @@ public sealed class ViewportMeasurementSpatialIndex
             foreach (SKPoint point in hole)
                 IncludePoint(point, ref left, ref top, ref right, ref bottom);
 
+        if (measurement.JoistEnabled && measurement.HasJoistNotePosition)
+            IncludePoint(measurement.JoistNoteAnchor(), ref left, ref top, ref right, ref bottom);
         bounds = new SKRect(left, top, right, bottom);
         return true;
     }

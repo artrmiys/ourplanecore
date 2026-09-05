@@ -151,6 +151,7 @@ public static partial class SmartMassingDraftService
             JoistLengthRounding = item.JoistLengthRounding,
             JoistShowLabels = item.JoistShowLabels,
             JoistDetailedLabels = item.JoistDetailedLabels,
+            JoistMoveNote = item.JoistMoveNote,
         };
         clone.Measurements.AddRange(item.Measurements);
         return clone;

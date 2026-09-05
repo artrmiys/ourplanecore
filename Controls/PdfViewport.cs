@@ -75,7 +75,8 @@ public sealed record BeamMeasurementRequest(
     double LengthFeet,
     double OrderLengthFeet,
     string OrderLengthText,
-    string PageFolder);
+    string PageFolder,
+    string DimensionId = "");
 public sealed record OpeningMeasurementRequest(
     SKPoint FirstCornerPdf,
     SKPoint OppositeCornerPdf,

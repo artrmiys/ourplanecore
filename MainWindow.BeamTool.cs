@@ -18,25 +18,28 @@ public partial class MainWindow
     private const float BeamOpeningSimilarTextPaddingMaxPdf = 144f;
     private const float BeamOpeningSimilarTextPaddingRatio = 0.65f;
 
-    private void OnBeamMeasurementCompleted(BeamMeasurementRequest request)
+    private void OnBeamMeasurementCompleted(BeamMeasurementRequest request) =>
+        OnBeamMeasurementCompleted(_viewport, _currentPage, this, request);
+
+    private void OnBeamMeasurementCompleted(PdfViewport viewport, PageInfo? page, Window owner, BeamMeasurementRequest request)
     {
         if (!EnsureCurrentJobWritable("create a Beam takeoff"))
             return;
 
-        if (_currentJob == null || _currentPage == null)
+        if (_currentJob == null || page == null)
         {
             TxtStatus.Text = "Beam ruler was placed, but no job/page is open for the Count item.";
             return;
         }
 
-        if (!IsSamePageFolder(request.PageFolder, _currentPage.FolderPath))
+        if (!IsSamePageFolder(request.PageFolder, page.FolderPath))
         {
             TxtStatus.Text = "Beam ruler was placed, but the active sheet changed before the Count item was created.";
             return;
         }
 
         string parentFolder = NewTakeoffItemParentFolderForUserCreate();
-        string defaultColor = RandomTakeoffColor(_activeItem?.Color ?? _viewport.ActiveColor);
+        string defaultColor = RandomTakeoffColor(_activeItem?.Color ?? viewport.ActiveColor);
         string defaultName = BeamTakeoffService.BuildDefaultCountName(
             ResolveTakeoffFolderDefaultNamePrefix(parentFolder),
             request.OrderLengthText,
@@ -55,7 +58,7 @@ public partial class MainWindow
             defaultKeepBeamAnnotationLine: _beamAnnotationConfig.KeepLineAnnotation,
             defaultBeamAnnotationLineColor: _beamAnnotationConfig.LineColor)
         {
-            Owner = this,
+            Owner = owner,
         };
 
         if (dialog.ShowDialog() != true)
@@ -66,10 +69,13 @@ public partial class MainWindow
 
         RememberNewCountSymbol(dialog.ItemCountSymbol);
         bool beamLineAdded = dialog.KeepBeamAnnotationLine &&
-                             _viewport.AddBeamAnnotationLine(
+                             viewport.AddBeamAnnotationLine(
                                  request.StartPdf,
                                  request.EndPdf,
                                  dialog.BeamAnnotationLineColor) != null;
+
+        if (beamLineAdded)
+            viewport.OffsetBeamDimension(request, _beamAnnotationConfig.DimensionOffsetPx);
 
         TakeoffItem item = CreateUniqueTakeoffItem(dialog.ItemName, dialog.ItemColor, "point", parentFolder);
         ApplyTakeoffFolderDefaultsToNewItem(item, parentFolder);
@@ -83,13 +89,13 @@ public partial class MainWindow
 
         _activeItem = item;
         _activeTakeoffParentFolder = parentFolder;
-        _viewport.ActiveColor = item.Color;
-        _viewport.ActiveTakeoffFolder = item.FolderPath;
-        _viewport.ActiveCountSymbol = item.CountSymbol;
+        viewport.ActiveColor = item.Color;
+        viewport.ActiveTakeoffFolder = item.FolderPath;
+        viewport.ActiveCountSymbol = item.CountSymbol;
         tvi.IsSelected = true;
 
         SetTool("point");
-        _viewport.AddCountMeasurementAt(request.CountPointPdf);
+        viewport.AddCountMeasurementAt(request.CountPointPdf);
         UpdateToolStatus();
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
@@ -98,28 +104,31 @@ public partial class MainWindow
             : "";
         TxtStatus.Text = $"Beam Count created: {item.Name}. Ruler {request.LengthFeet:0.##} ft, order size {request.OrderLengthText}.{lineStatus} Use Similar to add reviewed matches to this Beam item.";
         if (dialog.MarkSimilarOnCurrentSheet)
-            StartSimilarCountReview(BuildBeamSimilarCountRequest(request));
+            StartBeamOpeningSimilarReview(page, BuildBeamSimilarCountRequest(request, page));
     }
 
-    private void OnOpeningMeasurementCompleted(OpeningMeasurementRequest request)
+    private void OnOpeningMeasurementCompleted(OpeningMeasurementRequest request) =>
+        OnOpeningMeasurementCompleted(_viewport, _currentPage, this, request);
+
+    private void OnOpeningMeasurementCompleted(PdfViewport viewport, PageInfo? page, Window owner, OpeningMeasurementRequest request)
     {
         if (!EnsureCurrentJobWritable("create an Openings takeoff"))
             return;
 
-        if (_currentJob == null || _currentPage == null)
+        if (_currentJob == null || page == null)
         {
             TxtStatus.Text = "Opening dimensions were placed, but no job/page is open for the Count item.";
             return;
         }
 
-        if (!IsSamePageFolder(request.PageFolder, _currentPage.FolderPath))
+        if (!IsSamePageFolder(request.PageFolder, page.FolderPath))
         {
             TxtStatus.Text = "Opening dimensions were placed, but the active sheet changed before the Count item was created.";
             return;
         }
 
         string parentFolder = NewTakeoffItemParentFolderForUserCreate();
-        string defaultColor = RandomTakeoffColor(_activeItem?.Color ?? _viewport.ActiveColor);
+        string defaultColor = RandomTakeoffColor(_activeItem?.Color ?? viewport.ActiveColor);
         string defaultName = OpeningTakeoffService.BuildDefaultCountName(request.SizeText);
 
         var dialog = new NewItemDialog(
@@ -132,7 +141,7 @@ public partial class MainWindow
             showSimilarReviewOption: true,
             similarReviewOptionText: "Review similar Opening marks on this sheet")
         {
-            Owner = this,
+            Owner = owner,
         };
 
         if (dialog.ShowDialog() != true)
@@ -155,24 +164,34 @@ public partial class MainWindow
 
         _activeItem = item;
         _activeTakeoffParentFolder = parentFolder;
-        _viewport.ActiveColor = item.Color;
-        _viewport.ActiveTakeoffFolder = item.FolderPath;
-        _viewport.ActiveCountSymbol = item.CountSymbol;
+        viewport.ActiveColor = item.Color;
+        viewport.ActiveTakeoffFolder = item.FolderPath;
+        viewport.ActiveCountSymbol = item.CountSymbol;
         tvi.IsSelected = true;
 
         SetTool("point");
-        _viewport.AddCountMeasurementAt(request.CountPointPdf);
+        viewport.AddCountMeasurementAt(request.CountPointPdf);
         UpdateToolStatus();
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
         TxtStatus.Text = $"Opening Count created: {item.Name}. Dimensions {request.SizeText}. Use Similar to add reviewed matches to this Opening item.";
         if (dialog.MarkSimilarOnCurrentSheet)
-            StartSimilarCountReview(BuildOpeningSimilarCountRequest(request));
+            StartBeamOpeningSimilarReview(page, BuildOpeningSimilarCountRequest(request, page));
     }
 
-    private ViewportSimilarCountRequest BuildBeamSimilarCountRequest(BeamMeasurementRequest request)
+    private void StartBeamOpeningSimilarReview(PageInfo page, ViewportSimilarCountRequest request)
     {
-        PageInfo page = _currentPage ?? throw new InvalidOperationException("Current page is required for Beam Similar.");
+        // Similar review uses the main canvas; bring the measured sheet there explicitly.
+        if (!IsSamePageFolder(_currentPage?.FolderPath, page.FolderPath))
+        {
+            _detachedSheetNavigationTarget = null;
+            SelectPageByFolder(page.FolderPath);
+        }
+        StartSimilarCountReview(request);
+    }
+
+    private ViewportSimilarCountRequest BuildBeamSimilarCountRequest(BeamMeasurementRequest request, PageInfo page)
+    {
         SKRect segmentRect = MeasurementGeometry.NormalizeRect(request.StartPdf, request.EndPdf);
         float segmentLength = MeasurementGeometry.Distance(request.StartPdf, request.EndPdf);
         float padding = SimilarBeamOpeningPadding(Math.Max(
@@ -184,7 +203,7 @@ public partial class MainWindow
         return new ViewportSimilarCountRequest(
             templateRect,
             request.PageFolder,
-            _viewport.ScaleMetersPerPt,
+            page.ScaleMetersPerPt,
             [request.CountPointPdf],
             PdfPath: page.PdfPath,
             PdfPageIndex: page.PdfPage,
@@ -201,9 +220,8 @@ public partial class MainWindow
             InitialIncludeMirrored: true);
     }
 
-    private ViewportSimilarCountRequest BuildOpeningSimilarCountRequest(OpeningMeasurementRequest request)
+    private ViewportSimilarCountRequest BuildOpeningSimilarCountRequest(OpeningMeasurementRequest request, PageInfo page)
     {
-        PageInfo page = _currentPage ?? throw new InvalidOperationException("Current page is required for Opening Similar.");
         SKRect openingRect = MeasurementGeometry.NormalizeRect(request.FirstCornerPdf, request.OppositeCornerPdf);
         float openingSize = Math.Max(openingRect.Width, openingRect.Height);
         float padding = SimilarOpeningPadding(openingSize);
@@ -211,7 +229,7 @@ public partial class MainWindow
         return new ViewportSimilarCountRequest(
             PadRect(openingRect, padding),
             request.PageFolder,
-            _viewport.ScaleMetersPerPt,
+            page.ScaleMetersPerPt,
             [request.CountPointPdf],
             PdfPath: page.PdfPath,
             PdfPageIndex: page.PdfPage,

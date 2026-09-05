@@ -795,10 +795,14 @@ public partial class MainWindow
             JoistStartEdgeEnabled = source.JoistStartEdgeEnabled,
             JoistEndEdgeEnabled = source.JoistEndEdgeEnabled,
             JoistEdgeOverridesSet = source.JoistEdgeOverridesSet,
+            JoistNoteOffsetX = source.JoistNoteOffsetX,
+            JoistNoteOffsetY = source.JoistNoteOffsetY,
+            JoistNotePositionSet = source.JoistNotePositionSet,
             JoistPitch = source.JoistPitch,
             JoistLengthRounding = source.JoistLengthRounding,
             JoistShowLabels = source.JoistShowLabels,
             JoistDetailedLabels = source.JoistDetailedLabels,
+            JoistMoveNote = source.JoistMoveNote,
             ExtraJoists = source.ExtraJoists
                 .Select(extra => new JoistExtraSegment
                 {

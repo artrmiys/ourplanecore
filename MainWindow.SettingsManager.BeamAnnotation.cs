@@ -10,6 +10,7 @@ public partial class MainWindow
     private BeamAnnotationConfig _beamAnnotationConfig = BeamAnnotationConfig.BuildDefault();
     private CheckBox? _beamAnnotationKeepLineBox;
     private ColorSwatchPicker? _beamAnnotationColorPicker;
+    private TextBox? _beamDimensionOffsetBox;
     private TextBlock? _beamAnnotationStatus;
     private bool _beamAnnotationBinding;
 
@@ -47,6 +48,19 @@ public partial class MainWindow
         _beamAnnotationColorPicker.SelectedColorChanged += _ => RefreshBeamAnnotationColorStatus();
         colorRow.Children.Add(_beamAnnotationColorPicker);
         root.Children.Add(colorRow);
+
+        var offsetRow = HBar();
+        offsetRow.Children.Add(new TextBlock
+        {
+            Text = "Dimension offset (px):", Width = 150, VerticalAlignment = VerticalAlignment.Center,
+        });
+        _beamDimensionOffsetBox = new TextBox
+        {
+            Width = 70,
+            ToolTip = "Offset the dimension opposite the Count when keeping a Beam line. 0 restores overlapping lines. Range: 0-200 pixels at creation zoom.",
+        };
+        offsetRow.Children.Add(_beamDimensionOffsetBox);
+        root.Children.Add(offsetRow);
 
         _beamAnnotationStatus = StatusLine();
         root.Children.Add(_beamAnnotationStatus);
@@ -92,6 +106,8 @@ public partial class MainWindow
             _beamAnnotationKeepLineBox.IsChecked = config.KeepLineAnnotation;
             _beamAnnotationColorPicker.SetSelectedColor(config.LineColor);
             _beamAnnotationColorPicker.IsEnabled = config.KeepLineAnnotation;
+            if (_beamDimensionOffsetBox != null)
+                _beamDimensionOffsetBox.Text = config.DimensionOffsetPx.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
         }
         finally
         {
@@ -109,10 +125,19 @@ public partial class MainWindow
             return false;
         }
 
+        if (!double.TryParse(_beamDimensionOffsetBox?.Text.Replace(',', '.'),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+                out double offset) || !double.IsFinite(offset) || offset < 0 || offset > 200)
+        {
+            SetBeamAnnotationStatus("Dimension offset must be between 0 and 200 px.");
+            return false;
+        }
+
         config = new BeamAnnotationConfig
         {
             KeepLineAnnotation = _beamAnnotationKeepLineBox.IsChecked == true,
             LineColor = _beamAnnotationColorPicker.SelectedColor,
+            DimensionOffsetPx = offset,
         };
         return true;
     }
