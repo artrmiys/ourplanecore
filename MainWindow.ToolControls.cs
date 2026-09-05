@@ -68,7 +68,7 @@ public partial class MainWindow
             SetTool("select");
     }
 
-    private void SetTool(string tool, bool forceNewTakeoff = false)
+    private void SetTool(string tool, bool forceNewTakeoff = false, bool repeatDrawing = false)
     {
         if (IsCurrentJobReadOnly && tool is not ("pan" or "select"))
         {
@@ -90,21 +90,25 @@ public partial class MainWindow
             return;
         }
 
+        _repeatDrawingTool = repeatDrawing && tool is "beam" or "line" ? tool : null;
         ApplyToolSelection(tool);
     }
 
     private void ApplyToolSelection(string tool)
     {
+        if (_repeatDrawingTool != tool)
+            _repeatDrawingTool = null;
         _activeTool = tool;
         if (IsRecordTool(tool))
             _lastDrawingTool = tool;
-        _viewport.SetTool(ViewportToolName(tool));
+        _viewport.SetTool(ViewportToolName(tool), repeatDrawing: _repeatDrawingTool == tool);
         // Detached sheet windows follow the main tool so takeoffs can be drawn
         // there without re-arming the tool inside each window.
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
             ApplyDetachedTool(window, tool);
         foreach (var (t, btn) in _toolBtns)
-            btn.IsChecked = t == tool;
+            btn.IsChecked = t == tool && _repeatDrawingTool == null;
+        SyncRepeatDrawingButtons();
         UpdateAnnotationMenuButton();
         UpdateRecordButton();
         UpdateToolStatus();
@@ -113,7 +117,8 @@ public partial class MainWindow
     private void SyncToolButtonsToActiveTool()
     {
         foreach (var (t, btn) in _toolBtns)
-            btn.IsChecked = t == _activeTool;
+            btn.IsChecked = t == _activeTool && _repeatDrawingTool == null;
+        SyncRepeatDrawingButtons();
         UpdateAnnotationMenuButton();
         UpdateRecordButton();
         UpdateToolStatus();

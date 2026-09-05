@@ -61,6 +61,14 @@ public partial class MainWindow
         if (ShouldSkipTakeoffShortcut(e.OriginalSource as DependencyObject))
             return;
 
+        if (key == Key.Escape && _repeatDrawingTool != null)
+        {
+            SetTool("select");
+            TxtStatus.Text = "Repeat drawing stopped.";
+            e.Handled = true;
+            return;
+        }
+
         if (HandleGlobalModifiedShortcut(key))
         {
             e.Handled = true;

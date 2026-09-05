@@ -68,6 +68,13 @@ Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariab
 
 var tests = new List<(string Name, Action Run)>
 {
+    ("repeat Line creates independent scaled segments", RepeatDrawingTests.RepeatLineCreatesIndependentScaledSegments),
+    ("repeat stops on cancel tool change read-only and page close", RepeatDrawingTests.RepeatStopsOnCancelToolChangeReadOnlyAndPageClose),
+    ("normal Line keeps polyline completion and scale gate", RepeatDrawingTests.NormalLineKeepsPolylineCompletionAndScaleGate),
+    ("PDF preview plain wheel zooms around cursor", PdfPreviewInteractionTests.PlainWheelZoomsAroundCursor),
+    ("PDF preview zoom anchor and free right drag", PdfPreviewInteractionTests.ZoomPreservesAnchorAndRightDragPansFreely),
+    ("PDF preview live refresh preserves manual view", PdfPreviewInteractionTests.LiveFrameRefreshPreservesManualView),
+    ("PDF preview fit resets pan and permits small page drag", PdfPreviewInteractionTests.FitResetsPanAndAllowsDraggingSmallPage),
     ("feedback Beam offset opposes Count and preserves length", UserFeedbackTests.BeamOffsetPreservesLengthAndOpposesCount),
     ("feedback Joist note persists in both formats", UserFeedbackTests.JoistNotePersistsThroughBothFormats),
     ("feedback Joist note drag undo cancel and read-only", UserFeedbackTests.JoistNoteDragUndoCancelAndReadOnly),

@@ -38,7 +38,10 @@ public partial class MainWindow
             return;
         }
         _pdfOutputPreview?.Close();
-        var window = new PdfOutputPreviewWindow(page.Name) { Owner = this };
+        var window = new PdfOutputPreviewWindow(page.Name)
+        {
+            Owner = this, ZoomWheelFactor = _settings.ViewportZoomWheelFactor,
+        };
         _pdfOutputPreview = window;
         OurPlanCoreJob job = _currentJob;
         var session = new PdfExporter.PreviewSession();
@@ -50,6 +53,7 @@ public partial class MainWindow
         void Queue()
         {
             if (closed) return;
+            window.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
             revision++;
             window.SetUpdating();
             if (!rendering) timer.Start();

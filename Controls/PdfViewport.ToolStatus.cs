@@ -75,6 +75,14 @@ public sealed partial class PdfViewport
                     break;
                 }
 
+                if (IsRepeatDrawingActive)
+                {
+                    PostStatus(_drawPts.Count == 0
+                        ? $"Repeat Line: click the first endpoint. Esc stops.{modes}"
+                        : $"Repeat Line: click the second endpoint. Esc stops.{modes}");
+                    break;
+                }
+
                 PostStatus(_drawPts.Count switch
                 {
                     0 => $"Line Record: click the first point.{modes}",
@@ -151,9 +159,11 @@ public sealed partial class PdfViewport
                     break;
                 }
 
+                string beamMode = IsRepeatDrawingActive ? "Repeat Beam" : "Beam";
+                string beamExit = IsRepeatDrawingActive ? " Esc stops." : "";
                 PostStatus(_drawPts.Count == 0
-                    ? $"Beam: click the first endpoint.{modes}"
-                    : $"Beam: click the second endpoint to create the Ruler and Count item.{modes}");
+                    ? $"{beamMode}: click the first endpoint.{beamExit}{modes}"
+                    : $"{beamMode}: click the second endpoint to create the Ruler and Count item.{beamExit}{modes}");
                 break;
             case ViewerTool.Openings:
                 if (IsMissingScaleForLinearArea())

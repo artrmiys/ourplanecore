@@ -76,6 +76,8 @@ public partial class MainWindow
             "areacut" => "Area Cut",
             _ => "Pan",
         };
+        if (_repeatDrawingTool != null)
+            return $"Mode: Repeat {title}";
         return IsRecordTool(_activeTool) ? $"Mode: Record {title}" : $"Mode: {title}";
     }
 

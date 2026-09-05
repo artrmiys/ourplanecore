@@ -79,6 +79,9 @@ public sealed partial class PdfViewport
             case ViewerTool.Area when BoxModeEnabled:
                 AddBoxMeasurementPoint(pdf);
                 break;
+            case ViewerTool.Line when IsRepeatDrawingActive:
+                AddRepeatLinePoint(pdf);
+                break;
             case ViewerTool.Line:
             case ViewerTool.Area:
                 if (_tool == ViewerTool.Area && TryFinishOpenAreaAt(pdf, FinalizeDrawing))

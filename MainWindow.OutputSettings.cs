@@ -133,8 +133,8 @@ public partial class MainWindow
 
         // ── GROUP: OVERLAYS (Legend / Header sizes, same as Viewport) ──
         var overlays = new StackPanel { Orientation = Orientation.Vertical };
-        overlays.Children.Add(OutputScaleRow("Legend", _sldOutputPdfLegend, _txtOutputPdfLegend));
-        overlays.Children.Add(OutputScaleRow("Header", _sldOutputPdfHeader, _txtOutputPdfHeader));
+        overlays.Children.Add(OutputScaleRow("Legend", _sldOutputPdfLegend, _txtOutputPdfLegend, 44));
+        overlays.Children.Add(OutputScaleRow("Header", _sldOutputPdfHeader, _txtOutputPdfHeader, 44));
         root.Children.Add(RibbonGroupContainer("OVERLAYS", overlays));
 
         root.Children.Add(RibbonSep());
@@ -157,7 +157,7 @@ public partial class MainWindow
     }
 
     private static StackPanel OutputHRow() =>
-        new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
+        new() { Orientation = Orientation.Horizontal, Height = 22, Margin = new Thickness(0, 1, 0, 1) };
 
     private FrameworkElement RibbonGroupContainer(string label, UIElement content)
     {
@@ -191,10 +191,10 @@ public partial class MainWindow
         Style = TryFindResource("RibbonGroupSep") as Style,
     };
 
-    private FrameworkElement OutputScaleRow(string text, Slider slider, TextBox box)
+    private FrameworkElement OutputScaleRow(string text, Slider slider, TextBox box, double labelWidth = 34)
     {
-        var g = new Grid { Margin = new Thickness(0, 1, 0, 1) };
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
+        var g = new Grid { Height = 22, Margin = new Thickness(0, 1, 0, 1) };
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(labelWidth) });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var lbl = new TextBlock { Text = text, Style = TryFindResource("RibbonRowLabel") as Style };

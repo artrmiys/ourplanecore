@@ -283,6 +283,7 @@ public partial class MainWindow
         SetVisible(BtnPointAlongLine, advanced);
         SetVisible(BtnJoistArea, advanced);
         SetVisible(BtnBeam, advanced);
+        SetVisible(BtnBeamRepeat, advanced);
         SetVisible(BtnOpenings, advanced);
         SetVisible(BtnAreaCut, advanced);
         SetVisible(BtnMergeSelectedMeasurements, advanced);

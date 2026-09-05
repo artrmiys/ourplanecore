@@ -23,6 +23,7 @@ public partial class MainWindow
 
     private void OnBeamMeasurementCompleted(PdfViewport viewport, PageInfo? page, Window owner, BeamMeasurementRequest request)
     {
+        bool repeatDrawing = viewport.IsRepeatDrawingActive;
         if (!EnsureCurrentJobWritable("create a Beam takeoff"))
             return;
 
@@ -63,6 +64,8 @@ public partial class MainWindow
 
         if (dialog.ShowDialog() != true)
         {
+            if (repeatDrawing)
+                SetTool("select");
             TxtStatus.Text = $"Beam ruler kept: {request.LengthFeet:0.##} ft. Count item cancelled.";
             return;
         }
@@ -94,7 +97,7 @@ public partial class MainWindow
         viewport.ActiveCountSymbol = item.CountSymbol;
         tvi.IsSelected = true;
 
-        SetTool("point");
+        SetTool(repeatDrawing ? "beam" : "point", repeatDrawing: repeatDrawing);
         viewport.AddCountMeasurementAt(request.CountPointPdf);
         UpdateToolStatus();
         RefreshActiveTakeoffVisuals();
@@ -105,6 +108,8 @@ public partial class MainWindow
         TxtStatus.Text = $"Beam Count created: {item.Name}. Ruler {request.LengthFeet:0.##} ft, order size {request.OrderLengthText}.{lineStatus} Use Similar to add reviewed matches to this Beam item.";
         if (dialog.MarkSimilarOnCurrentSheet)
             StartBeamOpeningSimilarReview(page, BuildBeamSimilarCountRequest(request, page));
+        else if (repeatDrawing)
+            TxtStatus.Text += " Repeat Beam: click the next two endpoints. Esc stops.";
     }
 
     private void OnOpeningMeasurementCompleted(OpeningMeasurementRequest request) =>

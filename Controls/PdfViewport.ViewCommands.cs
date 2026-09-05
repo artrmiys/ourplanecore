@@ -17,7 +17,7 @@ namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    public void SetTool(string name)
+    public void SetTool(string name, bool repeatDrawing = false)
     {
         ViewerTool requestedTool = name.ToLower() switch
         {
@@ -48,6 +48,7 @@ public sealed partial class PdfViewport
         }
 
         CancelExtraJoistPlacement(postStatus: false);
+        IsRepeatDrawingActive = repeatDrawing && requestedTool is ViewerTool.Beam or ViewerTool.Line;
         _tool = requestedTool;
         if (requestedTool is ViewerTool.Ruler or ViewerTool.Pitch or ViewerTool.DrawHighlight or ViewerTool.DrawLine or
             ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or

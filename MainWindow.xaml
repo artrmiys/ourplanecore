@@ -425,7 +425,7 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <Grid Margin="0,1">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="44"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Ruler" Style="{StaticResource RibbonRowLabel}"/>
                                     <Slider Grid.Column="1" x:Name="SldRulerThickness" Minimum="0.5" Maximum="6" SmallChange="0.25" LargeChange="0.5"
                                             Width="76"
@@ -478,7 +478,7 @@
                         <!-- GROUP: LABELS -->
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                            <StackPanel Orientation="Horizontal" Height="22" Margin="0,1">
                                 <CheckBox x:Name="ChkDisplayMeasurementLabels" Content="All" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Show every measurement label category"/>
                                 <CheckBox x:Name="ChkDisplayLineLabels" Content="Line" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
@@ -490,13 +490,13 @@
                                 <CheckBox x:Name="ChkDisplayCountLabels" Content="Count" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Show count label on each count measurement"/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                            <StackPanel Orientation="Horizontal" Height="22" Margin="0,1">
                                 <TextBlock Text="Size" Style="{StaticResource RibbonRowLabel}"/>
                                 <Slider x:Name="SldLabelScale" Minimum="0.25" Maximum="3" SmallChange="0.25" LargeChange="0.5"
-                                        Style="{StaticResource RibbonSlider}"
+                                        Width="76" Style="{StaticResource RibbonSlider}"
                                         ValueChanged="SldLabelScale_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
                                         ToolTip="Value label size 0.25 - 3.0"/>
-                                <TextBox x:Name="TxtMeasurementLabelScale" Text="1.0" Style="{StaticResource RibbonValue}"
+                                <TextBox x:Name="TxtMeasurementLabelScale" Text="1.0" Style="{StaticResource RibbonNumericValue}"
                                          KeyDown="TxtMeasurementLabelScale_KeyDown" LostFocus="TxtMeasurementLabelScale_LostFocus"
                                          ToolTip="Type a label size 0.25 - 3.0 and press Enter"/>
                                 <CheckBox x:Name="ChkDisplayLabelsScaleWithPage" Content="w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
@@ -514,40 +514,53 @@
                         <!-- GROUP: OVERLAYS -->
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
-                                <TextBlock Text="Legend" Style="{StaticResource RibbonRowLabel}"/>
-                                <CheckBox x:Name="ChkDisplayLegend" Content="Show" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="24"/><RowDefinition Height="24"/></Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Margin="0,0,8,0">
+                                <Grid.RowDefinitions><RowDefinition Height="24"/><RowDefinition Height="24"/></Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Legend" Style="{StaticResource RibbonRowLabel}"/>
+                                <CheckBox Grid.Row="0" Grid.Column="1" x:Name="ChkDisplayLegend" Content="Show" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Show or hide the legend overlay on the active sheet"/>
-                                <Button Content="Size" Click="BtnLegendSizeMenu_Click" Style="{StaticResource TopCommandButton}"
+                                <Button Grid.Row="0" Grid.Column="2" Content="Size" Click="BtnLegendSizeMenu_Click" Style="{StaticResource TopCommandButton}"
                                         ToolTip="Pick legend size preset"/>
-                                <Button Content="Pos" Click="BtnLegendPositionMenu_Click" Style="{StaticResource TopCommandButton}"
+                                <Button Grid.Row="0" Grid.Column="3" Content="Pos" Click="BtnLegendPositionMenu_Click" Style="{StaticResource TopCommandButton}"
                                         ToolTip="Pick legend anchor (corner/edge of the sheet)"/>
-                                <CheckBox x:Name="ChkDisplayLegendScaleWithPage" Content="w/page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                <CheckBox Grid.Row="0" Grid.Column="4" x:Name="ChkDisplayLegendScaleWithPage" Content="w/page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Off (default): legend keeps a fixed screen size when zooming. On: legend grows/shrinks with page zoom."/>
-                            </StackPanel>
-                            <WrapPanel Orientation="Horizontal" Margin="0,1" Width="560">
-                                <TextBlock Text="Header" Style="{StaticResource RibbonRowLabel}"/>
-                                <Button Content="Size" Click="BtnScaleHeaderSizeMenu_Click" Style="{StaticResource TopCommandButton}"
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Header" Style="{StaticResource RibbonRowLabel}"/>
+                                <Button Grid.Row="1" Grid.Column="2" Content="Size" Click="BtnScaleHeaderSizeMenu_Click" Style="{StaticResource TopCommandButton}"
                                         ToolTip="Pick header size preset"/>
-                                <CheckBox x:Name="ChkDisplayHeaderScaleWithPage" Content="w/page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                <CheckBox Grid.Row="1" Grid.Column="4" x:Name="ChkDisplayHeaderScaleWithPage" Content="w/page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Off (default): header keeps a fixed screen size when zooming. On: header grows/shrinks with page zoom."/>
+                            </Grid>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
                                 <CheckBox x:Name="ChkDisplaySimplifyNavigation" Content="Fast pan/zoom" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                          Margin="6,0,7,0"
                                           ToolTip="Simplify overlays while panning or zooming. Faster on heavy sheets, off by default for full visual quality."/>
                                 <CheckBox x:Name="ChkDisplayPdfLayers" Content="PDF layers" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           Margin="0,0,7,0"
                                           ToolTip="Enable the PDF Layers panel and per-page layer scanning. Off by default: pages render faster without layer discovery."/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
                                 <CheckBox x:Name="ChkDisplayStaticRaster" Content="Static image" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           Margin="0,0,7,0"
                                           ToolTip="On by default (PlanSwift-style): show each page as one fixed 150 DPI raster image with no live re-rendering while you zoom or pan. Turn on PDF layers to use the live layer renderer instead. Trade-off: the image softens above ~200% zoom — enable 'Black vector' for crisp linework."/>
                                 <CheckBox x:Name="ChkDisplayBlackVector" Content="Black vector" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           Margin="0,0,7,0"
                                           ToolTip="Draw crisp black vector linework on top of the static image, razor-sharp at any zoom. Only lines are vector — text, hatches and fills stay raster; scanned PDFs have no vectors to draw."/>
-                                <TextBlock Text="DPI" Style="{StaticResource RibbonRowLabel}"/>
-                                <TextBox x:Name="TxtStaticRasterDpi" Text="150" Style="{StaticResource RibbonValue}"
+                                <TextBlock Text="DPI" MinWidth="24" Style="{StaticResource RibbonRowLabel}"/>
+                                <TextBox x:Name="TxtStaticRasterDpi" Text="150" Width="40" Style="{StaticResource RibbonNumericValue}"
                                          KeyDown="TxtStaticRasterDpi_KeyDown" LostFocus="TxtStaticRasterDpi_LostFocus"
                                          ToolTip="Resolution the static page image is rendered at (72–300 DPI). Default 150. Higher stays sharper when zoomed in but uses more memory and disk; the page is rebuilt once and cached."/>
-                            </WrapPanel>
+                            </StackPanel>
+                            </Grid>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
                                 <TextBlock Text="OVERLAYS / RENDER" Style="{StaticResource RibbonGroupLabel}"/>
@@ -559,29 +572,35 @@
                         <!-- GROUP: UNITS / VIEW -->
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
-                                <CheckBox x:Name="ChkDisplayImperial" Content="ft / sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="24"/><RowDefinition Height="24"/></Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="58"/>
+                                    <ColumnDefinition Width="44"/>
+                                    <ColumnDefinition Width="101"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Row="0" Grid.Column="0" x:Name="ChkDisplayImperial" Content="ft / sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Imperial units (ft / sf / ea). Off = metric."/>
-                                <TextBlock Text="Render" Style="{StaticResource RibbonRowLabel}"/>
-                                <ComboBox x:Name="ComboViewportRenderQuality" Width="92" FontSize="11" Margin="0,0,5,0"
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="Render" Style="{StaticResource RibbonRowLabel}"/>
+                                <ComboBox Grid.Row="0" Grid.Column="2" x:Name="ComboViewportRenderQuality" Width="96" Height="22" MinHeight="22" Padding="6,1" VerticalAlignment="Center" FontSize="11" Margin="0,0,5,0"
                                           SelectionChanged="ComboViewportRenderQuality_SelectionChanged"
                                           ToolTip="Viewport PDF render RAM/quality profile">
                                     <ComboBoxItem Content="Balanced"/>
                                     <ComboBoxItem Content="High"/>
                                     <ComboBoxItem Content="Max"/>
                                 </ComboBox>
-                                <TextBlock Text="Edge" Style="{StaticResource RibbonRowLabel}"/>
-                                <ComboBox x:Name="ComboDisplayViewportBackground" Width="96" FontSize="11" Margin="0,0,5,0"
+                                <TextBlock Grid.Row="0" Grid.Column="3" Text="Edge" Style="{StaticResource RibbonRowLabel}"/>
+                                <ComboBox Grid.Row="0" Grid.Column="4" x:Name="ComboDisplayViewportBackground" Width="96" Height="22" MinHeight="22" Padding="6,1" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="11" Margin="0,0,5,0"
                                           SelectionChanged="ComboDisplayViewportBackground_SelectionChanged"
                                           ToolTip="Choose the background around the sheet">
                                     <ComboBoxItem Content="White" Tag="#FFFFFF"/>
                                     <ComboBoxItem Content="Gray" Tag="#F2F2F2"/>
                                     <ComboBoxItem Content="Dark" Tag="#2B2B2B"/>
                                 </ComboBox>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
-                                <TextBlock Text="Paper" Style="{StaticResource RibbonRowLabel}"/>
-                                <ComboBox x:Name="ComboDisplayPageBackground" Width="96" FontSize="11" Margin="0,0,5,0"
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="Paper" Style="{StaticResource RibbonRowLabel}"/>
+                                <ComboBox Grid.Row="1" Grid.Column="2" x:Name="ComboDisplayPageBackground" Width="96" Height="22" MinHeight="22" Padding="6,1" VerticalAlignment="Center" FontSize="11" Margin="0,0,5,0"
                                           SelectionChanged="ComboDisplayPageBackground_SelectionChanged"
                                           ToolTip="Choose a softer page background tint">
                                     <ComboBoxItem Content="White" Tag="#FFFFFF"/>
@@ -592,20 +611,21 @@
                                     <ComboBoxItem Content="Soft green" Tag="#EFF7ED"/>
                                     <ComboBoxItem Content="Black" Tag="#000000"/>
                                 </ComboBox>
-                                <ToggleButton x:Name="BtnDisplayDarkTheme" Content="Dark" Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"
+                                <ToggleButton Grid.Row="1" Grid.Column="0" x:Name="BtnDisplayDarkTheme" Content="Dark" Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"
+                                              HorizontalAlignment="Left" Height="22"
                                               Style="{StaticResource TopCommandToggle}"
                                               ToolTip="Toggle dark/light UI theme"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
-                                <TextBlock Text="Zoom" Style="{StaticResource RibbonRowLabel}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="3" Text="Zoom" Style="{StaticResource RibbonRowLabel}"/>
+                            <StackPanel Grid.Row="1" Grid.Column="4" Orientation="Horizontal">
                                 <Slider x:Name="SldZoomWheelFactor" Minimum="1.05" Maximum="2.5" SmallChange="0.05" LargeChange="0.25"
-                                        Style="{StaticResource RibbonSlider}"
+                                        Width="76" Style="{StaticResource RibbonSlider}"
                                         ValueChanged="SldZoomWheelFactor_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
                                         ToolTip="Mouse-wheel zoom step per notch 1.05 - 2.5x (PlanSwift-fast at 2x)"/>
-                                <TextBox x:Name="TxtZoomWheelFactor" Text="2.0" Style="{StaticResource RibbonValue}"
+                                <TextBox x:Name="TxtZoomWheelFactor" Text="2.0" Width="40" Style="{StaticResource RibbonNumericValue}"
                                          KeyDown="TxtZoomWheelFactor_KeyDown" LostFocus="TxtZoomWheelFactor_LostFocus"
                                          ToolTip="Type a wheel zoom step 1.05 - 2.5x and press Enter"/>
                             </StackPanel>
+                            </Grid>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
                                 <TextBlock Text="UNITS &amp; VIEW" Style="{StaticResource RibbonGroupLabel}"/>
@@ -784,6 +804,10 @@
                     <TextBlock Text="Line" VerticalAlignment="Center"/>
                 </StackPanel>
             </RadioButton>
+            <RadioButton x:Name="BtnLineRepeat" Click="BtnRepeatDrawing_Click" Tag="line"
+                         GroupName="DrawingTool" Content="↻"
+                         ToolTip="Repeat Line: create a Line item, then draw separate two-point segments. Esc stops."
+                         Style="{StaticResource ToolRadio}" MinWidth="26" Padding="4,3"/>
             <RadioButton x:Name="BtnArea" Click="BtnTool_Click" Tag="area"
                          GroupName="DrawingTool" ToolTip="Create a new Area item and start recording (A). Use the active target Record button to continue an existing item"
                          Style="{StaticResource ToolRadio}" MinWidth="58" Padding="5,3">
@@ -808,6 +832,10 @@
                     <TextBlock Text="Beam" VerticalAlignment="Center"/>
                 </StackPanel>
             </RadioButton>
+            <RadioButton x:Name="BtnBeamRepeat" Click="BtnRepeatDrawing_Click" Tag="beam"
+                         GroupName="DrawingTool" Content="↻"
+                         ToolTip="Repeat Beam: measure and create each Beam, then draw the next. Esc stops."
+                         Style="{StaticResource ToolRadio}" MinWidth="26" Padding="4,3"/>
             <RadioButton x:Name="BtnOpenings" Click="BtnTool_Click" Tag="openings"
                          GroupName="DrawingTool" ToolTip="Measure an opening box, create a Count item, and place the Count mark in the center (O)"
                          Style="{StaticResource ToolRadio}" MinWidth="62" Padding="5,3">

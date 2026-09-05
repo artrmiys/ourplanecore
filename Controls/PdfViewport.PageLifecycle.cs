@@ -19,6 +19,7 @@ public sealed partial class PdfViewport
 {
     public void ClearPage()
     {
+        StopRepeatDrawing();
         CancelExtraJoistPlacement(postStatus: false);
         _pdfPath = "";
         _pdfIndex = 0;

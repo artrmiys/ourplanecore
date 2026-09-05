@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -89,6 +90,9 @@ internal static class FeedbackUiSmokeHarness
                 Check(items.Count == 3 && items[2].Measurements.Single().PageFolder == Get<PageInfo>(main, "_currentPage").FolderPath, "main Beam remains functional");
                 checks.Add("Main Beam regression passed");
 
+                RepeatDrawingTests.CheckUi(main, detached, items);
+                checks.Add("Repeat Beam and Line buttons, detached targets, Escape and normal tools passed");
+
                 await CheckJoistNoteUi(main, detached, job, items, root);
                 checks.Add("Joists Properties checkbox, detached note drag, Undo and saved position passed");
 
@@ -97,11 +101,23 @@ internal static class FeedbackUiSmokeHarness
                 var preview = Get<PdfOutputPreviewWindow>(main, "_pdfOutputPreview");
                 await Wait(() => preview.PdfBytes != null);
                 Check(preview.Title.Contains(pageB.Name), "preview opens the current detached sheet");
+                var previewSurface = Get<Canvas>(preview, "_surface");
+                double zoomBeforeWheel = Get<double>(preview, "_zoom");
+                var wheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, 120)
+                {
+                    RoutedEvent = UIElement.PreviewMouseWheelEvent,
+                };
+                previewSurface.RaiseEvent(wheel);
+                Check(wheel.Handled && Get<double>(preview, "_zoom") > zoomBeforeWheel, "plain wheel zooms in real preview");
+                PdfPreviewInteractionTests.Pan(preview, new Point(200, 150), new Point(330, 205));
+                Matrix manualView = PdfPreviewInteractionTests.Matrix(preview);
+                checks.Add("Plain wheel zoom and free right-drag pan passed in live preview");
                 byte[] before = SHA256.HashData(preview.PdfBytes!);
                 var slider = Get<Slider>(main, "_sldOutputPdfLabel");
                 slider.Value = 3.2;
                 await Wait(() => preview.PdfBytes != null && !before.SequenceEqual(SHA256.HashData(preview.PdfBytes)));
-                checks.Add("Nonmodal current-sheet preview reacts to real slider events");
+                Check(PdfPreviewInteractionTests.Matrix(preview) == manualView, "slider refresh preserves preview zoom and pan");
+                checks.Add("Nonmodal current-sheet preview reacts to real slider events and preserves zoom and pan");
                 Capture(preview, Path.Combine(root, "live-preview.png"));
                 File.WriteAllBytes(Path.Combine(root, "preview.pdf"), preview.PdfBytes!);
 
@@ -110,9 +126,12 @@ internal static class FeedbackUiSmokeHarness
                 legendBox.IsChecked = false;
                 legendBox.RaiseEvent(new RoutedEventArgs(CheckBox.ClickEvent));
                 await Wait(() => !before.SequenceEqual(SHA256.HashData(preview.PdfBytes!)));
-                checks.Add("Preview reacts to legend checkbox");
+                Check(PdfPreviewInteractionTests.Matrix(preview) == manualView, "legend refresh preserves preview zoom and pan");
+                checks.Add("Preview reacts to legend checkbox and preserves zoom and pan");
                 preview.Close();
                 detached.Close();
+                await CaptureRibbonTabs(main, root);
+                checks.Add("PDF Output, Viewport and Display ribbon screenshots captured at 1100 and 1280 pixels");
                 result = 0;
             }
             catch (Exception ex)
@@ -228,7 +247,26 @@ internal static class FeedbackUiSmokeHarness
         }
     }
 
-    private static void Capture(Window window, string path)
+    private static async Task CaptureRibbonTabs(MainWindow main, string root)
+    {
+        TabControl tabs = Get<TabControl>(main, "TopMainTabs");
+        main.WindowState = WindowState.Normal;
+        main.Height = 850;
+        foreach (int width in new[] { 1100, 1280 })
+        {
+            main.Width = width;
+            foreach (string header in new[] { "PDF Output", "Viewport", "Display" })
+            {
+                tabs.Items.OfType<TabItem>().Single(tab => tab.Header?.ToString() == header).IsSelected = true;
+                main.UpdateLayout();
+                await Task.Delay(150);
+                string stem = header.ToLowerInvariant().Replace(' ', '-');
+                Capture(tabs, Path.Combine(root, $"ribbon-{stem}-{width}.png"));
+            }
+        }
+    }
+
+    private static void Capture(FrameworkElement window, string path)
     {
         var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(window);

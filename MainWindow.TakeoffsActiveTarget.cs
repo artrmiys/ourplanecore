@@ -64,6 +64,13 @@ public partial class MainWindow
 
     private bool TryBlockTakeoffSwitchDuringRecord(TakeoffItem? requestedItem)
     {
+        if (_repeatDrawingTool != null &&
+            (requestedItem == null || !IsActiveTakeoffItem(requestedItem)))
+        {
+            SetTool("select");
+            return false;
+        }
+
         if (!IsTakeoffRecordActive() || _activeItem == null)
             return false;
 

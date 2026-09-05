@@ -514,7 +514,7 @@ public partial class MainWindow
             ApplyDetachedActiveTakeoff(window.Viewport, _activeItem);
         }
 
-        window.Viewport.SetTool(ViewportToolName(requestedTool));
+        window.Viewport.SetTool(ViewportToolName(requestedTool), repeatDrawing: _repeatDrawingTool == requestedTool);
     }
 
     private void OnDetachedMeasurementAdded(DetachedSheetWindow window, Measurement measurement, UnitMode unitMode)

@@ -20,6 +20,7 @@ public sealed partial class PdfViewport
             if (!value)
                 return;
 
+            StopRepeatDrawing();
             CancelMutableInteractionForReadOnly();
             _tool = ViewerTool.Select;
             UpdateCursor();

@@ -322,7 +322,7 @@ public sealed partial class PdfViewport
 
             // Double-click (ClickCount==2) finishes a line/area without adding an extra point.
             // Single-click (ClickCount==1) adds a vertex as usual.
-            if (e.ClickCount == 2 &&
+            if (e.ClickCount == 2 && !IsRepeatDrawingActive &&
                 (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.DrawLine or ViewerTool.DrawArea ||
                  _tool == ViewerTool.AreaCut && !BoxModeEnabled))
             {
@@ -942,7 +942,8 @@ public sealed partial class PdfViewport
                     break;
                 }
 
-                CompleteOrCancelDrawing();
+                if (!StopRepeatDrawing())
+                    CompleteOrCancelDrawing();
                 e.Handled = true;
                 break;
             case Key.Enter:
