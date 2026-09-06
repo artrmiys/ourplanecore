@@ -388,6 +388,7 @@ public sealed partial class PdfViewport : SKElement
     private readonly System.Windows.Threading.DispatcherTimer _navigationIdleTimer;
     private bool _zoomRerenderForce;
     private bool _repaintQueued;
+    private bool _repaintRequestedWhileQueued;
     private bool _isFastNavigating;
     private bool _renderNavigationFastFrame;
     private bool _showingPreviousPageDuringSwitch;
@@ -606,18 +607,31 @@ public sealed partial class PdfViewport : SKElement
 
         ViewportPerformanceRecorder.RecordRepaintRequest(_pageFolder, _repaintQueued, crossThreadRequest);
         if (_repaintQueued)
+        {
+            _repaintRequestedWhileQueued = true;
             return;
+        }
 
         PrepareBitmapForImmediateRepaint();
         TryStartPendingSimilarCountSelection();
         if (_repaintQueued)
+        {
+            _repaintRequestedWhileQueued = true;
             return;
+        }
 
         _repaintQueued = true;
         InvalidateVisual();
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() =>
         {
             _repaintQueued = false;
+            // WPF may already have painted before this callback runs. A request
+            // arriving in that gap still needs a frame, even though it coalesced.
+            if (_repaintRequestedWhileQueued)
+            {
+                _repaintRequestedWhileQueued = false;
+                RequestRepaint();
+            }
         }));
     }
 

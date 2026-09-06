@@ -24,6 +24,9 @@ public sealed partial class PdfViewport
 
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
     {
+        // This frame consumes requests received before painting. Requests made
+        // during or after it must still schedule the trailing frame.
+        _repaintRequestedWhileQueued = false;
         if (UpdateCanvasMetrics(e.Info.Width, e.Info.Height))
             ClampPanToPage();
 

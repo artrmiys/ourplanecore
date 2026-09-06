@@ -114,10 +114,15 @@ public sealed partial class PdfViewport
                     null))
             {
                 wrapper.Dispose();
-                return master.Copy();
+                SKBitmap copy = master.Copy();
+                copy.SetImmutable();
+                return copy;
             }
 
             state.Leases++;
+            // This wrapper has its own pixel ref. Freeze it too so DrawBitmap's
+            // SKImage.FromBitmap can share pixels instead of copying the full page.
+            wrapper.SetImmutable();
             return wrapper;
         }
 
@@ -215,6 +220,7 @@ public sealed partial class PdfViewport
         public void Put(string key, float widthPt, float heightPt, float bitmapScale, SKBitmap bitmap)
         {
             SKBitmap copy = bitmap.Copy();
+            copy.SetImmutable();
             lock (_gate)
             {
                 if (_entries.TryGetValue(key, out CacheEntry? existing))
@@ -379,6 +385,7 @@ public sealed partial class PdfViewport
             IReadOnlyList<PdfLayer> layers)
         {
             SKBitmap copy = bitmap.Copy();
+            copy.SetImmutable();
             long bytes = EstimateBitmapBytes(copy);
             var layerCopy = layers
                 .Select(layer => new PdfLayer(layer.Number, layer.Name, layer.IsOn, layer.IsHighlighted))

@@ -853,6 +853,11 @@ var tests = new List<(string Name, Action Run)>
 
 tests.AddRange(DataSafetyTests.Cases);
 tests.Add(("magnified raster preserves interpolated pixels after navigation", ViewportZoomSamplingTests.MagnifiedRasterDoesNotChangePixelsAfterNavigation));
+tests.Add(("cached raster images share native pixels and survive lease eviction", ViewportBitmapLeaseTests.CachedImagesSharePixelsAndSurviveEviction));
+tests.Add(("visual change after paint receives a trailing frame", ViewportRepaintSchedulingTests.VisualChangeAfterPaintBeforeQueueResetGetsTrailingFrame));
+tests.Add(("repaint burst stays coalesced and becomes idle", ViewportRepaintSchedulingTests.RepaintBurstStaysCoalescedAndBecomesIdle));
+tests.Add(("worker repaint is dispatched and painted", ViewportRepaintSchedulingTests.CrossThreadRepaintIsDispatchedAndPainted));
+tests.Add(("offscreen snapshot preserves the latest repaint color", ViewportRepaintSchedulingTests.OffscreenSnapshotBetweenRequestsKeepsLatestColor));
 tests.AddRange(new (string Name, Action Run)[]
 {
     ("custom shortcuts preserve legacy defaults", CustomKeyboardShortcutTests.DefaultsStaySparseAndPreserveLegacyKeys),
