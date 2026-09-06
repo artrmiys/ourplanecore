@@ -25,6 +25,7 @@ public partial class MainWindow
         {
             if (pages.Count < 100 || measurementCount < 500)
                 throw new InvalidOperationException("This check requires a real project with at least 100 sheets and 500 measurements.");
+            await WaitForStorage();
             if (!_takeoffSaveService.Flush().Success) throw new IOException("Initial takeoff flush failed.");
             SaveCurrentPageAnnotations();
             var before = RealProjectMetadata(job);
@@ -98,11 +99,21 @@ public partial class MainWindow
 
             async Task Step(string name, Action action)
             {
+                await WaitForStorage();
                 Stopwatch watch = Stopwatch.StartNew(); action(); watch.Stop();
                 steps.Add(new { Operation = name, ActionMs = watch.ElapsedMilliseconds });
                 await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 await Task.Delay(200);
                 if (_currentPage is { } page) CaptureViewportSmokeImage(page, name.Replace(' ', '-'));
+            }
+            async Task WaitForStorage()
+            {
+                DateTime deadline = DateTime.UtcNow.AddMinutes(3);
+                while (JobFileWriteActivity.HasActivePackageCheckpoints || JobFileWriteActivity.HasActiveBackgroundWriters)
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Project storage did not settle before the operation check.");
+                    await Task.Delay(100);
+                }
             }
             void CheckTotals()
             {

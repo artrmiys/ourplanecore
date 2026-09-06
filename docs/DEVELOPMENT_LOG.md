@@ -11,6 +11,10 @@
   passed. Added opt-in real-project performance and preservation verification.
 - See [preview handoff](DATA_SAFETY_PREVIEW_2026_09_06.md) for behavior, recovery
   limits, verification commands and isolated package requirements.
+- Large-project QA found valid raster images failing to decode when deep
+  workspace paths exceeded MAX_PATH. Switched filename decoding to managed
+  file streams, preserving cache use and avoiding fallback renders. A 298-char
+  filesystem regression covers full images and overview pixel preservation.
 
 ## 2026-08-08 Sharp Sheet Open, Pitch, Value Export, and Viewport Layout
 

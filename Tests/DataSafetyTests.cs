@@ -30,6 +30,7 @@ internal static class DataSafetyTests
         ("data safety page source cannot escape project root", EscapingPageSource),
         ("data safety interrupted undo recovers on job open", InterruptedUndo),
         ("data safety overlay source cannot escape project root", EscapingOverlay),
+        ("raster cache loads full image and overview beyond MAX_PATH", LongRasterPaths),
     };
 
     private static void ReadStates() => WithJob(job =>
@@ -312,6 +313,27 @@ internal static class DataSafetyTests
         File.WriteAllText(SheetOverlayLayerStore.ManifestPath(page.FolderPath), "{\"layers\":[{\"source_page_folder\":\"../../../../private\"}]}");
         Check(SheetOverlayLayerStore.Load(page.FolderPath).Layers.Count == 0, "Unsafe overlay not loaded");
         Check(DataFileReader.IsProtected(page.FolderPath), "Unsafe overlay protected");
+    });
+    private static void LongRasterPaths() => WithJob(job =>
+    {
+        PageInfo page = OurPlanCoreJobStore.CreateBlankPage(job, "A1", job.PagesRoot);
+        string folder = Path.Combine(page.FolderPath, new string('a', 90), new string('b', 90));
+        Directory.CreateDirectory(folder);
+        string imagePath = Path.Combine(folder, "working.png");
+        using var original = new SKBitmap(32, 24);
+        original.Erase(SKColors.Red);
+        using var image = SKImage.FromBitmap(original);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        File.WriteAllBytes(imagePath, encoded.ToArray());
+        Check(imagePath.Length > 260, "Long real filesystem path");
+        using SKBitmap? native = SKBitmap.Decode(imagePath);
+        Console.WriteLine($"Raster path proof: {imagePath.Length} characters; native filename decode={(native == null ? "failed" : "available")}");
+        var source = new RasterSheetSource { Enabled = true, RenderProfile = RasterSheetCacheService.SourceImageRasterProfile, Image = Path.GetRelativePath(page.FolderPath, imagePath),
+            OverviewImage = Path.GetRelativePath(page.FolderPath, imagePath), WidthPt = 32, HeightPt = 24, RenderScale = 1, OverviewRenderScale = 1 };
+        Check(RasterSheetCacheService.TryReadReady(page.FolderPath, page.PdfPath, source, out var full, out string reason), "Full raster: " + reason);
+        using (full.Bitmap) Check(full.Bitmap.Width == 32 && full.Bitmap.GetPixel(10, 10) == SKColors.Red, "Full image pixels retained");
+        Check(RasterSheetCacheService.TryReadOverviewReady(page.FolderPath, page.PdfPath, source, out var overview, out reason), "Overview: " + reason);
+        using (overview.Bitmap) Check(overview.Bitmap.Height == 24 && overview.Bitmap.GetPixel(10, 10) == SKColors.Red, "Overview pixels retained");
     });
     private static Dictionary<string, string> Metadata(OurPlanCoreJob job) => Directory.GetFiles(job.RootPath, "*", SearchOption.AllDirectories)
         .Where(p => !Path.GetRelativePath(job.RootPath, p).StartsWith(".undo", StringComparison.OrdinalIgnoreCase))

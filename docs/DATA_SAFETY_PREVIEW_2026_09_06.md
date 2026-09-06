@@ -40,8 +40,9 @@ and original backups remain for recovery once access is restored.
 
 ## Verification
 
-- Build: zero warnings/errors; console regression suite: 790/790, including
-  24 new data-safety cases; Python metadata/crop tests: 26 + 3 passed.
+- Build: zero warnings/errors; baseline console regression suite: 790/790;
+  the added long-path raster test makes 791 total. Python metadata/crop tests:
+  26 + 3 passed. The final run is recorded with release QA artifacts.
 - Actual WPF command smoke passed scoped A/S, sibling isolation, measurement
   links, exact undo bytes and the recovery dialog's Retry action.
 - Existing feedback UI smoke passed detached Beam/Opening, repeat tools,
@@ -53,6 +54,12 @@ and original backups remain for recovery once access is restored.
   compares Pages/Takeoffs JSON/XML hashes after Undo, checks all item quantities,
   and injects a failed move and a locked measurement read. Results and images
   are kept with local release artifacts rather than the source repository.
+- The large-project run exposed native filename decoding failure above Windows
+  MAX_PATH: valid raster caches were ignored, triggering slower PDF rendering
+  and unnecessary raster rebuilds. `RasterBitmapFile` opens through managed
+  streams instead. Regression coverage reproduces native failure at 298
+  characters and verifies full/overview dimensions and pixels through the
+  production cache-reader methods.
 
 ```powershell
 dotnet build .\ourplancore.sln

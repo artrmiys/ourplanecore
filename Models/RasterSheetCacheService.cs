@@ -374,7 +374,7 @@ public static class RasterSheetCacheService
             if (!File.Exists(candidatePath))
                 continue;
 
-            using SKBitmap? bitmap = SKBitmap.Decode(candidatePath);
+            using SKBitmap? bitmap = RasterBitmapFile.Decode(candidatePath);
             if (bitmap == null)
                 continue;
 
@@ -802,7 +802,7 @@ public static class RasterSheetCacheService
         if (!File.Exists(imagePath))
             return false;
 
-        using SKBitmap? bitmap = SKBitmap.Decode(imagePath);
+        using SKBitmap? bitmap = RasterBitmapFile.Decode(imagePath);
         if (bitmap == null)
         {
             error = $"active raster image could not be decoded: {imagePath}";
@@ -1286,7 +1286,7 @@ public static class RasterSheetCacheService
             return false;
         }
 
-        SKBitmap? bitmap = SKBitmap.Decode(imagePath);
+        SKBitmap? bitmap = RasterBitmapFile.Decode(imagePath);
         if (bitmap == null)
         {
             reason = "image file could not be decoded";
@@ -1332,7 +1332,7 @@ public static class RasterSheetCacheService
             return false;
         }
 
-        SKBitmap? bitmap = SKBitmap.Decode(imagePath);
+        SKBitmap? bitmap = RasterBitmapFile.Decode(imagePath);
         if (bitmap == null)
         {
             reason = "overview image file could not be decoded";
