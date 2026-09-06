@@ -114,6 +114,8 @@ public partial class MainWindow
 
         if (IsTruthyEnvironment(ViewportPageStressTreeOpsEnv))
             RunViewportTreeOpsSmoke(report);
+        if (IsTruthyEnvironment("OURPLANCORE_REAL_PROJECT_SAFETY_SMOKE"))
+            await RunRealProjectSafetySmokeAsync();
     }
 
     private async Task WaitForInitialViewportPagePaintAsync(ViewportPageStressSmokeReport report, int timeoutMs)
@@ -151,6 +153,7 @@ public partial class MainWindow
             result.PostZoomRenderReadyMs = phaseWatch.ElapsedMilliseconds;
             phaseWatch.Restart();
             result.VisualProbe = ProbeViewportSurfaceOpacity();
+            CaptureViewportSmokeImage(page, "fit");
             phaseWatch.Stop();
             result.VisualProbeMs = phaseWatch.ElapsedMilliseconds;
             result.Passed = result.VisualProbe.Passed;
@@ -321,6 +324,7 @@ public partial class MainWindow
             ZoomSmokeStep detail = await WaitForViewportDetailSmokeStepAsync(page, timeoutMs);
             result.ZoomDetailReadyMs = detail.ElapsedMs;
             steps.Add(detail);
+            CaptureViewportSmokeImage(page, "detail");
             steps.Add(await RunViewportSmokeStepAsync("restore", () => _viewport.RestoreViewState(start)));
             return steps;
         }

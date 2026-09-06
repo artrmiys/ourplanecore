@@ -114,6 +114,7 @@ public static class AppDataMigration
 
     private static void TryRun(bool includeDeferred)
     {
+        if (AppIdentity.IsIsolatedPreview) return;
         try
         {
             RunCore(

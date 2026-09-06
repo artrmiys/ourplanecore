@@ -27,6 +27,9 @@ if (args.Length > 0 && args[0] == "feedback-tests")
 if (args.Length > 0 && args[0] == "feedback-ui-smoke")
     return FeedbackUiSmokeHarness.Run();
 
+if (args.Length > 0 && args[0] == "data-safety-ui-smoke")
+    return DataSafetyUiSmokeHarness.Run();
+
 if (args.Length > 0 && args[0] == "sheetmetadata-golden")
     return SheetMetadataGoldenHarness.Run(args);
 
@@ -835,6 +838,9 @@ var tests = new List<(string Name, Action Run)>
     ("pdf snap index finds nearest segment", PdfSnapIndexFindsNearestSegment),
     ("pdf raster edge snap bridges small endpoint gaps", PdfRasterEdgeSnapBridgesSmallEndpointGaps),
 };
+
+tests.AddRange(DataSafetyTests.Cases);
+if (args.Contains("data-safety-tests")) tests = DataSafetyTests.Cases.ToList();
 
 int passed = 0;
 var failures = new List<string>();

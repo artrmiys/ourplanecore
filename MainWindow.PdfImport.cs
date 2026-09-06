@@ -232,6 +232,7 @@ public partial class MainWindow
 
         try
         {
+            using var operation = BeginPageOperation("Import PDF files");
             if (importButton != null)
                 importButton.IsEnabled = false;
 
@@ -314,6 +315,7 @@ public partial class MainWindow
                 InvalidatePagePreviewPrefetchCache();
                 QueueImportedPagePreviewWarmup(createdPages);
             }
+            operation.Commit();
         }
         catch (Exception ex)
         {

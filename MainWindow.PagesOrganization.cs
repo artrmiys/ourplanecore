@@ -142,6 +142,7 @@ public partial class MainWindow
 
         try
         {
+            using var operation = BeginPageSort("Sort A/S");
             string imported = OurPlanCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. imported");
             string arch = OurPlanCoreJobStore.EnsureFolder(imported, "Arch");
             string struc = OurPlanCoreJobStore.EnsureFolder(imported, "Struct");
@@ -153,6 +154,7 @@ public partial class MainWindow
                 others,
                 imported,
                 "");
+            operation.Commit();
         }
         catch (Exception ex)
         {
@@ -177,6 +179,7 @@ public partial class MainWindow
 
         try
         {
+            using var operation = BeginPageSort("Sort A/S");
             string arch = EnsurePagesChildFolder(scopeFolder, "Arch");
             string struc = EnsurePagesChildFolder(scopeFolder, "Struct");
             string others = EnsurePagesChildFolder(scopeFolder, "--------others");
@@ -188,6 +191,7 @@ public partial class MainWindow
                 others,
                 scopeFolder,
                 scopeLabel);
+            operation.Commit();
         }
         catch (Exception ex)
         {
@@ -335,6 +339,7 @@ public partial class MainWindow
 
     private void SortPagesBySuffix(string scopeFolder, bool scopedToSelectedFolder)
     {
+        using var operation = BeginPageSort("Sort D/Sec/WT");
         PageSortConfig cfg = PageSortRulesService.Active;
 
         // Pre-create each distinct destination folder referenced by the rules
@@ -406,6 +411,7 @@ public partial class MainWindow
             $"Sort D/Sec/WT{scopeLabel}: top {movedTop}" +
             (perFolder.Length > 0 ? $", {perFolder}" : "") +
             $", reordered {reorderedTop}, skipped {skipped}.";
+        operation.Commit();
     }
 
     private string CurrentSelectedPagesFolderOrRoot(out bool scopedToSelectedFolder)

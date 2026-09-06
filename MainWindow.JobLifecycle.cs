@@ -198,7 +198,7 @@ public partial class MainWindow
 
         if (reloadCurrent)
         {
-            if (!PrepareCurrentJobForSwitch())
+            if (!currentJobPrepared && !PrepareCurrentJobForSwitch())
                 return false;
             try
             {
@@ -339,7 +339,8 @@ public partial class MainWindow
     private void ReportCorruptJsonFiles()
     {
         IReadOnlyList<string> corruptFiles = OurPlanCoreJobStore.DrainCorruptJsonFiles();
-        if (corruptFiles.Count == 0)
+        int protectedCount = _currentJob == null ? 0 : DataFileReader.Issues(_currentJob.RootPath).Count;
+        if (corruptFiles.Count == 0 && protectedCount == 0)
             return;
 
         string details = string.Join(Environment.NewLine, corruptFiles.Take(8));
@@ -347,7 +348,7 @@ public partial class MainWindow
             details += $"{Environment.NewLine}...and {corruptFiles.Count - 8} more.";
 
         MessageBox.Show(
-            $"Some project JSON files could not be read and were moved aside for manual recovery.{Environment.NewLine}{Environment.NewLine}{details}",
+            $"Some project data could not be read. Affected files are protected from overwrite. Open Project Data Recovery from the project menu to retry or restore a known-good copy.{Environment.NewLine}{Environment.NewLine}{details}",
             "Project Data Warning",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);

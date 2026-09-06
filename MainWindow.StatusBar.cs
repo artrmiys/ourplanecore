@@ -86,6 +86,9 @@ public partial class MainWindow
         if (_currentJob == null)
             return "Save: --";
 
+        if (DataFileReader.IsProtected(_currentJob.RootPath))
+            return "Save: Protected data — open Project Data Recovery";
+
         if (HasCurrentPackageSession)
         {
             if (_takeoffSaveService.State != TakeoffSaveState.Clean ||

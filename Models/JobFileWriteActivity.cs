@@ -75,6 +75,17 @@ internal static class JobFileWriteActivity
         }
     }
 
+    public static IDisposable BeginBulkWrite()
+    {
+        lock (Gate)
+        {
+            if (_packageCheckpoints > 0)
+                throw new IOException("A project checkpoint is still being written. Retry the operation when saving finishes.");
+            _activeBackgroundWriters++;
+            return new Scope(backgroundWriter: true);
+        }
+    }
+
     public static bool HasActivePackageCheckpoints
     {
         get

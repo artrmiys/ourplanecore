@@ -9,7 +9,7 @@ internal static class OurPlanFileAssociationService
 
     public static void EnsureRegisteredForCurrentExecutable()
     {
-        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(Environment.ProcessPath))
+        if (AppIdentity.IsIsolatedPreview || !OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(Environment.ProcessPath))
             return;
 
         try

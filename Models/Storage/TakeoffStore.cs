@@ -176,25 +176,13 @@ internal static class TakeoffStore
 
     public static List<Measurement> LoadMeasurements(string takeoffFolder)
     {
-        string path = MeasurementsJsonPath(takeoffFolder);
-        if (!File.Exists(path)) return [];
-
-        try
-        {
-            var dtos = ParseMeasurementDtos(File.ReadAllText(path));
-            return dtos.Select(dto => ToMeasurement(dto, takeoffFolder)).ToList();
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            OurPlanCoreJobStore.QuarantineCorruptJson(path, "LoadMeasurements", ex);
-            return [];
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"LoadMeasurements failed for {path}");
-            return [];
-        }
+        return ReadMeasurements(takeoffFolder).Value ?? [];
     }
+
+    internal static DataFileResult<List<Measurement>> ReadMeasurements(string takeoffFolder) =>
+        DataFileReader.Read(MeasurementsJsonPath(takeoffFolder), json =>
+            ParseMeasurementDtos(json).Select(dto => dto == null || dto.PointsPdf == null
+                ? throw new JsonException("Invalid measurement entry.") : ToMeasurement(dto, takeoffFolder)).ToList());
 
     // Current on-disk format version for measurements.json. Writes still emit
     // the legacy bare array, so this is the version a future envelope-writing
@@ -203,19 +191,27 @@ internal static class TakeoffStore
 
     // Accept both the legacy bare array and a { schema_version, measurements }
     // envelope so a future format bump cannot make old files look corrupt.
-    private static List<MeasurementDto> ParseMeasurementDtos(string json)
+    internal static List<MeasurementDto> ParseMeasurementDtos(string json)
     {
         if (string.IsNullOrWhiteSpace(json))
-            return [];
+            throw new JsonException("The measurements document is empty.");
 
         int i = 0;
         while (i < json.Length && char.IsWhiteSpace(json[i]))
             i++;
 
         if (i < json.Length && json[i] == '{')
-            return JsonSerializer.Deserialize<MeasurementsFileDto>(json)?.Measurements ?? [];
+        {
+            using JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("measurements", out JsonElement values) ||
+                values.ValueKind != JsonValueKind.Array ||
+                !doc.RootElement.TryGetProperty("schema_version", out JsonElement version) ||
+                !version.TryGetInt32(out int schema) || schema != CurrentMeasurementsSchemaVersion)
+                throw new JsonException("Unsupported measurements schema.");
+            return JsonSerializer.Deserialize<MeasurementsFileDto>(json)?.Measurements ?? throw new JsonException("Missing measurements.");
+        }
 
-        return JsonSerializer.Deserialize<List<MeasurementDto>>(json) ?? [];
+        return JsonSerializer.Deserialize<List<MeasurementDto>>(json) ?? throw new JsonException("Missing measurements.");
     }
 
     internal static bool TryReadMeasurementCount(string takeoffFolder, out int count)

@@ -425,6 +425,7 @@ public partial class MainWindow
 
         try
         {
+            using var operation = BeginPageOperation("Reorder or move pages");
             string targetParent = Path.GetDirectoryName(targetPath) ?? "";
             if (string.IsNullOrWhiteSpace(targetParent))
                 return;
@@ -480,6 +481,7 @@ public partial class MainWindow
             TxtStatus.Text = changed.Count == 1
                 ? $"Moved page/folder {(after ? "below" : "above")} {OurPlanCoreJobStore.DisplayName(targetPath)}."
                 : $"Moved {changed.Count} page/folder items {(after ? "below" : "above")} {OurPlanCoreJobStore.DisplayName(targetPath)}.";
+            operation.Commit();
         }
         catch (Exception ex)
         {
@@ -498,6 +500,7 @@ public partial class MainWindow
         string root = _currentJob.PagesRoot;
         try
         {
+            using var operation = BeginPageOperation("Move pages to root");
             var changed = new List<string>();
             bool reloadActiveTab = false;
             bool movedIntoRoot = false;
@@ -543,6 +546,7 @@ public partial class MainWindow
             TxtStatus.Text = reordered || movedIntoRoot
                 ? RootBottomDroppedStatus(changed.Count)
                 : "Selected page/folder item(s) are already at Pages root bottom.";
+            operation.Commit();
         }
         catch (Exception ex)
         {

@@ -12,23 +12,8 @@ public static class PageTakeoffLayerOrderStore
 
     public static IReadOnlyList<string> Load(string pageFolder)
     {
-        string path = Path.Combine(pageFolder, FileName);
-        if (!File.Exists(path))
-            return [];
-
-        try
-        {
-            string json = File.ReadAllText(path);
-            PageTakeoffLayerOrderFile? file = System.Text.Json.JsonSerializer.Deserialize<PageTakeoffLayerOrderFile>(
-                json,
-                OurPlanCoreJobStore.JsonOptions);
-            return Normalize(file?.Order);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        {
-            AppLog.Warn(ex, $"Failed to read takeoff layer order from {path}");
-            return [];
-        }
+        var loaded = DataFileReader.ReadJson<PageTakeoffLayerOrderFile>(Path.Combine(pageFolder, FileName));
+        return Normalize(loaded.Value?.Order);
     }
 
     public static void Save(string pageFolder, IReadOnlyList<string> order)

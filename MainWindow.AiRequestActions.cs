@@ -273,6 +273,15 @@ public partial class MainWindow
             return;
         }
 
+        try
+        {
+            IReadOnlyList<string> attachments = AiAttachmentPolicy.Validate(_currentJob, request);
+            string files = string.Join(Environment.NewLine, attachments.Select(path => Path.GetRelativePath(_currentJob.RootPath, path)));
+            if (MessageBox.Show(this, "Send this request and the following project attachments to AI?\n\n" + files,
+                    "Review AI Attachments", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+        }
+        catch (Exception ex) { ShowOperationError("AI Attachments", ex); return; }
         string model = AppSettingsStore.ResolveOpenAiModel(_settings);
         OurPlanCoreJob runJob = _currentJob;
         var runCts = new CancellationTokenSource();

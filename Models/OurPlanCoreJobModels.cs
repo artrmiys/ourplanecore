@@ -56,6 +56,9 @@ public sealed class PageInfo
 
 public sealed class SourceInfo
 {
+    [JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? AdditionalData { get; set; }
+
     [JsonPropertyName("pdf")]
     public string Pdf { get; set; } = "";
 

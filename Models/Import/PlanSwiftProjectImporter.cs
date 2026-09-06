@@ -22,9 +22,12 @@ public static partial class PlanSwiftProjectImporter
                 throw new InvalidOperationException("Import into the current job supports PlanSwift source job folders only.");
 
             OurPlanCoreJob existingJob = OurPlanCoreJobStore.LoadJob(options.DestinationJobPath);
+            using var operation = JobOperationJournal.Begin(existingJob.RootPath, "Import PlanSwift project");
             string pageImportRoot = EnsureImportRootFolder(existingJob.PagesRoot, options.ImportRootFolderName, isTakeoffRoot: false);
             string takeoffImportRoot = EnsureImportRootFolder(existingJob.TakeoffsRoot, options.ImportRootFolderName, isTakeoffRoot: true);
-            return ImportManifestIntoJob(options, manifest, existingJob, pageImportRoot, takeoffImportRoot);
+            PlanSwiftImportResult result = ImportManifestIntoJob(options, manifest, existingJob, pageImportRoot, takeoffImportRoot);
+            operation.Commit();
+            return result;
         }
 
         if (PlanSwiftSourceFormats.IsOurPlanCore(manifest.SourceFormat))
@@ -42,6 +45,7 @@ public static partial class PlanSwiftProjectImporter
         string pagesRoot,
         string takeoffsRoot)
     {
+        using var operation = JobOperationJournal.Begin(job.RootPath, "Import PlanSwift project");
         var messages = manifest.Warnings.ToList();
 
         string tempRoot = Path.Combine(Path.GetTempPath(), "ourplancore_planswift_import", Guid.NewGuid().ToString("N"));
@@ -73,6 +77,7 @@ public static partial class PlanSwiftProjectImporter
             manifest.TakeoffFolders.Count);
 
         WriteReports(job, manifest, result, options.PortableReportPaths);
+        operation.Commit();
         return result;
     }
 }

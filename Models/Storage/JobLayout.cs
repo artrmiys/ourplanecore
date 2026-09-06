@@ -25,6 +25,8 @@ internal static class JobLayout
             throw new DirectoryNotFoundException(rootPath);
         if (accessMode == JobAccessMode.Closed)
             throw new ArgumentOutOfRangeException(nameof(accessMode), "A closed job cannot be loaded.");
+        if (accessMode == JobAccessMode.ReadOnly && JobOperationJournal.HasPending(rootPath))
+            throw new IOException("A bulk operation is still pending. Retry when it completes or let the editor recover the project first.");
 
         // Drop any cached Data.xml from a previously-open job so stale paths
         // don't accumulate (and a job folder changed on disk re-reads cleanly).
@@ -32,6 +34,7 @@ internal static class JobLayout
 
         if (accessMode == JobAccessMode.Writable)
         {
+            JobOperationJournal.RecoverPending(rootPath);
             JobWriteAccess.Demand(rootPath, "prepare job storage");
             if (!File.Exists(Path.Combine(rootPath, "Data.xml")))
                 OurPlanCoreJobStore.WriteItemDataXml(rootPath, "Folder", Path.GetFileName(rootPath), 0);

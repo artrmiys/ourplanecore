@@ -48,10 +48,8 @@ public partial class MainWindow
         SmartAiRequest? request = SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id);
         if (request != null && !string.IsNullOrWhiteSpace(request.LayerManifestPath))
         {
-            path = Path.IsPathFullyQualified(request.LayerManifestPath)
-                ? request.LayerManifestPath
-                : Path.GetFullPath(Path.Combine(_currentJob.RootPath, request.LayerManifestPath));
-            return File.Exists(path);
+            return ProjectPathSafety.TryResolveInside(_currentJob.RootPath, request.LayerManifestPath, _currentJob.RootPath, out path) &&
+                string.Equals(Path.GetFileName(path), "layers.json", StringComparison.OrdinalIgnoreCase) && File.Exists(path);
         }
 
         PageInfo? page = FindPageByName(item.Page);

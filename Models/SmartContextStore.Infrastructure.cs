@@ -176,5 +176,5 @@ public static partial class SmartContextStore
 
     private static string ProjectContextPath(string jobRoot) => Path.Combine(ContextRoot(jobRoot), "project.json");
 
-    private static string ContextRoot(string jobRoot) => Path.Combine(jobRoot, "AI_Context");
+    private static string ContextRoot(string jobRoot) => SafeJobPathResolver.ResolveRelative(jobRoot, "AI_Context");
 }

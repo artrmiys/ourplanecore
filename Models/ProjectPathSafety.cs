@@ -13,11 +13,9 @@ internal static class ProjectPathSafety
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
-        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(projectRoot));
-        string resolved = Path.IsPathFullyQualified(value)
-            ? Path.GetFullPath(value)
-            : Path.GetFullPath(Path.Combine(basePath, value));
-        return IsInside(resolved, root) ? resolved : null;
+        try { return SafeJobPathResolver.ResolveInside(projectRoot, value, basePath); }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        { return null; }
     }
 
     public static bool TryResolveInside(

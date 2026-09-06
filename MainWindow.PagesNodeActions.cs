@@ -277,6 +277,7 @@ public partial class MainWindow
 
         try
         {
+            using var operation = BeginPageOperation("Paste or move pages");
             var pastedItems = new List<string>();
             bool reloadActiveTab = false;
             var validEntries = payload.Entries
@@ -314,6 +315,7 @@ public partial class MainWindow
             TxtStatus.Text = pastedItems.Count == 1
                 ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlanCoreJobStore.DisplayName(pastedItems[0])}"
                 : $"{(wasCut ? "Moved" : "Pasted")} {pastedItems.Count} items.";
+            operation.Commit();
         }
         catch (Exception ex)
         {
@@ -431,11 +433,13 @@ public partial class MainWindow
 
         try
         {
+            using var operation = BeginPageOperation("Move page to folder");
             string moved = OurPlanCoreJobStore.MoveNode(page.FolderPath, target);
             bool reloadActiveTab = UpdatePageReferencesForMovedPath(page.FolderPath, moved);
             ReloadPagesTree(moved);
             ReloadActivePageTabAfterPathChange(reloadActiveTab);
             TxtStatus.Text = $"Moved page to: {OurPlanCoreJobStore.DisplayName(target)}";
+            operation.Commit();
         }
         catch (Exception ex)
         {

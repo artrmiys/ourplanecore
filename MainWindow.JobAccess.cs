@@ -280,6 +280,16 @@ public partial class MainWindow
 
     private bool EnsureCurrentJobWritable(string operation, bool showDialog = true)
     {
+        if (_currentJob != null && JobOperationJournal.IsBusyForCaller(_currentJob.RootPath))
+        {
+            PostStatusWarning("Wait for the current project operation to finish before editing.");
+            return false;
+        }
+        if (_currentJob != null && DataFileReader.IsProtected(_currentJob.RootPath))
+        {
+            PostStatusWarning("Project data is protected after a read failure. Open Project Data Recovery from the project menu before editing.");
+            return false;
+        }
         if (IsCurrentJobWritable)
             return true;
 

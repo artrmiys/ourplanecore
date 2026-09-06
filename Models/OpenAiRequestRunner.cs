@@ -123,6 +123,7 @@ public static class OpenAiRequestRunner
             };
         }
 
+        _ = AiAttachmentPolicy.Validate(job, request);
         string cleanModel = CleanModel(model);
         var content = new List<object>
         {
@@ -473,7 +474,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Page layers.json:");
-            sb.AppendLine(File.ReadAllText(layerPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, layerPath));
         }
 
         return sb.ToString();
@@ -503,7 +504,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Page layers.json:");
-            sb.AppendLine(File.ReadAllText(layerPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, layerPath));
         }
 
         return sb.ToString();
@@ -572,7 +573,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Existing AI_Context/3d_massing/model.json:");
-            sb.AppendLine(File.ReadAllText(modelPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, modelPath));
         }
 
         string markerContextPath = Path.Combine(job.AIContextRoot, "exports", "markers_context.json");
@@ -580,7 +581,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Current markers_context.json:");
-            sb.AppendLine(File.ReadAllText(markerContextPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, markerContextPath));
         }
 
         string? layerPath = ResolveContextPath(job, request.LayerManifestPath, job.RootPath);
@@ -588,7 +589,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Page layers.json:");
-            sb.AppendLine(File.ReadAllText(layerPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, layerPath));
         }
 
         return sb.ToString();
@@ -667,7 +668,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Current markers_context.json:");
-            sb.AppendLine(File.ReadAllText(markerContextPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, markerContextPath));
         }
 
         if (request.LayerCount > 0 || request.Layers.Count > 0 || !string.IsNullOrWhiteSpace(request.LayerManifestPath))
@@ -689,7 +690,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Page layers.json:");
-            sb.AppendLine(File.ReadAllText(layerPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, layerPath));
         }
 
         return sb.ToString();
@@ -772,7 +773,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Current markers_context.json:");
-            sb.AppendLine(File.ReadAllText(markerContextPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, markerContextPath));
         }
 
         string? layerPath = ResolveContextPath(job, request.LayerManifestPath, job.RootPath);
@@ -780,7 +781,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Page layers.json:");
-            sb.AppendLine(File.ReadAllText(layerPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, layerPath));
         }
 
         return sb.ToString();
@@ -821,7 +822,7 @@ public static class OpenAiRequestRunner
         {
             sb.AppendLine();
             sb.AppendLine("Page layers.json:");
-            sb.AppendLine(File.ReadAllText(layerPath));
+            sb.AppendLine(AiAttachmentPolicy.ReadText(job, layerPath));
         }
 
         return sb.ToString();

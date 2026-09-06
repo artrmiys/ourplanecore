@@ -7,9 +7,7 @@ internal static class SmartContextFileId
     public static string Require(string value, string label)
     {
         string clean = value?.Trim() ?? "";
-        if (clean.Length is < 1 or > 128 ||
-            clean.Any(character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not '_' and not '-'))
+        if (!string.Equals(clean, value, StringComparison.Ordinal) || !SafeJobPathResolver.IsSafeId(clean))
         {
             throw new OurPlanPackageValidationException(
                 $"Invalid {label}. Only 1-128 ASCII letters, digits, '_' and '-' are allowed.");
@@ -18,10 +16,7 @@ internal static class SmartContextFileId
     }
 
     public static bool IsValid(string value) =>
-        !string.IsNullOrWhiteSpace(value) &&
-        value.Length <= 128 &&
-        value.All(character =>
-            char.IsAsciiLetterOrDigit(character) || character is '_' or '-');
+        SafeJobPathResolver.IsSafeId(value);
 
     public static string JsonPath(
         OurPlanCoreJob job,
@@ -42,6 +37,6 @@ internal static class SmartContextFileId
         string path = Path.GetFullPath(Path.Combine(folder, cleanId + suffix));
         if (!Path.GetDirectoryName(path)!.Equals(folder, StringComparison.OrdinalIgnoreCase))
             throw new OurPlanPackageValidationException($"Invalid {label} path.");
-        return path;
+        return SafeJobPathResolver.ResolveInside(job.RootPath, path, job.AIContextRoot);
     }
 }

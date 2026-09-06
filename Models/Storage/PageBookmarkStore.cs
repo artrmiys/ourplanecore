@@ -8,32 +8,19 @@ namespace OurPlanCore;
 
 internal static class PageBookmarkStore
 {
-    public static List<PageBookmark> LoadPageBookmarks(OurPlanCoreJob job)
-    {
-        string path = PageBookmarksJsonPath(job);
-        if (!File.Exists(path))
-            return [];
+    public static List<PageBookmark> LoadPageBookmarks(OurPlanCoreJob job) =>
+        ReadPageBookmarks(job).Value ?? [];
 
-        try
+    internal static DataFileResult<List<PageBookmark>> ReadPageBookmarks(OurPlanCoreJob job) =>
+        DataFileReader.Read(PageBookmarksJsonPath(job), json =>
         {
             var dtos = JsonSerializer.Deserialize<List<PageBookmarkDto>>(
-                File.ReadAllText(path),
-                OurPlanCoreJobStore.JsonOptions) ?? [];
+                json,
+                OurPlanCoreJobStore.JsonOptions) ?? throw new JsonException("The document contains null instead of an array.");
             return dtos.Select(dto => ToBookmark(job, dto))
                 .Where(bookmark => !string.IsNullOrWhiteSpace(bookmark.PageFolder))
                 .ToList();
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            OurPlanCoreJobStore.QuarantineCorruptJson(path, "LoadPageBookmarks", ex);
-            return [];
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"LoadPageBookmarks failed for {path}");
-            return [];
-        }
-    }
+        });
 
     public static void SavePageBookmarks(OurPlanCoreJob job, IEnumerable<PageBookmark> bookmarks)
     {
@@ -60,6 +47,7 @@ internal static class PageBookmarkStore
 
     private static PageBookmark ToBookmark(OurPlanCoreJob job, PageBookmarkDto dto)
     {
+        if (dto == null) throw new JsonException("Invalid bookmark entry.");
         string pageFolder = ResolveJobPath(job, dto.PageFolder);
         PageInfo? page = string.IsNullOrWhiteSpace(pageFolder)
             ? null

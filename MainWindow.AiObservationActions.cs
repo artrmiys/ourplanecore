@@ -43,11 +43,8 @@ public partial class MainWindow
             return;
         }
 
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = path,
-            UseShellExecute = true,
-        });
+        var preview = new PageBookmarkCropPreviewDialog("AI crop", path) { Owner = this };
+        preview.ShowDialog();
     }
 
     private void OpenObservationCropFolder(ObservationDisplayItem item)

@@ -21,26 +21,17 @@ internal static class SheetOverlayLayerStore
     public static SheetOverlayLayerCollection Load(string pageFolder, SourceInfo? legacySource = null)
     {
         string path = ManifestPath(pageFolder);
-        if (File.Exists(path))
+        DataFileResult<SheetOverlayLayerManifest> loaded = DataFileReader.Read(path, json =>
         {
-            try
-            {
-                SheetOverlayLayerManifest? manifest =
-                    JsonSerializer.Deserialize<SheetOverlayLayerManifest>(
-                        File.ReadAllText(path),
-                        OurPlanCoreJobStore.JsonOptions);
-                if (manifest != null)
-                    return NormalizeManifest(pageFolder, manifest);
-            }
-            catch (Exception ex) when (ex is JsonException or NotSupportedException)
-            {
-                OurPlanCoreJobStore.QuarantineCorruptJson(path, "ReadSheetOverlayLayers", ex);
-            }
-            catch (Exception ex)
-            {
-                AppLog.Warn(ex, $"ReadSheetOverlayLayers failed for {path}");
-            }
-        }
+            var manifest = JsonSerializer.Deserialize<SheetOverlayLayerManifest>(json) ?? throw new JsonException("Empty overlay document.");
+            if (manifest.Layers == null || manifest.Layers.Any(layer => layer == null)) throw new JsonException("Invalid overlay layers.");
+            foreach (var layer in manifest.Layers)
+                if (!string.IsNullOrWhiteSpace(layer.SourcePageFolder))
+                    _ = PageReferenceSafety.Resolve(pageFolder, layer.SourcePageFolder);
+            return manifest;
+        });
+        if (loaded.Value != null) return NormalizeManifest(pageFolder, loaded.Value);
+        if (loaded.State != DataFileState.Missing) return new SheetOverlayLayerCollection();
 
         legacySource ??= PageStore.ReadSource(pageFolder);
         return FromLegacy(pageFolder, legacySource);
@@ -373,13 +364,11 @@ internal static class SheetOverlayLayerStore
             return "";
         try
         {
-            return Path.IsPathRooted(source)
-                ? Path.GetFullPath(source)
-                : Path.GetFullPath(Path.Combine(pageFolder, source));
+            return string.IsNullOrWhiteSpace(pageFolder) ? Path.GetFullPath(source) : PageReferenceSafety.Resolve(pageFolder, source);
         }
         catch
         {
-            return source;
+            return "";
         }
     }
 

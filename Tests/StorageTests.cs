@@ -228,7 +228,7 @@ internal static class StorageTests
                 });
 
             string sourcePath = Path.Combine(page.FolderPath, "source.json");
-            File.WriteAllText(sourcePath, "{ bad json");
+            File.Delete(sourcePath); // Only genuinely missing source metadata may be reconstructed automatically.
             _ = OurPlanCoreJobStore.DrainCorruptJsonFiles();
 
             PageInfo repaired = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
@@ -244,8 +244,8 @@ internal static class StorageTests
             AssertClose(0.3048, repaired.ScaleMetersPerPt, "repaired page scale");
             AssertTrue(repaired.PdfLayersCached, "repaired page should keep metadata layers cached");
             AssertFalse(Path.IsPathRooted(repairedSource.Pdf), "repaired source pdf should be relative");
-            AssertEqual("1", Directory.GetFiles(page.FolderPath, "source.json.corrupt-*").Length.ToString(), "corrupt source backup count");
-            AssertTrue(quarantined.Any(path => path.Contains("source.json", StringComparison.OrdinalIgnoreCase)), "quarantine report");
+            AssertEqual("0", Directory.GetFiles(page.FolderPath, "source.json.corrupt-*").Length.ToString(), "missing source has no corrupt backup");
+            AssertFalse(quarantined.Any(path => path.Contains("source.json", StringComparison.OrdinalIgnoreCase)), "missing source is not quarantined");
             AssertEqual("1", manifest.LayerCount.ToString(), "repaired layer manifest count");
         });
     }

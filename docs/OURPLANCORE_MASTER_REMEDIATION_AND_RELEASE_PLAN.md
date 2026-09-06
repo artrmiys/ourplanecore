@@ -1,8 +1,12 @@
-# OurPlanCore Master Remediation and Release Plan
+﻿# OurPlanCore Master Remediation and Release Plan
 
 Status: **active master plan**
 
-Last verified: **2026-07-15**
+Last implementation verification: **2026-09-06**
+
+Sections 5.3 and Phases 2–3 are implemented in independent **2.2.6-preview**.
+Stable 2.2.5 update files remain unchanged by explicit user instruction.
+See [preview behavior, verification and recovery limits](DATA_SAFETY_PREVIEW_2026_09_06.md).
 
 Repository: `C:\Users\User\Desktop\ourplanecore`
 
@@ -279,12 +283,12 @@ metadata tests `24/24`, and packaged startup with zero errors. Public latest:
 Owners: `Models/Storage/TakeoffStore`, annotation/bookmark/page stores, recovery
 UI and tests.
 
-- [ ] Return `Missing`, `Valid`, `Corrupt`, or `Unreadable`; never turn a
+- [x] Return `Missing`, `Valid`, `Corrupt`, or `Unreadable`; never turn a
       transient IO error into a valid empty collection.
-- [ ] Quarantine parse corruption, but do not quarantine sharing/access errors.
-- [ ] Mark affected items/pages protected and prevent autosave overwrite.
-- [ ] Provide explicit retry/repair/open-folder actions.
-- [ ] Back up `source.json` before repair and preserve every supported field,
+- [x] Quarantine parse corruption, but do not quarantine sharing/access errors.
+- [x] Mark affected items/pages protected and prevent autosave overwrite.
+- [x] Provide explicit retry/repair/open-folder actions.
+- [x] Back up `source.json` before repair and preserve every supported field,
       including legend order, hidden state, raster state, and overlays.
 
 Acceptance for Phase 1:
@@ -299,18 +303,18 @@ Acceptance for Phase 1:
 Owners: new focused path-validation service, bookmark controller, AI stores,
 AI runner, marker/observation actions, tests.
 
-- [ ] Add one `SafeJobPathResolver` with canonical containment checks.
-- [ ] Reject rooted paths, `..` escapes, invalid IDs, reserved device names,
+- [x] Add one `SafeJobPathResolver` with canonical containment checks.
+- [x] Reject rooted paths, `..` escapes, invalid IDs, reserved device names,
       and reparse/symlink escapes outside approved roots.
-- [ ] Normalize IDs to a bounded safe character set and reject, not silently
+- [x] Normalize IDs to a bounded safe character set and reject, not silently
       rewrite, identifiers loaded from an untrusted job.
-- [ ] Allow only expected file types for crop/bookmark open actions.
-- [ ] Open images in an internal viewer instead of shell-executing arbitrary
+- [x] Allow only expected file types for crop/bookmark open actions.
+- [x] Open images in an internal viewer instead of shell-executing arbitrary
       job-controlled files.
-- [ ] Limit AI input size/type and show the exact files that will be sent.
-- [ ] Keep layer manifests and crops inside the job context unless the user
+- [x] Limit AI input size/type and show the exact files that will be sent.
+- [x] Keep layer manifests and crops inside the job context unless the user
       explicitly chooses a reviewed external file.
-- [ ] Add malicious-job regression fixtures for path traversal, rooted paths,
+- [x] Add malicious-job regression fixtures for path traversal, rooted paths,
       executable bookmarks, oversized files, and AI local-file disclosure.
 
 Acceptance:
@@ -324,16 +328,16 @@ Acceptance:
 Owners: page organization, `NodeStore`, imports, source reference rewriting,
 new operation journal/undo models.
 
-- [ ] Save a complete pre-operation order snapshot before every sort.
-- [ ] Add visible `Undo Last Page Sort`; scope it to the exact affected folder
+- [x] Save a complete pre-operation order snapshot before every sort.
+- [x] Add visible `Undo Last Page Sort`; scope it to the exact affected folder
       or root operation.
-- [ ] Ensure folder-scoped A/S never changes siblings outside that folder.
-- [ ] Use staged writes or a journal for move/copy/import/reference rewrites.
-- [ ] Roll back completed steps when a later step fails.
-- [ ] Preserve legend order, overlays, hidden state, scale, source paths,
+- [x] Ensure folder-scoped A/S never changes siblings outside that folder.
+- [x] Use staged writes or a journal for move/copy/import/reference rewrites.
+- [x] Roll back completed steps when a later step fails.
+- [x] Preserve legend order, overlays, hidden state, scale, source paths,
       measurements, and takeoff links during page move/copy.
-- [ ] Stage PDF/PlanSwift import before exposing partially created nodes.
-- [ ] Persist undo manifests so recovery survives application restart.
+- [x] Stage PDF/PlanSwift import before exposing partially created nodes.
+- [x] Persist undo manifests so recovery survives application restart.
 
 Acceptance:
 

@@ -182,6 +182,7 @@ public partial class MainWindow
                 MakeMenuItem("Reset Sheet Legend Orders in Folder", canWrite && HasCustomPageLegendOrders(folderLegendPages), () => RunPagesMutation("reset sheet legend order", () => ResetPageLegendOrders(folderLegendPages))),
                 MakeMenuItem("Sort A/S in This Folder", canWrite, () => RunPagesMutation("sort pages into architecture and structure", () => SortPagesIntoArchStruct(folder.FolderPath))),
                 MakeMenuItem("Sort D/Sec/WT in This Folder", canWrite, () => RunPagesMutation("sort pages by suffix", () => SortPagesBySuffix(folder.FolderPath))),
+                MakeMenuItem("Undo Last Page Sort", canWrite, () => UndoLastPageOperation("page-sort")),
                 MakeMenuItem("Repair Measurement Links", canWrite, () => RunPagesMutation("repair measurement links", RepairMeasurementPageLinks))));
             if (IsModuleEnabled(ModuleId.SheetManager))
             {

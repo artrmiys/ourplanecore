@@ -16,6 +16,7 @@ internal static class PageStore
         string destinationFolder,
         IReadOnlyDictionary<int, IReadOnlyList<PdfLayerInfo>>? pdfLayerCache = null)
     {
+        using var operation = JobOperationJournal.Begin(job.RootPath, "Import PDF pages");
         JobWriteAccess.Demand(destinationFolder, "import PDF pages");
         string sourcesDir = JobLayout.EnsureFolder(job.RootPath, "sources");
         string pdfDest = OurPlanCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
@@ -52,6 +53,7 @@ internal static class PageStore
             });
         }
 
+        operation.Commit();
         return created;
     }
 
@@ -137,31 +139,24 @@ internal static class PageStore
 
     public static SourceInfo? ReadSource(string pageFolder)
     {
-        string path = Path.Combine(pageFolder, "source.json");
-        if (!File.Exists(path)) return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<SourceInfo>(File.ReadAllText(path));
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            OurPlanCoreJobStore.QuarantineCorruptJson(path, "ReadSource", ex);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"ReadSource failed for {path}");
-            return null;
-        }
+        return ReadSourceResult(pageFolder).Value;
     }
+
+    internal static DataFileResult<SourceInfo> ReadSourceResult(string pageFolder) =>
+        DataFileReader.Read(Path.Combine(pageFolder, "source.json"), json =>
+        {
+            SourceInfo source = JsonSerializer.Deserialize<SourceInfo>(json) ?? throw new JsonException("Missing page source.");
+            PageReferenceSafety.ValidateSource(pageFolder, source);
+            return source;
+        });
 
     public static PageInfo? TryReadPage(string pageFolder)
     {
-        SourceInfo? src = ReadSource(pageFolder);
+        DataFileResult<SourceInfo> loaded = ReadSourceResult(pageFolder);
+        SourceInfo? src = loaded.Value;
         if (src == null)
         {
-            if (!JobWriteAccess.IsWriteAllowed(pageFolder) ||
+            if (loaded.State != DataFileState.Missing || !JobWriteAccess.IsWriteAllowed(pageFolder) ||
                 !PageSourceRepair.TryRepairFromMetadata(pageFolder, out src))
             {
                 return null;
@@ -491,32 +486,14 @@ internal static class PageStore
 
     public static PdfSheetMetadata? ReadSourcePdfMetadata(string pageFolder)
     {
-        string path = SourcePdfMetadataPath(pageFolder);
-        if (!File.Exists(path)) return null;
-
-        try
+        return DataFileReader.Read(SourcePdfMetadataPath(pageFolder), json =>
         {
-            PdfSheetMetadata? metadata = JsonSerializer.Deserialize<PdfSheetMetadata>(
-                File.ReadAllText(path),
-                OurPlanCoreJobStore.JsonOptions);
-            if (metadata != null &&
-                !string.IsNullOrWhiteSpace(metadata.PdfPath) &&
-                !Path.IsPathRooted(metadata.PdfPath))
-            {
+            PdfSheetMetadata metadata = JsonSerializer.Deserialize<PdfSheetMetadata>(json, OurPlanCoreJobStore.JsonOptions)
+                ?? throw new JsonException("Missing sheet metadata.");
+            if (!string.IsNullOrWhiteSpace(metadata.PdfPath) && !Path.IsPathRooted(metadata.PdfPath))
                 metadata.PdfPath = Path.GetFullPath(Path.Combine(pageFolder, metadata.PdfPath));
-            }
             return metadata;
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            OurPlanCoreJobStore.QuarantineCorruptJson(path, "ReadSourcePdfMetadata", ex);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"ReadSourcePdfMetadata failed for {path}");
-            return null;
-        }
+        }).Value;
     }
 
     public static void WriteSourcePdfMetadata(string pageFolder, PdfSheetMetadata metadata)
@@ -535,26 +512,8 @@ internal static class PageStore
         }
     }
 
-    public static PageLayerManifest? ReadPageLayerManifest(string pageFolder)
-    {
-        string path = PageLayersJsonPath(pageFolder);
-        if (!File.Exists(path)) return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<PageLayerManifest>(File.ReadAllText(path), OurPlanCoreJobStore.JsonOptions);
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            OurPlanCoreJobStore.QuarantineCorruptJson(path, "ReadPageLayerManifest", ex);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"ReadPageLayerManifest failed for {path}");
-            return null;
-        }
-    }
+    public static PageLayerManifest? ReadPageLayerManifest(string pageFolder) =>
+        DataFileReader.ReadJson<PageLayerManifest>(PageLayersJsonPath(pageFolder)).Value;
 
     public static void RewritePageSources(string newRoot, IReadOnlyList<PageSourceSnapshot> snapshots)
     {
@@ -573,6 +532,8 @@ internal static class PageStore
                     snap.ScaleMetersPerPt,
                     snap.PdfLayers,
                     snap.PdfLayersCached,
+                    legendTakeoffOrder: snap.LegendTakeoffOrder,
+                    legendTakeoffOrderMode: snap.LegendTakeoffOrderMode,
                     overlayPageFolder: snap.OverlayPageFolder,
                     overlayVisible: snap.OverlayVisible,
                     overlayColor: snap.OverlayColor,
@@ -583,7 +544,8 @@ internal static class PageStore
                     overlayRotationDegrees: snap.OverlayRotationDegrees,
                     hiddenTakeoffs: snap.HiddenTakeoffs,
                     rasterSheet: snap.RasterSheet,
-                    hiddenMeasurements: snap.HiddenMeasurements);
+                    hiddenMeasurements: snap.HiddenMeasurements,
+                    additionalData: snap.AdditionalData ?? []);
                 if (snap.OverlayLayers.Layers.Count > 0)
                     SheetOverlayLayerStore.SaveSnapshot(targetFolder, snap.OverlayLayers);
             }
@@ -621,7 +583,10 @@ internal static class PageStore
                 overlayLayers.Clone(),
                 NormalizeStringList(src.HiddenTakeoffs),
                 NormalizeStringList(src.HiddenMeasurements),
-                NormalizeRasterSheet(src.RasterSheet)));
+                NormalizeRasterSheet(src.RasterSheet),
+                src.LegendTakeoffOrder?.ToList() ?? [],
+                src.LegendTakeoffOrderMode,
+                src.AdditionalData == null ? [] : new(src.AdditionalData)));
         }
 
         return snapshots;
@@ -708,7 +673,8 @@ internal static class PageStore
         double overlayRotationDegrees = 0,
         IReadOnlyList<string>? hiddenTakeoffs = null,
         RasterSheetSource? rasterSheet = null,
-        IReadOnlyList<string>? hiddenMeasurements = null)
+        IReadOnlyList<string>? hiddenMeasurements = null,
+        Dictionary<string, JsonElement>? additionalData = null)
     {
         string sourcePath = Path.Combine(pageFolder, "source.json");
         string layersPath = PageLayersJsonPath(pageFolder);
@@ -716,6 +682,7 @@ internal static class PageStore
         JobWriteAccess.Demand(layersPath, "save page layer manifest");
         var src = new SourceInfo
         {
+            AdditionalData = additionalData ?? ReadSource(pageFolder)?.AdditionalData,
             Pdf = Path.GetRelativePath(pageFolder, pdfAbsPath),
             Page = pageIndex,
             ScaleMetersPerPt = scaleMetersPerPt,
@@ -969,4 +936,7 @@ internal sealed record PageSourceSnapshot(
     SheetOverlayLayerCollection OverlayLayers,
     IReadOnlyList<string> HiddenTakeoffs,
     IReadOnlyList<string> HiddenMeasurements,
-    RasterSheetSource? RasterSheet);
+    RasterSheetSource? RasterSheet,
+    IReadOnlyList<string> LegendTakeoffOrder,
+    string LegendTakeoffOrderMode,
+    Dictionary<string, JsonElement>? AdditionalData);

@@ -303,9 +303,15 @@ internal static class StorageSupport
 
     public static IEnumerable<string> EnumerateSelfAndDescendants(string rootFolder)
     {
-        yield return rootFolder;
-        foreach (string dir in Directory.EnumerateDirectories(rootFolder, "*", SearchOption.AllDirectories))
-            yield return dir;
+        var pending = new Stack<string>();
+        pending.Push(rootFolder);
+        while (pending.Count > 0)
+        {
+            string folder = pending.Pop();
+            _ = SafeJobPathResolver.ResolveInside(rootFolder, folder, rootFolder);
+            yield return folder;
+            foreach (string child in Directory.EnumerateDirectories(folder)) pending.Push(child);
+        }
     }
 
     public static void QuarantineCorruptJson(string path, string context, Exception exception)

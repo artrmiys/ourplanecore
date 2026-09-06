@@ -1,5 +1,17 @@
 ﻿# Development Log
 
+## 2026-09-06 Independent data safety preview
+
+- Implemented master-plan section 5.3 and Phases 2–3: protected JSON loading,
+  contained job/AI paths, attachment review, recoverable bulk operations and
+  visible page-sort/operation Undo. Source rewrites preserve unknown fields and
+  manual legend order. Stable update files and shortcut are excluded from deployment.
+- Full backup verified before editing. Build: zero warnings/errors; tests:
+  790/790 C# and 29/29 Python; actual WPF recovery/sort/Undo and feedback smoke
+  passed. Added opt-in real-project performance and preservation verification.
+- See [preview handoff](DATA_SAFETY_PREVIEW_2026_09_06.md) for behavior, recovery
+  limits, verification commands and isolated package requirements.
+
 ## 2026-08-08 Sharp Sheet Open, Pitch, Value Export, and Viewport Layout
 
 - Changed image-backed sheet opening so the viewport applies the full native

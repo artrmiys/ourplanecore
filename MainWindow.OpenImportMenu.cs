@@ -32,6 +32,9 @@ public partial class MainWindow
 
         // Manage where jobs live.
         menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Undo Last Page Sort", hasJob, () => UndoLastPageOperation("page-sort")));
+        menu.Items.Add(MakeMenuItem("Undo Last Page Operation", hasJob, () => UndoLastPageOperation()));
+        menu.Items.Add(MakeMenuItem("Project Data Recovery...", hasJob, OpenProjectDataRecovery));
         menu.Items.Add(MakeMenuItem("Manage job folders...", true, OpenJobFromJobsRootDialog));
 
         if (sender is Button button)

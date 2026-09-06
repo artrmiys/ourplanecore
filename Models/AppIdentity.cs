@@ -17,9 +17,15 @@ public static class AppIdentity
     internal const string LegacyExecutableName = "ourplanecore";
     internal const string LegacyEnvironmentPrefix = "OURPLANECORE";
 
-    public static string RoamingRoot => ProductRoamingRoot(ProductName);
+    private static readonly bool IsPreviewBuild = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(AppIdentity).Assembly)?.InformationalVersion.Contains("-preview", StringComparison.OrdinalIgnoreCase) == true;
 
-    public static string LocalRoot => ProductLocalRoot(ProductName);
+    public static bool IsIsolatedPreview => IsPreviewBuild || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OURPLANCORE_PROFILE_ROOT")) || File.Exists(Path.Combine(AppContext.BaseDirectory, "ourplancore.preview"));
+
+    private static string PreviewProfileRoot => Environment.GetEnvironmentVariable("OURPLANCORE_PROFILE_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OurPlanCore Preview");
+
+    public static string RoamingRoot => IsIsolatedPreview ? Path.Combine(PreviewProfileRoot, "roaming") : ProductRoamingRoot(ProductName);
+
+    public static string LocalRoot => IsIsolatedPreview ? Path.Combine(PreviewProfileRoot, "local") : ProductLocalRoot(ProductName);
 
     internal static string LegacyRoamingRoot => ProductRoamingRoot(LegacyProductName);
 

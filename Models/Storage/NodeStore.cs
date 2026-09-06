@@ -48,7 +48,10 @@ internal static class NodeStore
         }
 
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase))
+        {
+            JobOperationJournal.RecordMove(folder, target);
             Directory.Move(folder, target);
+        }
 
         OurPlanCoreJobStore.UpdateItemName(target, displayName);
         return target;
@@ -73,7 +76,10 @@ internal static class NodeStore
         JobWriteAccess.Demand(target, "rename node");
 
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase))
+        {
+            JobOperationJournal.RecordMove(folder, target);
             Directory.Move(folder, target);
+        }
 
         OurPlanCoreJobStore.UpdateItemName(target, displayName);
         return target;
@@ -86,14 +92,18 @@ internal static class NodeStore
 
     public static string CopyNodePreserveDisplayName(string sourcePath, string targetFolder)
     {
+        using var operation = JobOperationJournal.BeginForPath(targetFolder, "Copy page or takeoff");
         string displayName = OurPlanCoreJobStore.DisplayName(sourcePath);
         string destPath = UniqueDestinationPath(targetFolder, displayName);
         JobWriteAccess.Demand(destPath, "copy node");
-        return CopyNodeCore(sourcePath, destPath, displayName, GetNextOrderIndex(targetFolder));
+        string result = CopyNodeCore(sourcePath, destPath, displayName, GetNextOrderIndex(targetFolder));
+        operation.Commit();
+        return result;
     }
 
     public static IReadOnlyList<string> CopyNodesPreserveDisplayName(IEnumerable<string> sourcePaths, string targetFolder)
     {
+        using var operation = JobOperationJournal.BeginForPath(targetFolder, "Copy pages or takeoffs");
         var sources = sourcePaths
             .Where(Directory.Exists)
             .Select(NormalizeFolderPath)
@@ -113,6 +123,7 @@ internal static class NodeStore
             results.Add(CopyNodeCore(sourcePath, destPath, displayName, nextOrder++));
         }
 
+        operation.Commit();
         return results;
     }
 
@@ -131,6 +142,7 @@ internal static class NodeStore
 
     public static string MoveNode(string sourcePath, string targetFolder)
     {
+        using var operation = JobOperationJournal.BeginForPath(targetFolder, "Move page or takeoff");
         string sourceParent = Path.GetDirectoryName(sourcePath) ?? "";
         if (string.Equals(sourceParent, targetFolder, StringComparison.OrdinalIgnoreCase))
             return sourcePath;
@@ -141,6 +153,7 @@ internal static class NodeStore
         int nextOrder = GetNextOrderIndex(targetFolder);
         string destPath = MoveNodeCore(sourcePath, targetFolder, ref nextOrder);
         NormalizeOrder(sourceParent);
+        operation.Commit();
         return destPath;
     }
 
@@ -148,6 +161,7 @@ internal static class NodeStore
         IEnumerable<string> sourcePaths,
         string targetFolder)
     {
+        using var operation = JobOperationJournal.BeginForPath(targetFolder, "Move pages or takeoffs");
         var sources = sourcePaths
             .Where(Directory.Exists)
             .Select(NormalizeFolderPath)
@@ -185,6 +199,7 @@ internal static class NodeStore
                 NormalizeOrder(sourceParent);
         }
 
+        operation.Commit();
         return results;
     }
 
@@ -265,11 +280,13 @@ internal static class NodeStore
 
     private static void SortChildren(string parentFolder, bool descending, IComparer<string> displayNameComparer)
     {
+        using var operation = JobOperationJournal.BeginForPath(parentFolder, "Sort folder children", "page-sort");
         var children = Directory.EnumerateDirectories(parentFolder)
             .OrderBy(OurPlanCoreJobStore.DisplayName, displayNameComparer)
             .ToList();
         if (descending) children.Reverse();
         ApplySiblingOrder(children);
+        operation.Commit();
     }
 
     public static void NormalizeOrder(string parentFolder)
@@ -298,6 +315,7 @@ internal static class NodeStore
         string destPath = UniqueDestinationPath(targetFolder, displayName);
         var pageSources = PageStore.CollectPageSources(sourcePath);
 
+        JobOperationJournal.RecordMove(sourcePath, destPath);
         Directory.Move(sourcePath, destPath);
         PageStore.RewritePageSources(destPath, pageSources);
         OurPlanCoreJobStore.UpdateItemName(destPath, displayName);

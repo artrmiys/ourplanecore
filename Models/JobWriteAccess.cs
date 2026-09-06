@@ -127,12 +127,24 @@ public static class JobWriteAccess
             return FindRegistration(fullPath)?.Mode ?? JobAccessMode.Closed;
     }
 
+    internal static string? RegisteredRootForPath(string path)
+    {
+        lock (Sync) return FindRegistration(Normalize(path))?.RootPath;
+    }
+
     public static bool IsWriteAllowed(string path)
     {
         string fullPath = Normalize(path);
+        if (DataFileReader.IsProtected(fullPath))
+            return false;
         lock (Sync)
         {
             Registration? registration = FindRegistration(fullPath);
+            if (registration != null)
+            {
+                try { _ = SafeJobPathResolver.ResolveInside(registration.RootPath, fullPath, registration.RootPath); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return false; }
+            }
             return registration == null ||
                 registration.Mode == JobAccessMode.Writable ||
                 IsLeaseMetadata(registration.RootPath, fullPath);
@@ -142,9 +154,12 @@ public static class JobWriteAccess
     public static void Demand(string path, string operation)
     {
         string fullPath = Normalize(path);
+        DataFileReader.Demand(fullPath, operation);
         lock (Sync)
         {
             Registration? registration = FindRegistration(fullPath);
+            if (registration != null)
+                _ = SafeJobPathResolver.ResolveInside(registration.RootPath, fullPath, registration.RootPath);
             if (registration == null ||
                 registration.Mode == JobAccessMode.Writable ||
                 IsLeaseMetadata(registration.RootPath, fullPath))

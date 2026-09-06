@@ -9,16 +9,16 @@ namespace OurPlanCore;
 
 internal static class PageAnnotationStore
 {
-    public static List<PageAnnotation> LoadPageAnnotations(string pageFolder)
-    {
-        string path = PageAnnotationsJsonPath(pageFolder);
-        if (!File.Exists(path)) return [];
+    public static List<PageAnnotation> LoadPageAnnotations(string pageFolder) =>
+        ReadPageAnnotations(pageFolder).Value ?? [];
 
-        try
+    internal static DataFileResult<List<PageAnnotation>> ReadPageAnnotations(string pageFolder) =>
+        DataFileReader.Read(PageAnnotationsJsonPath(pageFolder), json =>
         {
-            var dtos = JsonSerializer.Deserialize<List<PageAnnotationDto>>(File.ReadAllText(path)) ?? [];
+            var dtos = JsonSerializer.Deserialize<List<PageAnnotationDto>>(json) ?? throw new JsonException("The document contains null instead of an array.");
             return dtos.Select(dto =>
             {
+                if (dto == null || dto.PointsPdf == null) throw new JsonException("Invalid annotation entry.");
                 string kind = NormalizePageAnnotationKind(dto.Kind);
                 return new PageAnnotation
                 {
@@ -33,18 +33,7 @@ internal static class PageAnnotationStore
                     Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
                 };
             }).ToList();
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            OurPlanCoreJobStore.QuarantineCorruptJson(path, "LoadPageAnnotations", ex);
-            return [];
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"LoadPageAnnotations failed for {path}");
-            return [];
-        }
-    }
+        });
 
     public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations)
     {
