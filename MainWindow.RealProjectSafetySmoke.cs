@@ -13,6 +13,8 @@ public partial class MainWindow
         string reportPath = Environment.GetEnvironmentVariable("OURPLANCORE_REAL_PROJECT_SAFETY_REPORT")
             ?? throw new InvalidOperationException("A real-project safety report path is required.");
         OurPlanCoreJob job = _currentJob ?? throw new InvalidOperationException("Open the copied project first.");
+        string? previousImages = Environment.GetEnvironmentVariable("OURPLANCORE_VIEWPORT_SMOKE_IMAGES");
+        Environment.SetEnvironmentVariable("OURPLANCORE_VIEWPORT_SMOKE_IMAGES", Path.Combine(Path.GetDirectoryName(reportPath)!, "images"));
         var steps = new List<object>();
         bool passed = false;
         string error = "";
@@ -49,6 +51,7 @@ public partial class MainWindow
             await WaitForViewportPageRenderAsync(selected[0], 30000);
             await WaitForViewportPagePaintAsync(selected[0], 30000);
             CaptureViewportSmokeImage(selected[0], "measurements-before");
+            await ExerciseViewportZoomAsync(selected[0], 30000, CreatePageSmokeResult(selected[0], "real-quality"));
             string destination = SameFolder(sourceGroup.Key, job.PagesRoot) ? scope : job.PagesRoot;
             foreach (PagesClipboardMode mode in new[] { PagesClipboardMode.Cut, PagesClipboardMode.Copy })
             {
@@ -118,6 +121,7 @@ public partial class MainWindow
         catch (Exception ex) { error = ex.ToString(); throw; }
         finally
         {
+            Environment.SetEnvironmentVariable("OURPLANCORE_VIEWPORT_SMOKE_IMAGES", previousImages);
             JobOperationJournal.FailureInjectionForTests = null;
             Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
             File.WriteAllText(reportPath, JsonSerializer.Serialize(new
