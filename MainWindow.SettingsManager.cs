@@ -58,12 +58,14 @@ public partial class MainWindow
         "Auto Rename / Scale",
         "Excel Actions",
         "Project Storage",
+        "Keyboard Shortcuts",
         "Defaults",
     ];
 
     // Called on job open so edited templates apply app-wide (menus too).
     private void ApplyFolderTemplateProviders()
     {
+        LoadCustomKeyboardShortcuts();
         SettingsPresetStore.InstallProviders(_currentJob);
         SettingsPresetStore.InstallPageSortProvider(_currentJob);
         SettingsPresetStore.InstallSheetMetadataProvider(_currentJob);
@@ -168,6 +170,7 @@ public partial class MainWindow
                 "Auto Rename / Scale" => BuildRulesPanel(),
                 "Excel Actions" => BuildExcelActionsPanel(),
                 "Project Storage" => BuildProjectStoragePanel(),
+                "Keyboard Shortcuts" => BuildKeyboardShortcutsPanel(),
                 _ => BuildDefaultsPanel(),
             };
             _settingsPanels[category] = panel;

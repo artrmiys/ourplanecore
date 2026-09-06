@@ -30,6 +30,18 @@ if (args.Length > 0 && args[0] == "feedback-ui-smoke")
 if (args.Length > 0 && args[0] == "data-safety-ui-smoke")
     return DataSafetyUiSmokeHarness.Run();
 
+if (args.Length > 0 && args[0] == "clipboard-ui-smoke")
+    return MeasurementClipboardUiSmokeHarness.Run(args);
+
+if (args.Length > 0 && args[0] == "zoom-real-sample")
+    return ViewportZoomSamplingTests.RunReal(args[1], args[2]);
+
+if (args.Length > 0 && args[0] == "real-work-perf")
+    return RealProjectPerformanceHarness.Run(args);
+
+if (args.Length > 0 && args[0] == "shortcut-ui-smoke")
+    return CustomShortcutUiSmokeHarness.Run(args);
+
 if (args.Length > 0 && args[0] == "sheetmetadata-golden")
     return SheetMetadataGoldenHarness.Run(args);
 
@@ -840,7 +852,19 @@ var tests = new List<(string Name, Action Run)>
 };
 
 tests.AddRange(DataSafetyTests.Cases);
+tests.Add(("magnified raster preserves interpolated pixels after navigation", ViewportZoomSamplingTests.MagnifiedRasterDoesNotChangePixelsAfterNavigation));
+tests.AddRange(new (string Name, Action Run)[]
+{
+    ("custom shortcuts preserve legacy defaults", CustomKeyboardShortcutTests.DefaultsStaySparseAndPreserveLegacyKeys),
+    ("custom shortcuts normalize aliases and reject invalid gestures", CustomKeyboardShortcutTests.NormalizesAliasesAndRejectsInvalidGestures),
+    ("custom shortcuts detect focus and sequence conflicts", CustomKeyboardShortcutTests.ConflictsRespectFocusAndSequencePrefixes),
+    ("custom shortcuts reset clone and preset retain unbound commands", CustomKeyboardShortcutTests.ResetCloneAndPresetRoundTripKeepExplicitUnbound),
+    ("custom mirror uses production Undo and read-only guard", CustomKeyboardShortcutTests.MirrorUsesProductionUndoAndReadOnlyGuard),
+    ("custom shortcut settings retain damaged and locked originals during recovery", CustomKeyboardShortcutTests.DamagedOrLockedSettingsRecoverWithOriginalBytesRetained),
+});
 if (args.Contains("data-safety-tests")) tests = DataSafetyTests.Cases.ToList();
+if (args.Contains("zoom-sampling-tests")) tests = tests.Where(t => t.Name.StartsWith("magnified raster", StringComparison.Ordinal)).ToList();
+if (args.Contains("custom-shortcut-tests")) tests = tests.Where(t => t.Name.StartsWith("custom ", StringComparison.Ordinal)).ToList();
 
 int passed = 0;
 var failures = new List<string>();

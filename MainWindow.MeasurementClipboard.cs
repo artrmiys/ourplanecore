@@ -79,20 +79,33 @@ public partial class MainWindow
             return;
         }
 
-        if (!ConfirmMeasurementPasteScale(_measurementClipboard, page))
+        if (!EnsureMeasurementPasteWritable(viewport, page))
+        {
+            viewport.CancelPendingMixedCutRegionPaste();
+            return;
+        }
+        OurPlanCoreJob pasteJob = _currentJob;
+        MeasurementClipboard clipboard = _measurementClipboard;
+
+        if (!ConfirmMeasurementPasteScale(clipboard, page))
         {
             viewport.CancelPendingMixedCutRegionPaste();
             return;
         }
 
-        SKPoint pasteOffset = CalculateMeasurementPasteOffset(viewport, _measurementClipboard.Entries, pasteAtPdf);
+        SKPoint pasteOffset = CalculateMeasurementPasteOffset(viewport, clipboard.Entries, pasteAtPdf);
         if (!viewport.TryPreflightPendingMixedCutRegionPaste(pasteOffset, out string preflightFailure))
         {
             TxtStatus.Text = preflightFailure;
             return;
         }
-        MeasurementPasteMode? pasteMode = PromptMeasurementPasteMode(_measurementClipboard.Entries.Count);
+        MeasurementPasteMode? pasteMode = PromptMeasurementPasteMode(clipboard.Entries.Count, viewport, page);
         if (pasteMode == null)
+        {
+            viewport.CancelPendingMixedCutRegionPaste();
+            return;
+        }
+        if (!EnsureExpectedJobWritable(pasteJob, "paste measurements") || !EnsureMeasurementPasteWritable(viewport, page))
         {
             viewport.CancelPendingMixedCutRegionPaste();
             return;
@@ -111,7 +124,7 @@ public partial class MainWindow
         bool pasteCommitted = false;
         try
         {
-            foreach (MeasurementClipboardEntry entry in _measurementClipboard.Entries)
+            foreach (MeasurementClipboardEntry entry in clipboard.Entries)
             {
                 TakeoffItem target = ResolveMeasurementPasteTarget(entry, pasteMode.Value, createdTargets);
                 EnsureTakeoffItemFolder(target);
@@ -123,6 +136,7 @@ public partial class MainWindow
                 changedItems.Add(target);
             }
 
+            BeforeMeasurementPasteCommitForTests?.Invoke();
             viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
             bool mixedPasteHandled = viewport.CompletePendingMixedCutRegionPaste(
                 pasted,
@@ -130,6 +144,7 @@ public partial class MainWindow
                 out string cutoutStatus);
             if (!mixedPasteHandled)
                 viewport.RegisterAddedMeasurementsUndo(pasted, $"remove pasted {pasted.Count} measurement(s)");
+            AttachMeasurementPasteTakeoffUndo(viewport, pasteJob, pasted, createdTargets.Values);
             pasteCommitted = true;
 
             QueueTakeoffAutosave(changedItems);
@@ -225,7 +240,7 @@ public partial class MainWindow
         foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
         {
             if (!ReferenceEquals(window.Viewport, sourceViewport))
-                RefreshDetachedTakeoffDisplay(window, unitMode);
+                RefreshDetachedTakeoffDisplay(window, unitMode, preserveUndo: true);
         }
     }
 
@@ -260,23 +275,12 @@ public partial class MainWindow
         return normalized is "line" or "area";
     }
 
-    private MeasurementPasteMode? PromptMeasurementPasteMode(int count)
+    private MeasurementPasteMode? PromptMeasurementPasteMode(int count, PdfViewport viewport, PageInfo page)
     {
-        MessageBoxResult result = MessageBox.Show(
-            $"Paste {count} copied measurement(s) to the active sheet?\n\n" +
-            "Yes = use the same takeoff items/values.\n" +
-            "No = create new copied takeoff items.\n" +
-            "Cancel = do nothing.",
-            "Paste Measurements",
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Question);
-
-        return result switch
-        {
-            MessageBoxResult.Yes => MeasurementPasteMode.SameTakeoffs,
-            MessageBoxResult.No => MeasurementPasteMode.NewTakeoffs,
-            _ => null,
-        };
+        var dialog = new MeasurementPasteModeDialog(count, page.Name) { Owner = Window.GetWindow(viewport) ?? this };
+        return dialog.ShowDialog() == true
+            ? dialog.CreateNewTakeoffs ? MeasurementPasteMode.NewTakeoffs : MeasurementPasteMode.SameTakeoffs
+            : null;
     }
 
     private TakeoffItem ResolveMeasurementPasteTarget(

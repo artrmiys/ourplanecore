@@ -310,6 +310,14 @@ public sealed partial class PdfViewport
         PushAddedMeasurementsUndo(added, status);
     }
 
+    internal void AttachAddedMeasurementsUndoCompletion(IReadOnlyCollection<Measurement> added, Func<string?> completion)
+    {
+        if (_undoStack.Count == 0) return;
+        ViewportUndoAction last = _undoStack[^1];
+        if (last.AddedMeasurements.Select(snapshot => snapshot.Target).ToHashSet().SetEquals(added))
+            _undoStack[^1] = last with { AfterUndo = completion };
+    }
+
     private void PushAddedMeasurementsUndo(IEnumerable<Measurement> added, string status)
     {
         if (_applyingViewportUndo)
@@ -672,7 +680,8 @@ public sealed partial class PdfViewport
 
         RequestRepaint();
         PublishTransformSelectionChanged();
-        PostStatus($"Undo: {action.Status}.");
+        string? completionNote = action.AfterUndo?.Invoke();
+        PostStatus($"Undo: {action.Status}." + (string.IsNullOrWhiteSpace(completionNote) ? "" : " " + completionNote));
         return true;
     }
 
@@ -800,7 +809,8 @@ public sealed partial class PdfViewport
         List<AnnotationPresenceUndo> AddedAnnotations,
         List<MeasurementPresenceUndo> RemovedMeasurements,
         List<AnnotationPresenceUndo> RemovedAnnotations,
-        SheetOverlayTransformUndo? OverlayTransform = null);
+        SheetOverlayTransformUndo? OverlayTransform = null,
+        Func<string?>? AfterUndo = null);
 
     private sealed record SheetOverlayTransformUndo(
         string TargetPageFolder,

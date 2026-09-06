@@ -25,7 +25,7 @@ public partial class MainWindow
         ExecuteCommandPaletteItem(dialog.SelectedCommandId);
     }
 
-    private IReadOnlyList<CommandPaletteItem> BuildCommandPaletteItems()
+    private IReadOnlyList<CommandPaletteItem> BuildCommandPaletteItems(bool includeUnavailableModules = false)
     {
         bool hasJob = _currentJob != null;
         bool hasPage = _currentPage != null;
@@ -184,7 +184,9 @@ public partial class MainWindow
         Add("ai.exportMarkers", "Export Marker Context", "AI", "", "Export visible marker context JSON.", hasJob, "Open a job first.");
 
         return items
-            .Where(item => IsCommandAvailableForModules(item.Id))
+            .Where(item => includeUnavailableModules || IsCommandAvailableForModules(item.Id))
+            .Select(item => _customShortcuts.Overrides.TryGetValue(item.Id, out var bindings)
+                ? item with { Shortcut = string.Join(" / ", bindings.Select(KeyboardShortcutGesture.Display)) } : item)
             .ToList();
     }
 

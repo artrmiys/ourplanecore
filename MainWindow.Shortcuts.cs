@@ -35,6 +35,12 @@ public partial class MainWindow
             return;
         }
 
+        if (HandleCustomKeyboardShortcut(sender, e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.IsRepeat)
         {
             // The first D starts continuous Extra Joists. Do not let key-repeat

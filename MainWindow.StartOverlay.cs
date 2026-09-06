@@ -22,6 +22,8 @@ public partial class MainWindow
     {
         if (ShortcutsOverlay == null)
             return;
+        foreach (var guide in WalkKeyboardSurface(ShortcutsOverlay).OfType<Controls.KeyboardShortcutsOverlay>())
+            guide.RefreshAssignments(_customShortcuts, _keyboardCommands.Values);
         ShortcutsOverlay.Visibility =
             ShortcutsOverlay.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
     }

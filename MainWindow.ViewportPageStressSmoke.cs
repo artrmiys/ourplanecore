@@ -129,6 +129,7 @@ public partial class MainWindow
         watch.Stop();
         report.InitialPageName = _currentPage.Name;
         report.InitialPageSettleMs = watch.ElapsedMilliseconds;
+        report.InitialPagePaintedUtc = DateTime.UtcNow;
     }
 
     private async Task<PageSmokeResult> OpenAndProbePageAsync(PageInfo page, int timeoutMs, string stage)
@@ -504,6 +505,7 @@ public partial class MainWindow
         public int OpenSampleCount { get; set; }
         public string InitialPageName { get; set; } = "";
         public long InitialPageSettleMs { get; set; }
+        public DateTime? InitialPagePaintedUtc { get; set; }
         public DateTime StartedUtc { get; set; }
         public DateTime FinishedUtc { get; set; }
         public List<PageSmokeResult> OpenResults { get; } = [];

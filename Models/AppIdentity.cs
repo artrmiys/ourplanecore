@@ -21,7 +21,27 @@ public static class AppIdentity
 
     public static bool IsIsolatedPreview => IsPreviewBuild || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OURPLANCORE_PROFILE_ROOT")) || File.Exists(Path.Combine(AppContext.BaseDirectory, "ourplancore.preview"));
 
-    private static string PreviewProfileRoot => Environment.GetEnvironmentVariable("OURPLANCORE_PROFILE_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OurPlanCore Preview");
+    private static readonly string PreviewProfileName = ReadPreviewProfileName();
+
+    private static string PreviewProfileRoot => Environment.GetEnvironmentVariable("OURPLANCORE_PROFILE_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), PreviewProfileName);
+
+    // A separately installed preview may name its own profile in the marker.
+    // This keeps a still-running earlier preview from sharing settings and jobs.
+    // Existing empty markers and builds without a marker retain their old root.
+    private static string ReadPreviewProfileName()
+    {
+        const string fallback = "OurPlanCore Preview";
+        string marker = Path.Combine(AppContext.BaseDirectory, "ourplancore.preview");
+        try
+        {
+            if (!File.Exists(marker) || new FileInfo(marker).Length > 512) return fallback;
+            string name = File.ReadAllText(marker).Trim();
+            return name.StartsWith(fallback + " ", StringComparison.Ordinal) && name.Length <= 100 &&
+                name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && !Path.IsPathRooted(name)
+                ? name : fallback;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return fallback; }
+    }
 
     public static string RoamingRoot => IsIsolatedPreview ? Path.Combine(PreviewProfileRoot, "roaming") : ProductRoamingRoot(ProductName);
 

@@ -213,20 +213,17 @@ public sealed partial class PdfViewport
 
     private SKFilterQuality CurrentPageBitmapFilterQuality()
     {
-        // Static raster is pinned and never re-rendered, so sample it for the
-        // sharpest still image the interactive path allows:
-        //  - motion: Low — cheap and clean; avoids the None nearest-neighbour
-        //    shimmer the down-scaled high-res raster shows while zooming/panning.
-        //  - at rest, zoomed IN past native resolution: None — nearest-neighbour
-        //    keeps edges crisp instead of the soft Medium upscale (no shimmer on
-        //    magnification since the image is not being minified).
-        //  - at rest, at or below native: Medium — smooth minification.
+        // A pinned image has no new detail to reveal when navigation stops.
+        // Keep bilinear sampling while magnifying, both in motion and at rest:
+        // switching to nearest-neighbour made the same walls/letters suddenly
+        // turn into square pixels after the navigation idle timer expired.
+        // Minification can still use mip filtering once motion has ended.
         if (IsStaticRasterDisplayActive())
         {
             if (_renderNavigationFastFrame)
                 return SKFilterQuality.Low;
 
-            return _zoom > _bitmapScale ? SKFilterQuality.None : SKFilterQuality.Medium;
+            return _zoom > _bitmapScale ? SKFilterQuality.Low : SKFilterQuality.Medium;
         }
 
         if (_renderNavigationFastFrame)

@@ -18,6 +18,14 @@ namespace OurPlanCore;
 
 internal sealed class PageBookmarksController
 {
+    internal FrameworkElement? KeyboardList => _bookmarkList;
+    internal void ExecuteKeyboardCommand(string id)
+    {
+        if (!_moduleEnabled) return;
+        if (id == "bookmarks.open") OpenSelectedBookmark();
+        else if (id == "bookmarks.delete") DeleteSelectedBookmark();
+    }
+
     private readonly Window _owner;
     private readonly TabControl _pagesSideTabs;
     private readonly ToggleButton _dockToggleButton;

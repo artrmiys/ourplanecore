@@ -87,7 +87,8 @@ internal static partial class OurPlanPackagePortability
                 }
                 if (!IsPortableMetadataFile(file.FullPath))
                     continue;
-                if (!MetadataNeedsNormalization(file.FullPath, root, root))
+                PortableMetadataContext metadata = ClassifyMetadataFile(file.FullPath);
+                if (!MetadataNeedsNormalization(metadata, root, root))
                     continue;
                 JsonNode document = ParseMetadataDocument(file.FullPath);
                 bool changed = NormalizeNode(
@@ -95,7 +96,7 @@ internal static partial class OurPlanPackagePortability
                     Path.GetDirectoryName(file.FullPath)!,
                     root,
                     root,
-                    file.FullPath,
+                    metadata,
                     writeChanges: true);
                 if (!changed)
                     continue;
@@ -130,7 +131,8 @@ internal static partial class OurPlanPackagePortability
         string destinationRoot,
         bool writeChanges)
     {
-        if (!MetadataNeedsNormalization(metadataPath, sourceRoot, destinationRoot))
+        PortableMetadataContext metadata = ClassifyMetadataFile(metadataPath);
+        if (!MetadataNeedsNormalization(metadata, sourceRoot, destinationRoot))
             return;
         JsonNode root = ParseMetadataDocument(metadataPath);
 
@@ -140,7 +142,7 @@ internal static partial class OurPlanPackagePortability
             metadataFolder,
             sourceRoot,
             destinationRoot,
-            metadataPath,
+            metadata,
             writeChanges);
         if (!writeChanges || !changed)
             return;
@@ -181,10 +183,11 @@ internal static partial class OurPlanPackagePortability
     }
 
     private static bool MetadataNeedsNormalization(
-        string metadataPath,
+        PortableMetadataContext metadata,
         string sourceRoot,
         string destinationRoot)
     {
+        string metadataPath = metadata.Path;
         string metadataFolder = Path.GetDirectoryName(metadataPath)!;
         string? pendingProperty = null;
         bool inContextCropPaths = false;
@@ -219,7 +222,7 @@ internal static partial class OurPlanPackagePortability
                         metadataFolder,
                         sourceRoot,
                         destinationRoot,
-                        metadataPath,
+                        metadata,
                         "context_crop_paths");
                     needsNormalization |= !contextPortable.Equals(value, StringComparison.Ordinal);
                     return;
@@ -229,7 +232,7 @@ internal static partial class OurPlanPackagePortability
 
                 string property = pendingProperty;
                 pendingProperty = null;
-                if (IsAiPortableMetadata(metadataPath) &&
+                if (metadata.IsAi &&
                     property.Equals("context_crop_paths", StringComparison.OrdinalIgnoreCase))
                 {
                     if (token != JsonTokenType.StartArray)
@@ -240,7 +243,7 @@ internal static partial class OurPlanPackagePortability
                     inContextCropPaths = true;
                     return;
                 }
-                if (!IsPortablePathProperty(metadataPath, property))
+                if (!IsPortablePathProperty(metadata, property))
                     return;
                 if (token == JsonTokenType.Null)
                     return;
@@ -251,23 +254,23 @@ internal static partial class OurPlanPackagePortability
                 }
                 if (string.IsNullOrWhiteSpace(value))
                     return;
-                string portable = IsThreeDModel(metadataPath) &&
+                string portable = metadata.IsThreeD &&
                                   property.Equals("TakeoffFolder", StringComparison.OrdinalIgnoreCase)
                     ? PortableCompositePath(
                         value!,
                         metadataFolder,
                         sourceRoot,
                         destinationRoot,
-                        metadataPath,
+                        metadata,
                         property)
                     : PortablePath(
                         value!,
                         metadataFolder,
                         sourceRoot,
                         destinationRoot,
-                        metadataPath,
+                        metadata,
                         property);
-                if (IsThreeDModel(metadataPath))
+                if (metadata.IsThreeD)
                     portable = portable.Replace(Path.DirectorySeparatorChar, '/');
                 needsNormalization |= !portable.Equals(value, StringComparison.Ordinal);
             });
@@ -276,6 +279,7 @@ internal static partial class OurPlanPackagePortability
 
     private static void ValidateMetadataReferences(string metadataPath, string root)
     {
+        PortableMetadataContext metadata = ClassifyMetadataFile(metadataPath);
         string metadataFolder = Path.GetDirectoryName(metadataPath)!;
         string? pendingProperty = null;
         bool inContextCropPaths = false;
@@ -310,7 +314,7 @@ internal static partial class OurPlanPackagePortability
                         metadataFolder,
                         root,
                         root,
-                        metadataPath,
+                        metadata,
                         "context_crop_paths");
                     return;
                 }
@@ -321,7 +325,7 @@ internal static partial class OurPlanPackagePortability
                 pendingProperty = null;
                 if (depth == 1 && token is JsonTokenType.String or JsonTokenType.Null)
                     rootStrings[property] = value;
-                if (IsAiPortableMetadata(metadataPath) &&
+                if (metadata.IsAi &&
                     property.Equals("context_crop_paths", StringComparison.OrdinalIgnoreCase))
                 {
                     if (token != JsonTokenType.StartArray)
@@ -332,7 +336,7 @@ internal static partial class OurPlanPackagePortability
                     inContextCropPaths = true;
                     return;
                 }
-                if (!IsPortablePathProperty(metadataPath, property))
+                if (!IsPortablePathProperty(metadata, property))
                     return;
                 if (token == JsonTokenType.Null)
                     return;
@@ -344,7 +348,7 @@ internal static partial class OurPlanPackagePortability
                 if (string.IsNullOrWhiteSpace(value))
                     return;
 
-                if (IsThreeDModel(metadataPath) &&
+                if (metadata.IsThreeD &&
                     property.Equals("TakeoffFolder", StringComparison.OrdinalIgnoreCase))
                 {
                     _ = PortableCompositePath(
@@ -352,7 +356,7 @@ internal static partial class OurPlanPackagePortability
                         metadataFolder,
                         root,
                         root,
-                        metadataPath,
+                        metadata,
                         property);
                 }
                 else
@@ -362,7 +366,7 @@ internal static partial class OurPlanPackagePortability
                         metadataFolder,
                         root,
                         root,
-                        metadataPath,
+                        metadata,
                         property);
                 }
             });
@@ -374,19 +378,20 @@ internal static partial class OurPlanPackagePortability
         string metadataFolder,
         string sourceRoot,
         string destinationRoot,
-        string metadataPath,
+        PortableMetadataContext metadata,
         bool writeChanges)
     {
+        string metadataPath = metadata.Path;
         bool changed = false;
         if (node is JsonObject obj)
         {
-            bool threeDModel = IsThreeDModel(metadataPath);
+            bool threeDModel = metadata.IsThreeD;
             string oldTakeoff = threeDModel ? ReadString(obj, "TakeoffFolder") : "";
             string oldPage = threeDModel ? ReadString(obj, "PageFolder") : "";
             string oldGroup = threeDModel ? ReadString(obj, "GroupKey") : "";
             foreach ((string propertyName, JsonNode? value) in obj.ToList())
             {
-                if (IsAiPortableMetadata(metadataPath) &&
+                if (metadata.IsAi &&
                     propertyName.Equals("context_crop_paths", StringComparison.OrdinalIgnoreCase) &&
                     value is JsonArray contextPaths)
                 {
@@ -407,7 +412,7 @@ internal static partial class OurPlanPackagePortability
                             metadataFolder,
                             sourceRoot,
                             destinationRoot,
-                            metadataPath,
+                            metadata,
                             propertyName);
                         if (writeChanges && !portable.Equals(contextPath, StringComparison.Ordinal))
                         {
@@ -419,7 +424,7 @@ internal static partial class OurPlanPackagePortability
                 }
 
                 if (value is JsonValue scalar &&
-                    IsPortablePathProperty(metadataPath, propertyName) &&
+                    IsPortablePathProperty(metadata, propertyName) &&
                     scalar.TryGetValue(out string? pathValue) &&
                     !string.IsNullOrWhiteSpace(pathValue))
                 {
@@ -430,14 +435,14 @@ internal static partial class OurPlanPackagePortability
                             metadataFolder,
                             sourceRoot,
                             destinationRoot,
-                            metadataPath,
+                            metadata,
                             propertyName)
                         : PortablePath(
                             pathValue,
                             metadataFolder,
                             sourceRoot,
                             destinationRoot,
-                            metadataPath,
+                            metadata,
                             propertyName);
                     if (threeDModel)
                         portable = portable.Replace(Path.DirectorySeparatorChar, '/');
@@ -456,7 +461,7 @@ internal static partial class OurPlanPackagePortability
                         metadataFolder,
                         sourceRoot,
                         destinationRoot,
-                        metadataPath,
+                        metadata,
                         writeChanges);
                 }
             }
@@ -487,7 +492,7 @@ internal static partial class OurPlanPackagePortability
                         metadataFolder,
                         sourceRoot,
                         destinationRoot,
-                        metadataPath,
+                        metadata,
                         writeChanges);
                 }
             }
@@ -501,7 +506,7 @@ internal static partial class OurPlanPackagePortability
         string metadataFolder,
         string sourceRoot,
         string destinationRoot,
-        string metadataPath,
+        PortableMetadataContext metadata,
         string propertyName) =>
         string.Join(
             "|",
@@ -513,7 +518,7 @@ internal static partial class OurPlanPackagePortability
                         metadataFolder,
                         sourceRoot,
                         destinationRoot,
-                        metadataPath,
+                        metadata,
                         propertyName)));
 
     private static string PortablePath(
@@ -521,13 +526,14 @@ internal static partial class OurPlanPackagePortability
         string metadataFolder,
         string sourceRoot,
         string destinationRoot,
-        string metadataPath,
+        PortableMetadataContext metadata,
         string propertyName)
     {
+        string metadataPath = metadata.Path;
         try
         {
             string referenceFolder = ReferenceFolder(
-                metadataPath,
+                metadata,
                 metadataFolder,
                 destinationRoot,
                 propertyName);
@@ -570,43 +576,6 @@ internal static partial class OurPlanPackagePortability
                 ex);
         }
     }
-
-    private static bool IsPortablePathProperty(string metadataPath, string propertyName) =>
-        PathPropertyNames.Contains(propertyName) ||
-        IsAiPortableMetadata(metadataPath) &&
-        (propertyName.Equals("page_folder", StringComparison.OrdinalIgnoreCase) ||
-         propertyName.Equals("crop_path", StringComparison.OrdinalIgnoreCase) ||
-         propertyName.Equals("layer_manifest_path", StringComparison.OrdinalIgnoreCase) ||
-         propertyName.Equals("raw_response_path", StringComparison.OrdinalIgnoreCase) ||
-         propertyName.Equals("root_path", StringComparison.OrdinalIgnoreCase)) ||
-        Path.GetFileName(metadataPath).Equals("bookmarks.json", StringComparison.OrdinalIgnoreCase) &&
-        (propertyName.Equals("page_folder", StringComparison.OrdinalIgnoreCase) ||
-         propertyName.Equals("crop_image_path", StringComparison.OrdinalIgnoreCase)) ||
-        IsThreeDModel(metadataPath) &&
-        (propertyName.Equals("TakeoffFolder", StringComparison.OrdinalIgnoreCase) ||
-         propertyName.Equals("PageFolder", StringComparison.OrdinalIgnoreCase)) ||
-        Path.GetFileName(metadataPath).Equals("measurements.json", StringComparison.OrdinalIgnoreCase) &&
-        propertyName.Equals("page_folder", StringComparison.OrdinalIgnoreCase) ||
-        Path.GetFileName(metadataPath).Equals("annotations.json", StringComparison.OrdinalIgnoreCase) &&
-        propertyName.Equals("page_folder", StringComparison.OrdinalIgnoreCase);
-
-    private static string ReferenceFolder(
-        string metadataPath,
-        string metadataFolder,
-        string destinationRoot,
-        string propertyName) =>
-        IsThreeDModel(metadataPath) ||
-        Path.GetFileName(metadataPath).Equals("bookmarks.json", StringComparison.OrdinalIgnoreCase) ||
-        IsAiPortableMetadata(metadataPath) &&
-        (propertyName.Equals("page_folder", StringComparison.OrdinalIgnoreCase) ||
-         propertyName.Equals("layer_manifest_path", StringComparison.OrdinalIgnoreCase) ||
-         propertyName.Equals("root_path", StringComparison.OrdinalIgnoreCase)) ||
-        Path.GetFileName(metadataPath).Equals("measurements.json", StringComparison.OrdinalIgnoreCase) &&
-        propertyName.Equals("page_folder", StringComparison.OrdinalIgnoreCase)
-            ? destinationRoot
-            : IsAiPortableMetadata(metadataPath)
-                ? Path.Combine(destinationRoot, "AI_Context")
-            : metadataFolder;
 
     private static IEnumerable<string> MetadataFiles(string root) =>
         Directory.EnumerateFiles(
@@ -674,9 +643,11 @@ internal static partial class OurPlanPackagePortability
     private static bool IsValidatedMetadataFile(string path) =>
         IsPortableMetadataFile(path) || AiIdentifierSchemaFor(path) != null;
 
-    private static bool IsAiPortableMetadata(string path)
+    private static bool IsAiPortableMetadata(string path) =>
+        IsAiPortableRelativeMetadata(AiContextRelativePath(path));
+
+    private static bool IsAiPortableRelativeMetadata(string relative)
     {
-        string relative = AiContextRelativePath(path);
         if (relative.Equals("project.json", StringComparison.OrdinalIgnoreCase))
             return true;
         string[] segments = relative
@@ -690,10 +661,6 @@ internal static partial class OurPlanPackagePortability
                parent == "responses" &&
                !fileName.EndsWith(".openai.raw.json", StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool IsThreeDModel(string metadataPath) =>
-        ProjectRelativeMetadataPath(metadataPath)
-            ?.Equals("3D_Context/walls_model.json", StringComparison.OrdinalIgnoreCase) == true;
 
     private static string ReadString(JsonObject obj, string propertyName)
     {
