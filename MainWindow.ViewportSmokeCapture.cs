@@ -13,7 +13,8 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(folder)) return;
         Directory.CreateDirectory(folder);
         string name = new(page.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c).Take(100).ToArray());
-        string path = Path.Combine(folder, name + "-" + stage + ".png");
+        string safeStage = new(stage.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c).Take(100).ToArray());
+        string path = Path.Combine(folder, name + "-" + safeStage + ".png");
         if (File.Exists(path)) return;
         int width = (int)ViewportSurfaceHost.ActualWidth, height = (int)ViewportSurfaceHost.ActualHeight;
         if (width < 2 || height < 2) return;
