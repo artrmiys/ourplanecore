@@ -216,7 +216,7 @@ public partial class MainWindow
         int movedStruct = 0;
         int movedOthers = 0;
         int skipped = 0;
-        bool reloadActiveTab = false;
+        var movedPaths = new List<(string OldPath, string NewPath)>();
         string? selectAfter = null;
 
         foreach (PageInfo page in pages)
@@ -237,7 +237,7 @@ public partial class MainWindow
 
             string oldPath = page.FolderPath;
             string movedPath = OurPlanCoreJobStore.MoveNode(oldPath, target);
-            reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
+            movedPaths.Add((oldPath, movedPath));
             selectAfter ??= movedPath;
 
             if (string.Equals(target, arch, StringComparison.OrdinalIgnoreCase))
@@ -248,6 +248,7 @@ public partial class MainWindow
                 movedOthers++;
         }
 
+        bool reloadActiveTab = UpdatePageReferencesForMovedPaths(movedPaths);
         OurPlanCoreJobStore.SortChildren(arch, descending: false);
         OurPlanCoreJobStore.SortChildren(struc, descending: false);
         OurPlanCoreJobStore.SortChildren(others, descending: false);
@@ -365,7 +366,7 @@ public partial class MainWindow
         int movedTop = 0;
         var movedByFolder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int skipped = 0;
-        bool reloadActiveTab = false;
+        var movedPaths = new List<(string OldPath, string NewPath)>();
         string? selectAfter = null;
 
         foreach (PageInfo page in pages)
@@ -386,7 +387,7 @@ public partial class MainWindow
 
             string oldPath = page.FolderPath;
             string movedPath = OurPlanCoreJobStore.MoveNode(oldPath, target);
-            reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
+            movedPaths.Add((oldPath, movedPath));
             selectAfter ??= movedPath;
 
             if (string.Equals(target, scopeFolder, StringComparison.OrdinalIgnoreCase))
@@ -395,6 +396,7 @@ public partial class MainWindow
                 movedByFolder[target] = movedByFolder.GetValueOrDefault(target) + 1;
         }
 
+        bool reloadActiveTab = UpdatePageReferencesForMovedPaths(movedPaths);
         foreach (string folder in targets.Values.Where(v => !string.IsNullOrEmpty(v)).Distinct(StringComparer.OrdinalIgnoreCase))
             OurPlanCoreJobStore.SortChildren(folder, descending: false);
         int reorderedTop = ReorderSuffixPagesToTop(scopeFolder);

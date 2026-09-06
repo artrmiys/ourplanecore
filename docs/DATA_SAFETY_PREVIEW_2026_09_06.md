@@ -61,6 +61,10 @@ and original backups remain for recovery once access is restored.
   characters and verifies full/overview dimensions and pixels through the
   production cache-reader methods.
 
+A/S and suffix sorts now rebase measurement/overlay/tab references once for
+the completed batch, instead of rescanning the project after each moved sheet.
+The journal covers both the physical moves and this final reference update.
+
 ```powershell
 dotnet build .\ourplancore.sln
 dotnet run --project .\Tests\OurPlanCore.Tests.csproj --no-build

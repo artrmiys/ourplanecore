@@ -21,6 +21,9 @@ public partial class MainWindow
         var pages = CollectPagesUnder(job.PagesRoot).ToList();
         int itemCount = _takeoffItems.Count, measurementCount = _takeoffItems.Sum(item => item.Measurements.Count);
         var totals = _takeoffItems.ToDictionary(item => item.FolderPath, item => item.Total(0), StringComparer.OrdinalIgnoreCase);
+        var validLinks = _takeoffItems.SelectMany(item => item.Measurements.Select((measurement, index) =>
+                (Key: item.FolderPath + "|" + index, Path: NormalizePageReferencePath(measurement.PageFolder))))
+            .Where(link => Directory.Exists(link.Path)).Select(link => link.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         try
         {
             if (pages.Count < 100 || measurementCount < 500)
@@ -119,6 +122,9 @@ public partial class MainWindow
             {
                 Check(_takeoffItems.Count == itemCount && _takeoffItems.Sum(item => item.Measurements.Count) == measurementCount, "Takeoff or measurement count changed.");
                 Check(_takeoffItems.All(item => totals.TryGetValue(item.FolderPath, out double value) && Math.Abs(item.Total(0) - value) < 1e-8), "A takeoff quantity changed.");
+                Check(_takeoffItems.SelectMany(item => item.Measurements.Select((measurement, index) =>
+                        (Key: item.FolderPath + "|" + index, Path: NormalizePageReferencePath(measurement.PageFolder))))
+                    .Where(link => validLinks.Contains(link.Key)).All(link => Directory.Exists(link.Path)), "A previously valid measurement lost its sheet link.");
             }
             void CheckMetadata(Dictionary<string, string> original)
             {
