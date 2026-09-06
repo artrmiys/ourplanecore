@@ -858,6 +858,10 @@ tests.Add(("visual change after paint receives a trailing frame", ViewportRepain
 tests.Add(("repaint burst stays coalesced and becomes idle", ViewportRepaintSchedulingTests.RepaintBurstStaysCoalescedAndBecomesIdle));
 tests.Add(("worker repaint is dispatched and painted", ViewportRepaintSchedulingTests.CrossThreadRepaintIsDispatchedAndPainted));
 tests.Add(("offscreen snapshot preserves the latest repaint color", ViewportRepaintSchedulingTests.OffscreenSnapshotBetweenRequestsKeepsLatestColor));
+tests.Add(("installed executable marker selects its isolated preview profile", AppIdentityPreviewProfileTests.ExecutableMarkerWinsOverExtractedBundleMarker));
+tests.Add(("dotnet host uses the application preview marker", AppIdentityPreviewProfileTests.DotnetHostUsesApplicationMarker));
+tests.Add(("missing process marker falls back to the application directory", AppIdentityPreviewProfileTests.MissingOrUnavailableProcessMarkerUsesBaseDirectory));
+tests.Add(("invalid preview markers preserve the existing default", AppIdentityPreviewProfileTests.InvalidOrEmptyMarkerRetainsExistingDefault));
 tests.AddRange(new (string Name, Action Run)[]
 {
     ("custom shortcuts preserve legacy defaults", CustomKeyboardShortcutTests.DefaultsStaySparseAndPreserveLegacyKeys),

@@ -19,19 +19,46 @@ public static class AppIdentity
 
     private static readonly bool IsPreviewBuild = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(AppIdentity).Assembly)?.InformationalVersion.Contains("-preview", StringComparison.OrdinalIgnoreCase) == true;
 
-    public static bool IsIsolatedPreview => IsPreviewBuild || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OURPLANCORE_PROFILE_ROOT")) || File.Exists(Path.Combine(AppContext.BaseDirectory, "ourplancore.preview"));
+    private static readonly string PreviewMarkerPath = ResolvePreviewMarkerPath(Environment.ProcessPath, AppContext.BaseDirectory);
 
-    private static readonly string PreviewProfileName = ReadPreviewProfileName();
+    public static bool IsIsolatedPreview => IsPreviewBuild || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OURPLANCORE_PROFILE_ROOT")) || File.Exists(PreviewMarkerPath);
+
+    private static readonly string PreviewProfileName = ReadPreviewProfileName(PreviewMarkerPath);
 
     private static string PreviewProfileRoot => Environment.GetEnvironmentVariable("OURPLANCORE_PROFILE_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), PreviewProfileName);
 
     // A separately installed preview may name its own profile in the marker.
     // This keeps a still-running earlier preview from sharing settings and jobs.
     // Existing empty markers and builds without a marker retain their old root.
-    private static string ReadPreviewProfileName()
+    internal static string ResolvePreviewMarkerPath(string? processPath, string baseDirectory)
+    {
+        // A self-extracting bundle's BaseDirectory is its extraction directory.
+        // The installation's marker belongs beside the actual executable.
+        if (!string.IsNullOrWhiteSpace(processPath))
+        {
+            try
+            {
+                if (Path.IsPathFullyQualified(processPath) &&
+                    !string.Equals(Path.GetFileNameWithoutExtension(processPath), "dotnet", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? directory = Path.GetDirectoryName(processPath);
+                    if (!string.IsNullOrEmpty(directory))
+                    {
+                        string marker = Path.Combine(directory, "ourplancore.preview");
+                        if (File.Exists(marker)) return marker;
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException) { }
+        }
+
+        // Framework-dependent launches use the app directory, not the dotnet host.
+        return Path.Combine(baseDirectory, "ourplancore.preview");
+    }
+
+    internal static string ReadPreviewProfileName(string marker)
     {
         const string fallback = "OurPlanCore Preview";
-        string marker = Path.Combine(AppContext.BaseDirectory, "ourplancore.preview");
         try
         {
             if (!File.Exists(marker) || new FileInfo(marker).Length > 512) return fallback;
