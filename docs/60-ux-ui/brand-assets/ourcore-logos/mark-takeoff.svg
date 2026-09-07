@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Takeoff mark">
+  <g stroke="currentColor" stroke-opacity="0.92" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M26 44 V26 H44"/><path d="M84 26 H102 V44"/>
+    <path d="M102 84 V102 H84"/><path d="M44 102 H26 V84"/>
+  </g>
+  <g stroke="#22c55e" stroke-width="7" stroke-linecap="round">
+    <line x1="64" y1="64" x2="64" y2="40"/><line x1="64" y1="64" x2="64" y2="88"/>
+    <line x1="64" y1="64" x2="40" y2="64"/><line x1="64" y1="64" x2="88" y2="64"/>
+  </g>
+  <g fill="#22c55e"><circle cx="64" cy="38" r="7"/><circle cx="64" cy="90" r="7"/><circle cx="38" cy="64" r="7"/><circle cx="90" cy="64" r="7"/></g>
+  <rect x="55" y="55" width="18" height="18" rx="4" fill="#22c55e"/>
+</svg>
