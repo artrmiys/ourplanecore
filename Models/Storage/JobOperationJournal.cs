@@ -57,7 +57,7 @@ internal sealed partial class JobOperationJournal : IDisposable
         return new JobOperationJournal(root, label, kind);
     }
 
-    private JobOperationJournal(string root, string label, string kind)
+    private JobOperationJournal(string root, string label, string kind, List<string>? scopedFiles = null)
     {
         _root = root;
         _owns = true;
@@ -70,7 +70,11 @@ internal sealed partial class JobOperationJournal : IDisposable
         if (HasPending(root)) throw new IOException("Reopen the project to recover its interrupted operation before making another change.");
         _directory = SafeJobPathResolver.ResolveRelative(root, ".undo/operations/" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(_directory, "before"));
-        _record = new OperationRecord { Label = label, Kind = kind, StartedUtc = DateTime.UtcNow };
+        _record = new OperationRecord
+        {
+            Version = scopedFiles == null ? 1 : 2,
+            Label = label, Kind = kind, StartedUtc = DateTime.UtcNow, ScopedFiles = scopedFiles,
+        };
         _record.Before = Capture(root, copyMetadata: true);
         _record.State = "pending";
         Persist(); // A durable manifest exists before the first user-data mutation.
@@ -200,7 +204,9 @@ internal sealed partial class JobOperationJournal : IDisposable
         if (new FileInfo(manifest).Length > 64 * 1024 * 1024)
             throw new InvalidDataException("The recovery manifest is too large.");
         var record = JsonSerializer.Deserialize<OperationRecord>(File.ReadAllText(manifest)) ?? throw new InvalidDataException("Invalid recovery manifest.");
-        if (record.Version != 1) throw new InvalidDataException("Unsupported recovery manifest version.");
+        if (record.Version is not (1 or 2)) throw new InvalidDataException("Unsupported recovery manifest version.");
+        if ((record.Version == 2) != (record.ScopedFiles != null))
+            throw new InvalidDataException("Invalid scoped recovery manifest.");
         var operation = new JobOperationJournal { _root = Path.GetFullPath(root), _directory = Path.GetDirectoryName(manifest)!, _record = record };
         // Validate every reference before performing even the first restoration step.
         foreach (FileRecord entry in record.Before.Files.Concat(record.After?.Files ?? []))
@@ -210,12 +216,14 @@ internal sealed partial class JobOperationJournal : IDisposable
                 _ = SafeJobPathResolver.ResolveRelative(operation._directory, entry.Backup);
         }
         foreach (string dir in record.Before.Directories.Concat(record.After?.Directories ?? [])) _ = operation.Resolve(dir);
+        foreach (string file in record.ScopedFiles ?? []) _ = operation.Resolve(file);
         foreach (MoveIntent move in record.Moves) { _ = operation.Resolve(move.Source); _ = operation.Resolve(move.Destination); }
         return operation;
     }
 
     private Inventory Capture(string root, bool copyMetadata)
     {
+        if (_record.ScopedFiles != null) return CaptureScopedFiles(copyMetadata);
         var result = new Inventory();
         var pending = new Stack<string>(); pending.Push(root);
         while (pending.Count > 0)
@@ -232,7 +240,11 @@ internal sealed partial class JobOperationJournal : IDisposable
                     result.Directories.Add(relative); pending.Push(child.FullName); continue;
                 }
                 if (child is not FileInfo file) continue;
-                bool metadata = IsMetadata(file.Name);
+                // Snap geometry is a rebuildable raster cache, often larger than all
+                // editable project data. Keep its inventory entry, not a backup copy.
+                bool snapCache = relative.StartsWith("Pages/", StringComparison.OrdinalIgnoreCase) &&
+                    relative.EndsWith("/raster/snap.json", StringComparison.OrdinalIgnoreCase);
+                bool metadata = IsMetadata(file.Name) && !snapCache;
                 var entry = new FileRecord { Path = relative, Length = file.Length, Metadata = metadata };
                 if (metadata)
                 {
@@ -302,6 +314,7 @@ internal sealed partial class JobOperationJournal : IDisposable
         public Inventory Before { get; set; } = new();
         public Inventory? After { get; set; }
         public List<MoveIntent> Moves { get; set; } = [];
+        public List<string>? ScopedFiles { get; set; }
     }
     internal sealed class Inventory
     {

@@ -6,7 +6,7 @@ using System.Xml.Linq;
 
 namespace OurPlanCore;
 
-internal static class NodeStore
+internal static partial class NodeStore
 {
     private static readonly IComparer<string> NaturalNameComparer = new NaturalStringComparer();
 
@@ -280,13 +280,7 @@ internal static class NodeStore
 
     private static void SortChildren(string parentFolder, bool descending, IComparer<string> displayNameComparer)
     {
-        using var operation = JobOperationJournal.BeginForPath(parentFolder, "Sort folder children", "page-sort");
-        var children = Directory.EnumerateDirectories(parentFolder)
-            .OrderBy(OurPlanCoreJobStore.DisplayName, displayNameComparer)
-            .ToList();
-        if (descending) children.Reverse();
-        ApplySiblingOrder(children);
-        operation.Commit();
+        ApplySortedFolders(parentFolder, [parentFolder], descending, displayNameComparer);
     }
 
     public static void NormalizeOrder(string parentFolder)
@@ -482,7 +476,10 @@ internal static class NodeStore
 
         int order = 1;
         foreach (string folder in folders)
-            SetOrderIndex(folder, order++);
+        {
+            if (GetOrderIndex(folder) != order) SetOrderIndex(folder, order);
+            order++;
+        }
     }
 
     private static void RegenerateGuidsRecursively(string folder)

@@ -398,7 +398,7 @@ public partial class MainWindow
 
     // Walls / Details sorts apply to the selected folder AND every folder
     // under it, so selecting "walls" reorders each floor folder in one click.
-    private void SortTakeoffsSpecial(Action<string> sortFolder, string label)
+    private void SortTakeoffsSpecial(bool walls, string label)
     {
         if (_currentJob == null)
         {
@@ -411,16 +411,14 @@ public partial class MainWindow
         try
         {
             string folderPath = SelectedTakeoffScopeFolder();
-            sortFolder(folderPath);
-            int folders = 1;
-            foreach (string child in Directory.EnumerateDirectories(folderPath, "*", SearchOption.AllDirectories))
-            {
-                sortFolder(child);
-                folders++;
-            }
+            FlushTakeoffAutosaves();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            NodeStore.SortResult result = NodeStore.SortTakeoffTree(folderPath, walls);
 
-            LoadTakeoffsForJob();
-            TxtStatus.Text = $"Sorted {TakeoffScopeLabel(folderPath)} ({label}, {folders} folder(s)).";
+            if (result.ChangedParents.Count > 0 && !TryRefreshTakeoffSortFast(result.ChangedParents))
+                LoadTakeoffsForJob();
+            AppLog.Info($"Takeoff sort: {label}; folders={result.FolderCount}; changed={result.ChangedParents.Count}; elapsed={watch.ElapsedMilliseconds}ms.");
+            TxtStatus.Text = $"Sorted {TakeoffScopeLabel(folderPath)} ({label}, {result.FolderCount} folder(s)).";
         }
         catch (Exception ex)
         {
@@ -429,10 +427,10 @@ public partial class MainWindow
     }
 
     private void SortTakeoffsWalls() =>
-        SortTakeoffsSpecial(OurPlanCoreJobStore.SortTakeoffWallChildren, "walls: ext-corr-dem-2x6-2x4");
+        SortTakeoffsSpecial(walls: true, "walls: ext-corr-dem-2x6-2x4");
 
     private void SortTakeoffsDetails() =>
-        SortTakeoffsSpecial(OurPlanCoreJobStore.SortTakeoffDetailChildren, "details by sheet");
+        SortTakeoffsSpecial(walls: false, "details by sheet");
 
     private void SortTakeoffChildren(string folderPath, bool descending)
     {

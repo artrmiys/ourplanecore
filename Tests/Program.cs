@@ -30,6 +30,9 @@ if (args.Length > 0 && args[0] == "feedback-ui-smoke")
 if (args.Length > 0 && args[0] == "data-safety-ui-smoke")
     return DataSafetyUiSmokeHarness.Run();
 
+if (args.Length > 0 && args[0] == "tree-sort-ui")
+    return TreeSortUiHarness.Run(args);
+
 if (args.Length > 0 && args[0] == "clipboard-ui-smoke")
     return MeasurementClipboardUiSmokeHarness.Run(args);
 
@@ -852,6 +855,7 @@ var tests = new List<(string Name, Action Run)>
 };
 
 tests.AddRange(DataSafetyTests.Cases);
+tests.AddRange(OrderJournalRegressionTests.Cases);
 tests.Add(("magnified raster preserves interpolated pixels after navigation", ViewportZoomSamplingTests.MagnifiedRasterDoesNotChangePixelsAfterNavigation));
 tests.Add(("cached raster images share native pixels and survive lease eviction", ViewportBitmapLeaseTests.CachedImagesSharePixelsAndSurviveEviction));
 tests.Add(("visual change after paint receives a trailing frame", ViewportRepaintSchedulingTests.VisualChangeAfterPaintBeforeQueueResetGetsTrailingFrame));
@@ -872,6 +876,7 @@ tests.AddRange(new (string Name, Action Run)[]
     ("custom shortcut settings retain damaged and locked originals during recovery", CustomKeyboardShortcutTests.DamagedOrLockedSettingsRecoverWithOriginalBytesRetained),
 });
 if (args.Contains("data-safety-tests")) tests = DataSafetyTests.Cases.ToList();
+if (args.Contains("order-journal-tests")) tests = OrderJournalRegressionTests.Cases.ToList();
 if (args.Contains("zoom-sampling-tests")) tests = tests.Where(t => t.Name.StartsWith("magnified raster", StringComparison.Ordinal)).ToList();
 if (args.Contains("custom-shortcut-tests")) tests = tests.Where(t => t.Name.StartsWith("custom ", StringComparison.Ordinal)).ToList();
 
