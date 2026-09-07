@@ -1,5 +1,7 @@
 # Static Raster Page Mode Handoff - 2026-07-22
 
+> Исторический документ. Актуальный срез 2026-09-06: [состояние программы](../CURRENT_OURPLANECORE_STATUS.md), [release evidence](../STRATEGY_APP_EVIDENCE_2026_09_06.md) и [код этой области](../../Controls/PdfViewport.Rendering.cs). Старые планы, пути и замеры ниже относятся к дате документа.
+
 ## Status
 
 The source implementation is committed as

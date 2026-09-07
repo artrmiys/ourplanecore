@@ -1,4 +1,6 @@
-﻿# OurPlaneCore Speed Acceleration Analysis - 2026-06-02
+# OurPlaneCore Speed Acceleration Analysis - 2026-06-02
+
+> Исторический документ. Актуальный срез 2026-09-06: [состояние программы](../CURRENT_OURPLANECORE_STATUS.md), [release evidence](../STRATEGY_APP_EVIDENCE_2026_09_06.md) и [код этой области](../../Controls/PdfViewport.cs). Старые планы, пути и замеры ниже относятся к дате документа.
 
 Полный разбор текущей производительности OurPlaneCore после коммита
 `a77aaed Speed up viewport rendering` и план доведения программы до состояния

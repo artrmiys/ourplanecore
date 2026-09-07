@@ -19,7 +19,11 @@ in a new versioned folder/profile with a separate shortcut. Preserve stable
 do not replace files or stop their processes. No public release is authorized.
 Run this task's build/tests from this isolated checkout, not the old Desktop
 source path in the general examples below.
-See [current strategy evidence and pending gates](docs/STRATEGY_APP_EVIDENCE_2026_09_06.md).
+The installed Preview's application commit is `42c44b0`; later documentation
+commits do not mean that its EXE was rebuilt. Start with
+[the documentation index](docs/README.md),
+[current release evidence](docs/STRATEGY_APP_EVIDENCE_2026_09_06.md) and
+[the next improvement plan](docs/70-architecture-refactor/IMPROVEMENT_PLAN_2026_09_06.md).
 
 ## Codex Skill Routing
 
@@ -57,7 +61,9 @@ smallest matching skill before editing:
 
 ## Build, Test, and Development Commands
 
-Run commands from `C:\Users\User\Desktop\ourplanecore`.
+Run commands from the checkout selected for the current task. For the isolated
+Preview, use this checkout. The Desktop source junction still belongs to the
+preserved older version.
 
 ```powershell
 dotnet restore .\ourplancore.sln
@@ -69,7 +75,7 @@ dotnet run --project .\ourplancore.csproj
 launches it. Avoid parallel builds because WPF outputs under
 `obj\Debug\net9.0-windows` can lock.
 
-After any successful local build intended for the user, refresh the local update
+For a normal stable release explicitly authorized by the user, refresh the update
 folder and point the Desktop shortcut at the packaged update build:
 `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`.
 Keep the shortcut working directory set to
@@ -81,9 +87,11 @@ finishing.
 ## Editable Rules & the Settings Tab
 
 The "8 Settings" top workspace tab (`Tag="SettingsManager"`) is the canonical
-home for any user-editable template or rule. Do not leave behaviour-defining
-constants hard-coded — surface them here. Current categories: Page Folders,
-Auto Tree, From Pages, Sort A/S, Sort D/Sec/WT, Auto Rename / Scale, Defaults.
+home for any user-editable template or rule. Do not leave new behaviour-defining
+constants hard-coded — surface them here. The current category list is built
+in `MainWindow.SettingsManager.cs`; it includes Modules, Project Storage and
+Keyboard Shortcuts as well as page/tree/template rules. This requirement for
+new work does not mean every existing hard-coded rule is already editable.
 
 Follow the established pattern (reference: `Models/FolderTemplateConfig` +
 `PlanSwiftFolderTemplateService` for folders, `Models/PageSortConfig` +
@@ -105,9 +113,10 @@ Follow the established pattern (reference: `Models/FolderTemplateConfig` +
 
 ## Release Validation
 
-After deploying to `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`,
-the preferred packaging is the compressed single-file build (~166 MB);
-compression is safe and never a launch-failure cause.
+Deploy to the task's authorized destination. The preferred packaging is the
+compressed single-file build (~166 MB). Validate the actual published bundle;
+its extraction directory can differ from the installed EXE directory.
+`AppIdentity` resolves the Preview marker beside the installed executable.
 
 ```powershell
 dotnet publish .\ourplancore.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o .\bin\publish
@@ -117,8 +126,8 @@ Keep a `ourplancore.exe.bak` rollback; never overwrite an existing `.bak`.
 
 Do **not** judge "did it launch" by window handle/title: `App.xaml.cs` shows a
 `MessageBox` titled "OurPlanCore" on unhandled startup exceptions, so a crash
-still produces a matching window. Instead launch, wait ~15-30s, and read
-`%APPDATA%\OurPlanCore\logs\app-<yyyyMMdd>.log` scoped to the **last**
+still produces a matching window. Instead launch, wait for the populated job
+to load, and read `AppIdentity.RoamingRoot/logs/app-<yyyyMMdd>.log` scoped to the **last**
 `Application startup.` line (the file spans every run that day). Pass = process
 alive + no `\tERROR\t` after that marker + `Loaded takeoffs`/`Viewport` present.
 WPF gotcha: `Slider.ValueChanged` fires during XAML load before the ctor wires
@@ -165,6 +174,11 @@ status. New dependencies need a clear reason and should match the app's WPF
 and Windows deployment model.
 
 ## Testing Guidelines
+
+For documentation-only changes, validate links, referenced source paths and
+release identity. If the public Knowledge Base changes, also run its strict
+MkDocs build and inspect the local rendered pages. Do not rebuild or replace
+an unchanged application merely to validate prose.
 
 `Tests/OurPlanCore.Tests.csproj` is the existing console regression harness and
 is included in `ourplancore.sln`. It runs through `dotnet run`, not test-adapter

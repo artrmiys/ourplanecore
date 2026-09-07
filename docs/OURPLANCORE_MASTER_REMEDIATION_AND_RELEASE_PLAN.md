@@ -1,18 +1,36 @@
-﻿# OurPlanCore Master Remediation and Release Plan
+# OurPlanCore Master Remediation and Release Plan
 
-Status: **active master plan**
+Status: **active master plan; historical baselines retained**.
 
-Last implementation verification: **2026-09-06**
+Current code verification: **2026-09-06, 42c44b0, independent 2.2.7-preview**.
+Build: **0 warnings / 0 errors**; C# console harness: **807/807**; unchanged
+Python helper suite: **29/29**. The primary runtime remains .NET 9. The separate
+.NET 10 experiment passed its build/runtime checks but is blocked on the full
+Excel gate; it is not an approved migration.
 
-Sections 5.3 and Phases 2–3 are implemented in independent **2.2.6-preview**.
-Stable 2.2.5 update files remain unchanged by explicit user instruction.
-See [preview behavior, verification and recovery limits](DATA_SAFETY_PREVIEW_2026_09_06.md).
+Sections 5.3 and Phases 2–3 were implemented in 2.2.6-preview and are retained
+in 2.2.7. The latter adds measured save/render fixes, common paste/Undo guards,
+editable keyboard shortcuts, and the compressed-EXE profile-marker fix.
+See [current technical context](PROJECT_CONTEXT.md),
+[strategy evidence and exact build identities](STRATEGY_APP_EVIDENCE_2026_09_06.md),
+and [delivered-package QA](../../QA-REPORT-227.md).
 
-Repository: `C:\Users\User\Desktop\ourplanecore`
+**Current scope overrides the general release policy below:** the original
+source checkout, stable 2.2.5 updates/shortcut and the user's running older
+Preview were preserved. This delivery uses its own folder, shortcut and profile.
+No public release, stable replacement or file-association change is authorized
+by this document. The failed intermediate marker launch did touch the older
+Preview profile; the final QA records the checked consequences and correction.
 
-Branch at plan creation: `feature/ourcore-design-overhaul`
+The current source is the [parent directory](../) of this document. Old absolute
+paths and template hashes in historical sections record provenance only; do not
+select those old workbooks or delivery targets for new work. Use the current
+preserved delivered templates and the explicit task's target.
 
-Packaged application: `C:\Users\User\Desktop\updates\OurPlanCore\ourplancore.exe`
+**Next work:** follow the nine bounded items in the
+[improvement plan](70-architecture-refactor/IMPROVEMENT_PLAN_2026_09_06.md),
+starting with protected settings and the Excel gate. This plan retains the
+complete phase requirements; a completed narrow fix does not close a whole phase.
 
 This plan converts the 2026-07-14 full-project audit into an implementation
 sequence. It supersedes stale priority ordering in older roadmaps, but it does
@@ -37,9 +55,10 @@ No phase may silently change takeoff quantities, page names, sheet scale,
 folder placement, suffix rules, or existing keyboard behavior. Any intentional
 behavior change must be called out in that phase's handoff.
 
-## 2. Verified Baseline
+## 2. Historical Verified Baseline — 2026-07-14
 
-Baseline captured before implementation:
+Baseline captured before implementation. These counts, versions, paths and
+hashes are historical, not the current release or template-selection policy:
 
 - `dotnet build .\ourplancore.sln`: 0 warnings, 0 errors.
 - C# regression harness: 494/494 passed.
@@ -349,6 +368,11 @@ Acceptance:
 
 Owners: `SettingsPresetStore`, `AppSettingsStore`, template stores, Settings UI.
 
+**Still open at 42c44b0.** The protected shortcut store is a scoped implementation;
+general `AppSettingsStore` and `SettingsPresetStore` still collapse failed loads
+to defaults/null. It does not close the requirements below. The next bounded
+slice and acceptance criteria are improvement-plan item 1.
+
 - [ ] Replace silent `null/default` fallback with `Missing`, `Valid`, and
       `Invalid` results plus effective-scope reporting.
 - [ ] Quarantine invalid JSON and preserve a last-known-good copy.
@@ -363,6 +387,14 @@ Owners: `SettingsPresetStore`, `AppSettingsStore`, template stores, Settings UI.
 
 ## 9. Phase 5 — Test, Runtime, and Supply-Chain Gate
 
+**Partial evidence, gate still open.** The isolated .NET 10 spike at `69031529`
+passed 791 C# tests, 29 Python tests, PDF/Skia/OCR/WPF and a compressed native
+launch. Full Excel smoke fails on both compared runtimes; the cause remains
+unresolved. See [compatibility matrix](../../platform-evidence/PLATFORM-COMPATIBILITY.md).
+The current 807-test .NET 9 suite must not be relabeled as a .NET 10 run.
+Console tests and real-project harnesses exist; standard discovery, per-test
+timeouts, CI, SDK/package locks and the full release gate remain incomplete.
+
 - [ ] Keep the current console harness while making tests discoverable through
       `Microsoft.NET.Test.Sdk` and a standard framework.
 - [ ] Separate source-wiring contract tests from behavioral tests.
@@ -372,14 +404,28 @@ Owners: `SettingsPresetStore`, `AppSettingsStore`, template stores, Settings UI.
       manifest checks.
 - [ ] Add `global.json`, deterministic package locking, dependency inventory,
       licenses, and an SBOM/hash manifest.
-- [ ] Update the embedded .NET 9 servicing runtime immediately, then run a
-      controlled .NET 10 LTS compatibility spike before .NET 9 support ends.
+- [ ] Verify and update the embedded servicing runtime against current official
+      support information, then complete the .NET 10 compatibility gate.
+      The spike itself was performed; full Excel acceptance remains blocked.
 - [ ] Reconcile the Windows manifest with actually supported operating systems.
 - [ ] Trim unused embedded Python standard-library tests and document exact
       vendored package versions/hashes without breaking runtime extraction.
 - [ ] Plan code signing before external/customer distribution.
 
 ## 10. Phase 6 — Performance and Memory
+
+**Measured slices delivered; systemic work still open.** Per-file metadata
+classification removes repeated filesystem probes while retaining path checks.
+Immutable bitmap leases remove whole-image copies; repaint coalescing retains
+the trailing request and acknowledges requests consumed by an actual paint.
+The [final repeated comparison](../../PERFORMANCE-COMPARISON-227-FINAL.md)
+uses three runs per version/project: Westminster Save 128.04→8.97 s and Close
+120.64→2.73 s; paint p95 358→330.5 ms. Its paint median is 2.1% higher,
+Pages expand-all 18.7% higher and sampled private peak 2.2% higher. Takeoffs
+reload remains about 4 s. None of this establishes a leak or a global memory
+budget. The budget, trees and incremental-save items remain open below and
+in improvement-plan items 5–7. Test-host open timing excludes process startup;
+memory sampling stops before Close. Native all-214-sheet proof is separate.
 
 - [ ] Introduce one global render-memory budget shared by all bitmap caches.
 - [ ] Add memory-pressure trimming and bounded settings presets.
@@ -410,6 +456,12 @@ No big-bang rewrite. Use tested strangler boundaries.
 - [ ] Keep new C# and XAML files within repository size/method limits.
 
 ## 12. Phase 8 — UX and Accessibility Completion
+
+**Partial delivery:** editable shortcuts, focus/typing/modal guards and their
+main/detached scenarios passed; the installed editor and correct separate
+profile were inspected through the final shortcut launch. This does not prove
+complete keyboard, screen-reader, minimum-width or accessibility coverage.
+Recheck each remaining behavior below before assigning a new implementation.
 
 - [ ] Do not intercept `Space` when a button/toggle/menu control owns keyboard
       focus.
@@ -446,7 +498,17 @@ If any gate fails, retain the previous update package and previous GitHub
 latest release. Record the failure in `docs/DEVELOPMENT_LOG.md`; never label a
 partially verified package as latest.
 
-## 14. Implementation Order Starting Now
+## 14. Current Order and Historical Sequence
+
+Current order and concrete acceptance criteria are maintained in the
+[2026-09-06 improvement plan](70-architecture-refactor/IMPROVEMENT_PLAN_2026_09_06.md):
+protected settings → Excel recoverability/gate → reproducible release/runtime
+gates → workspace capacity/backup → shared memory accounting → responsive trees
+→ dirty-only save → visible AI cancellation/typed actions → one state-owner
+extraction. These are planned, not implemented by the documentation audit.
+
+The original phase sequence is retained below as historical reasoning; do not
+restart completed Phases 0–3 merely because they appear in this list.
 
 1. Complete Phase 0 release foundation and publish the current known-good
    baseline.

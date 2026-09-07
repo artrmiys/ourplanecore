@@ -1,4 +1,44 @@
-﻿# Development Log
+# Development Log
+
+## 2026-09-06 Knowledge Base and documentation review
+
+- Reworked the public KB program guide against 2.2.7 Preview: current menus,
+  portable projects, save/recovery, PDF Output, detached tools and configurable
+  shortcuts. Added task-oriented entry, troubleshooting and release history.
+- Aligned current status, architecture context, command map, strategy evidence
+  and the internal Obsidian routes. Historical plans remain dated evidence.
+- Added a prioritized improvement plan that distinguishes confirmed code risks,
+  measured limitations and proposals. This documentation task does not implement
+  those future application changes or rebuild the installed EXE.
+- Backed up affected documentation before edits. See
+  [documentation audit](00-start-here/KB_DOCS_AUDIT_2026_09_06.md) for scope,
+  verification and rollback references.
+
+## 2026-09-06 Final isolated 2.2.7 Preview delivery
+
+- Application commit `42c44b0`: final installed identity and profile-marker fix.
+  Full C# harness 807/807; Python 29/29; build/publish zero warnings and errors.
+- Added command customization, common main/detached paste and Undo fixes,
+  stable idle raster sampling, immutable cache leases and repaint scheduling.
+- Real-project Save/Close optimization and batch-sort work retain existing
+  geometry and names. Timing comparisons and their regressions are recorded
+  in the final performance report, not described as universal speedups.
+- Native 214-sheet proof belongs to renderer commit `ae2a8ee`; final `42c44b0`
+  changed profile resolution only and passed normal shortcut/job/editor launch.
+- Stable updates and earlier Preview remain preserved. .NET 10 is a separate
+  experiment with an unpassed Excel migration gate.
+- [Final release evidence](STRATEGY_APP_EVIDENCE_2026_09_06.md) links exact
+  manifests, real-project runs, runtime logs and limitations.
+
+## 2026-09-05 Live PDF Preview and detached tools
+
+- `90b382c` and `5d46e11`: completed detached Beam/Opening workflows, adjustable
+  Beam dimension offset, live current-sheet PDF Preview with navigation,
+  opt-in movable Joist note, repeat Beam/Line and ribbon alignment.
+- Joist-note placement persists and participates in PDF output and Undo;
+  movement defaults off. Main and detached workflows use their actual page.
+- Historical release verification: 766/766 C# and build zero warnings/errors.
+  These counts describe that release, not the final 2.2.7 Preview.
 
 ## 2026-09-06 Independent data safety preview
 

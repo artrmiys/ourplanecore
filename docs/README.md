@@ -1,69 +1,81 @@
-# OurPlaneCore Docs - Start Here
+# OurPlanCore — документация
 
-This folder is organized so future work starts from a small, stable context
-instead of scanning dozens of dated handoffs.
+Актуализировано 6 сентября 2026 по коду **2.2.7 Preview** и сохранённым
+доказательствам выпуска. Коммит приложения установленного EXE — `42c44b0`.
+Последующие правки документации не меняют бинарную версию приложения.
 
-## Read First
+## Быстрый вход
 
-- `OURPLANCORE_MASTER_REMEDIATION_AND_RELEASE_PLAN.md` - active authority for
-  remediation order, release gates, local update contents, and GitHub Releases.
-- `PROJECT_CONTEXT.md` - broad product and architecture context.
-- `CURRENT_OURPLANECORE_STATUS.md` - current behavior and known gaps.
-- `OURPLANECORE_TASK_ROADMAP.md` - historical feature map; its priority order is
-  superseded by the active master remediation plan.
-- `DEVELOPMENT_LOG.md` - chronological work log.
-- `ARCHITECTURE_AUDIT_AND_REFACTOR_PLAN_2026_05_05.md` - refactor baseline.
+| Задача | Документ |
+| --- | --- |
+| Понять текущие функции и ограничения | [Текущее состояние](CURRENT_OURPLANECORE_STATUS.md) |
+| Найти исходники, хранение и владельца операции | [Контекст проекта](PROJECT_CONTEXT.md) |
+| Проверить фактический выпуск и тесты | [Доказательства стратегии и релиза](STRATEGY_APP_EVIDENCE_2026_09_06.md) |
+| Выбрать следующее улучшение | [План улучшений](70-architecture-refactor/IMPROVEMENT_PLAN_2026_09_06.md) |
+| Сверить порядок принятой стратегии | [Master plan](OURPLANCORE_MASTER_REMEDIATION_AND_RELEASE_PLAN.md) |
+| Найти клавишу или контекст команды | [Горячие клавиши](60-ux-ui/KEYBOARD_SHORTCUTS.md) |
+| Найти вкладку/ленту/панель | [Карта интерфейса](60-ux-ui/WORKSPACE_TAB_COMMAND_MAP.md) |
+| Найти историю и причины решений | [Development log](DEVELOPMENT_LOG.md), затем соответствующий dated handoff |
+| Понять, что исправлено в описаниях | [Аудит документации](00-start-here/KB_DOCS_AUDIT_2026_09_06.md) |
+| Найти любой документ | [Реестр документов](00-start-here/DOCUMENT_REGISTER_2026_09_06.md) |
 
-## Current Priority Context
+Пользовательская инструкция находится в отдельной
+[Knowledge Base](https://artrmiys.github.io/knowledge-base/reference/ourplancore-start/).
+Локальные исходники сайта и опубликованный сайт могут временно различаться:
+проверку публикации нужно фиксировать отдельно от локальной сборки.
 
-- `OURPLANCORE_MASTER_REMEDIATION_AND_RELEASE_PLAN.md`
-  - current implementation phases, acceptance gates, rollback rules, and the
-    permanent EXE + Excel template + download-note release contract.
-- `00-start-here/NEXT_TASK_JOB_MOVE_AUTOREPAIR_AND_SHEET_RENDER_PERF_2026_06_06.md`
-  - handoff/history for moved-job `page_folder` repair plus the next
-    sheet-render performance strategy; the code-side job-move autorepair is now
-    implemented.
-- `00-start-here/DOCS_AUDIT_2026_06_06.md`
-  - latest markdown inventory and cleanup notes.
-- `10-performance-render/OURPLANECORE_SPEED_ACCELERATION_ANALYSIS_2026_06_02.md`
-  - latest speed and render acceleration plan.
-- `10-performance-render/SHEET_RENDER_STRATEGY_2026_06_01.md`
-  - canonical sheet render strategy.
-- `10-performance-render/SHEET_RENDERING_ANALYSIS_AND_INSTANT_STRATEGY_2026_06_04.md`
-  - root-cause analysis for whole-sheet raster slowness/blur.
-- `20-import-pages-metadata/JOB_CREATION_AND_STORAGE_FLOW_2026_06_05.md`
-  - current job/page/takeoff storage flow and page-folder link contract.
-- `30-takeoffs-measurements/TAKEOFF_TEMPLATE_PRESETS_2026_06_01.md`
-  - latest Takeoff Templates preset rollout.
-- `30-takeoffs-measurements/EXCEL_MACRO_EXPORT_WORKFLOW_2026_07_29.md`
-  - canonical operator and implementation contract for the vertical Excel
-    macro strip, `ALL`, Auto Tree root scope, VBA order, and protected Walls
-    cleanup.
+## Версии и достоверность
 
-## Folder Map
+- В этой рабочей копии находятся изменения нового Preview. Старый Desktop
+  source, stable updates и предыдущий Preview сохранены по указанию пользователя.
+- Точная локальная поставка описана в [delivery manifest](../../delivery-227.json)
+  и [QA](../../QA-REPORT-227.md). Для другого компьютера эти внешние файлы могут
+  быть недоступны; отсутствие локального evidence не превращается в PASS.
+- Итоговый C# набор для `42c44b0`: 807/807, Python: 29/29. Native проход всех
+  214 листов выполнен на renderer-этапе `ae2a8ee`. После него исправлен только
+  поиск marker отдельного профиля, а финальный EXE проверен обычным запуском.
+- Таблица скорости относится к выбранным повторным сценариям:
+  [методика и результаты](../../PERFORMANCE-COMPARISON-227-FINAL.md).
+  Время создания окна/job не равно времени запуска EXE. Увеличения задержек
+  соседних операций остаются видны и не считаются закрытыми автоматически.
+- Эксперимент .NET 10 выполнен отдельно; полный migration gate не пройден из-за
+  Excel smoke. Основное приложение осталось на .NET 9.
 
-- `00-start-here/` - small guide docs and organization notes.
-- `10-performance-render/` - PDF render, viewport speed, cache, zoom clarity.
-- `20-import-pages-metadata/` - PDF import, sheet names, scale, pages, job open.
-- `30-takeoffs-measurements/` - takeoffs tree, measurements, labels, tools.
-- `40-planswift-product/` - PlanSwift behavior, product rules, MVP mappings.
-- `50-3d-roof-ai/` - 3D roof, massing, AI markers, geometry ideas.
-- `60-ux-ui/` - Bluebeam/PlanSwift UI, workspace layout, UX research.
-- `70-architecture-refactor/` - audits, refactor plans, parallel-agent notes.
-- `90-archive-prompts/` - old prompts, archived plans, historical scratch docs.
-- `archive/` - pre-existing archive folder.
-- `mockups/` - UI mockup assets/docs.
+## Как читать историю
 
-## Rules For New Docs
+Датированные handoffs фиксируют поведение и проверки **на свою дату**. Старые
+числа тестов, пути, TODO и «следующая задача» нельзя читать как текущий статус.
+Сначала проверь актуальную страницу выше и код, затем используй историю для
+понимания причин. План или прототип не равен доступной пользователю функции.
 
-1. Put new docs in the matching folder, not in the `docs/` root.
-2. Keep only long-lived canonical status files in the root.
-3. If a document supersedes another one, write that explicitly at the top.
-4. Include exact files/modules and verification commands for handoffs.
-5. Do not delete old handoffs; move obsolete ones to `90-archive-prompts/`.
+`STRATEGY_2026.md`, майский architecture audit и старый task roadmap сохраняются
+как исторические источники. Текущая последовательность работ находится в
+master plan и плане улучшений; последний различает предложения и реализованное.
 
-## Git Note
+## Тематические папки
 
-The repo `.gitignore` ignores `*.md`. The active master plan has a narrow
-exception; other new markdown files may still need `git add -f <path>` when
-they must be committed.
+| Папка | Содержание |
+| --- | --- |
+| `00-start-here` | Навигация, аудит и реестр документов |
+| `10-performance-render` | Рендер, растры, кеши, zoom, история измерений |
+| `20-import-pages-metadata` | Импорт, проекты, метаданные и масштаб |
+| `30-takeoffs-measurements` | Замеры, деревья, экспорт, операции |
+| `40-planswift-product` | Требования и сопоставление рабочих сценариев |
+| `50-3d-roof-ai` | 3D/roof/AI, включая отдельно помеченные идеи и legacy |
+| `60-ux-ui` | Карта UI, клавиши, UX и пользовательские макеты |
+| `70-architecture-refactor` | Архитектура, технический долг, план улучшений |
+| `80-web-version` | Идеи веб-версии; не описание установленного WPF-продукта |
+| `90-archive-prompts` | Исторические prompts и снимки |
+| `95-marketing-content` | Черновики контента; не спецификация программы |
+
+## Поддержание описаний
+
+1. У каждого действующего описания — версия/дата и понятный источник проверки.
+2. Одна подробная инструкция на функцию; остальные страницы ссылаются на неё.
+3. При релизе обновляй current status и release evidence; исторические результаты
+   не переписывай под новые числа.
+4. Перед правкой сохрани документы и пользовательские untracked assets.
+5. Для docs-only проверь ссылки и факты. Для KB — strict MkDocs build и просмотр
+   собранных страниц. Изменение прозы не требует замены EXE.
+6. `.gitignore` содержит `*.md`; добавляй новые документы адресно через
+   `git add -f <path>` после проверки, не включай посторонние файлы.

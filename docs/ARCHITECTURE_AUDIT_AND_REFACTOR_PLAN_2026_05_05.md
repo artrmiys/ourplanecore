@@ -1,12 +1,48 @@
 # Architecture Audit and Refactor Plan - 2026-05-05
 
-This is a deep engineering audit of the current WPF takeoff app after the
+> **Historical May 2026 baseline.** File sizes, verification commands, paths,
+> feature ownership and proposed priorities below describe that audit and its
+> follow-up splits. They are not current release instructions. Start with the
+> [current context](PROJECT_CONTEXT.md), [delivery evidence](STRATEGY_APP_EVIDENCE_2026_09_06.md)
+> and [bounded improvement plan](70-architecture-refactor/IMPROVEMENT_PLAN_2026_09_06.md).
+
+## Current Delta — 2026-09-06
+
+Source `42c44b0` is delivered as separate 2.2.7-preview on .NET 9. Build 0/0 and
+807/807 C# checks passed; unchanged Python helpers passed 29/29. The .NET 10
+spike is separate and its full Excel gate is blocked. Real-project verification
+and native evidence retain their own source/binary identities in the linked
+matrix rather than being relabeled as one test run.
+
+Physical source sizes now are `MainWindow*.cs`: 202 files / 68,297 lines;
+`PdfViewport*.cs`: 72 / 31,105; `MainWindow.xaml`: 2,713. Examples still above
+the intended size limits: SimilarCount 1,660; WorkspaceManagers 1,603;
+PdfViewport.Layers 2,304; RenderCache 1,560. These are structural indicators,
+not runtime bug diagnoses. A small root partial does not remove shared state.
+
+Since this audit, data readers, write-access and path barriers, recoverable
+bulk operations, common clipboard/Undo, and focused main/detached regressions
+have strengthened the mutation boundaries. Repeated metadata filesystem probes,
+whole-bitmap copies and a lost trailing repaint were fixed with reproductions.
+The final large-project comparison still shows roughly 4 s Takeoffs reload,
+paint median +2.1%, Pages expand-all +18.7% and private peak +2.2%; these are
+bounded measurements, not proof of a leak. General protected settings, one
+render-memory budget, data-bound trees and cancellation/progress UI remain open.
+
+Next extraction should isolate one workflow with explicit state and completion
+ownership, starting with SimilarCount review after reliable test/release gates.
+Do not start a broad MVVM/XAML rewrite or repeat the existing clipboard route.
+The improvement plan supplies acceptance criteria and disjoint file ownership.
+
+## Original Audit
+
+This was a deep engineering audit of the WPF takeoff app after the
 recent PDF layer, Layer Trace, tree-state, item-creation, export, AI, and 3D
 work. The goal is not a cosmetic cleanup. The goal is to stop recurring small
 bugs by reducing hidden state coupling and moving large feature clusters out of
 the main window and viewport control in a safe order.
 
-## Current Verification
+## Historical Verification — May 2026
 
 Command run from `C:\Users\User\Desktop\ourplanecore`:
 
