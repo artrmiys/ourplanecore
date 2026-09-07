@@ -4,7 +4,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public enum PlanSwiftExportRowKind
 {
@@ -21,9 +21,21 @@ public static class PlanSwiftTakeoffExporter
     private const int HeaderLineLength = 60;
     private const int ExcelStartRow = 10;
     private const int ExcelStartColumn = 10; // J
+    private static readonly string[] HiddenImportNotePrefixes =
+    [
+        "Imported from PlanSwift:",
+        "Imported from PlanSwift Segment Section:",
+        "Imported generated PlanSwift Segment geometry from ",
+        "Imported from PDF takeoff:",
+        "Imported from PDF takeoff annotations:",
+        "PDF page:",
+        "Annotation:",
+        "Subtype:",
+        "Content:",
+    ];
 
     public static IReadOnlyList<PlanSwiftExportRow> BuildRows(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> takeoffItems,
         IReadOnlyList<string> selectedRoots,
         UnitMode unitMode)
@@ -35,15 +47,28 @@ public static class PlanSwiftTakeoffExporter
 
         var roots = NormalizeRoots(job, selectedRoots);
         var rows = new List<PlanSwiftExportRow>();
-        foreach (string root in roots)
+        if (roots.Count > 0 && roots.All(root => TryGetItem(itemByFolder, root, out _)))
         {
-            if (TryGetItem(itemByFolder, root, out TakeoffItem? item))
+            EmitSelectedItemGroups(
+                rows,
+                job,
+                roots
+                    .Select(root => itemByFolder[NormalizePath(root)])
+                    .ToList(),
+                unitMode);
+        }
+        else
+        {
+            foreach (string root in roots)
             {
-                EmitSingleItem(rows, job, item!, unitMode);
-                continue;
-            }
+                if (TryGetItem(itemByFolder, root, out TakeoffItem? item))
+                {
+                    EmitSingleItem(rows, job, item!, unitMode);
+                    continue;
+                }
 
-            ProcessFolder(rows, job, root, itemByFolder, unitMode, isRoot: IsSamePath(root, job.TakeoffsRoot));
+                ProcessFolder(rows, job, root, itemByFolder, unitMode, isRoot: IsSamePath(root, job.TakeoffsRoot));
+            }
         }
 
         while (rows.Count > 0 && rows[^1].Kind == PlanSwiftExportRowKind.Blank)
@@ -124,7 +149,7 @@ public static class PlanSwiftTakeoffExporter
         return rows.Count(row => row.Kind != PlanSwiftExportRowKind.Blank);
     }
 
-    private static void EmitSingleItem(List<PlanSwiftExportRow> rows, OurPlaneCoreJob job, TakeoffItem item, UnitMode unitMode)
+    private static void EmitSingleItem(List<PlanSwiftExportRow> rows, OurPlanCoreJob job, TakeoffItem item, UnitMode unitMode)
     {
         string parent = Path.GetDirectoryName(item.FolderPath) ?? job.TakeoffsRoot;
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Header, GroupTitle(job, parent)));
@@ -132,9 +157,33 @@ public static class PlanSwiftTakeoffExporter
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
     }
 
+    private static void EmitSelectedItemGroups(
+        List<PlanSwiftExportRow> rows,
+        OurPlanCoreJob job,
+        IReadOnlyList<TakeoffItem> selectedItems,
+        UnitMode unitMode)
+    {
+        var groups = selectedItems
+            .Select(item => new
+            {
+                Parent = Path.GetDirectoryName(item.FolderPath) ?? job.TakeoffsRoot,
+                Item = item,
+            })
+            .GroupBy(entry => NormalizePath(entry.Parent), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+        {
+            string parent = group.First().Parent;
+            rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Header, GroupTitle(job, parent)));
+            foreach (TakeoffItem item in SortItemsForFolder(job, parent, group.Select(entry => entry.Item).ToList()))
+                EmitItem(rows, item, unitMode);
+            rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
+        }
+    }
+
     private static void ProcessFolder(
         List<PlanSwiftExportRow> rows,
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string folder,
         IReadOnlyDictionary<string, TakeoffItem> itemByFolder,
         UnitMode unitMode,
@@ -143,7 +192,7 @@ public static class PlanSwiftTakeoffExporter
         if (!Directory.Exists(folder) || !FolderHasMeasuredItems(folder, itemByFolder))
             return;
 
-        var children = OurPlaneCoreJobStore.GetOrderedChildDirectories(folder);
+        var children = OurPlanCoreJobStore.GetOrderedChildDirectories(folder);
         var items = children
             .Select(child => TryGetItem(itemByFolder, child, out TakeoffItem? item) ? item : null)
             .Where(item => item is { Measurements.Count: > 0 })
@@ -169,28 +218,58 @@ public static class PlanSwiftTakeoffExporter
 
     private static void EmitItem(List<PlanSwiftExportRow> rows, TakeoffItem item, UnitMode unitMode)
     {
+        var noteLines = ExportNotes(item).ToList();
+        if (item.IsJoistArea)
+        {
+            var joistLabelLines = JoistLabelLines(item, 0, unitMode).ToList();
+            if (joistLabelLines.Count > 0)
+            {
+                rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Item, item.Name, joistLabelLines[0]));
+                foreach (string line in joistLabelLines.Skip(1))
+                    rows.Add(string.IsNullOrWhiteSpace(line)
+                        ? new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, "")
+                        : new PlanSwiftExportRow(PlanSwiftExportRowKind.Note, line));
+
+                foreach (string line in noteLines)
+                    rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Note, line));
+
+                if (joistLabelLines.Count > 1 || noteLines.Count > 0)
+                    rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
+                return;
+            }
+        }
+
         var (value, unit) = QuantityValueAndUnit(item, unitMode);
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Item, item.Name, value, unit));
 
-        foreach (string line in ExportNotes(item))
+        foreach (string line in noteLines)
             rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Note, line));
 
-        if (ExportNotes(item).Any())
+        if (noteLines.Count > 0)
             rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
     }
+
+    public static string CleanExportNotes(string notes) =>
+        string.Join(Environment.NewLine, SplitExportNoteLines(notes));
 
     private static IEnumerable<string> ExportNotes(TakeoffItem item)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string line in SplitNoteLines(item.Notes))
+        foreach (string line in SplitExportNoteLines(item.Notes))
             if (seen.Add(line))
                 yield return line;
 
         foreach (Measurement measurement in item.Measurements)
-            foreach (string line in SplitNoteLines(measurement.Notes))
+            foreach (string line in SplitExportNoteLines(measurement.Notes))
                 if (seen.Add(line))
                     yield return line;
     }
+
+    private static IEnumerable<string> SplitExportNoteLines(string notes) =>
+        SplitNoteLines(notes).Where(line => !IsHiddenImportNoteLine(line));
+
+    private static bool IsHiddenImportNoteLine(string line) =>
+        HiddenImportNotePrefixes.Any(prefix => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static IEnumerable<string> SplitNoteLines(string notes) =>
         (notes ?? "")
@@ -199,9 +278,66 @@ public static class PlanSwiftTakeoffExporter
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(line => !string.IsNullOrWhiteSpace(line));
 
+    public static IReadOnlyList<string> JoistLabelLines(
+        TakeoffItem item,
+        double fallbackScaleMetersPerPt,
+        UnitMode unitMode)
+    {
+        if (!item.IsJoistArea)
+            return [];
+
+        var measurements = item.Measurements
+            .Where(measurement =>
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+                measurement.JoistEnabled)
+            .ToList();
+        var lines = new List<string>();
+        foreach (Measurement measurement in measurements)
+        {
+            if (lines.Count > 0)
+                lines.Add("");
+
+            var measurementLines = SplitLabelLines(measurement.Label(fallbackScaleMetersPerPt, unitMode)).ToList();
+            int extraIndex = measurementLines.FindIndex(line =>
+                string.Equals(line.Trim(), "Extra", StringComparison.Ordinal));
+            lines.AddRange(extraIndex >= 0
+                ? measurementLines.Take(extraIndex)
+                : measurementLines);
+        }
+
+        IReadOnlyList<JoistLengthGroup> extraGroups = JoistTakeoffCalculator.ExtraLengthGroups(
+            measurements,
+            fallbackScaleMetersPerPt,
+            unitMode);
+        if (extraGroups.Count > 0)
+        {
+            if (lines.Count > 0)
+                lines.Add("");
+            lines.Add("Extra");
+            lines.AddRange(JoistTakeoffCalculator.FormatLengthGroupLines(
+                extraGroups,
+                unitMode,
+                item.JoistDetailedLabels));
+        }
+
+        return lines;
+    }
+
+    public static string JoistLabelText(
+        TakeoffItem item,
+        double fallbackScaleMetersPerPt,
+        UnitMode unitMode) =>
+        string.Join("\n", JoistLabelLines(item, fallbackScaleMetersPerPt, unitMode));
+
+    private static IEnumerable<string> SplitLabelLines(string label) =>
+        (label ?? "")
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
     private static (string Value, string Unit) QuantityValueAndUnit(TakeoffItem item, UnitMode unitMode)
     {
-        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string type = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double totalMeters = item.Total(0);
         if (item.IsJoistArea)
             return unitMode == UnitMode.Imperial
@@ -232,7 +368,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static bool FolderHasMeasuredItems(string folder, IReadOnlyDictionary<string, TakeoffItem> itemByFolder)
     {
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(folder))
         {
             if (TryGetItem(itemByFolder, child, out TakeoffItem? item))
             {
@@ -248,13 +384,13 @@ public static class PlanSwiftTakeoffExporter
         return false;
     }
 
-    private static IReadOnlyList<string> NormalizeRoots(OurPlaneCoreJob job, IReadOnlyList<string> selectedRoots)
+    private static IReadOnlyList<string> NormalizeRoots(OurPlanCoreJob job, IReadOnlyList<string> selectedRoots)
     {
         var rawRoots = selectedRoots.Count == 0 ? [job.TakeoffsRoot] : selectedRoots;
         var valid = rawRoots
             .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
             .Select(NormalizePath)
-            .Where(path => OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, path))
+            .Where(path => OurPlanCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path.Length)
             .ToList();
@@ -262,7 +398,7 @@ public static class PlanSwiftTakeoffExporter
         var result = new List<string>();
         foreach (string root in valid)
         {
-            if (result.Any(parent => OurPlaneCoreJobStore.IsSameOrDescendant(parent, root)))
+            if (result.Any(parent => OurPlanCoreJobStore.IsSameOrDescendant(parent, root)))
                 continue;
             result.Add(root);
         }
@@ -270,7 +406,7 @@ public static class PlanSwiftTakeoffExporter
         return result.Count == 0 ? [job.TakeoffsRoot] : result;
     }
 
-    private static IEnumerable<TakeoffItem> SortItemsForFolder(OurPlaneCoreJob job, string folder, IReadOnlyList<TakeoffItem> items)
+    private static IEnumerable<TakeoffItem> SortItemsForFolder(OurPlanCoreJob job, string folder, IReadOnlyList<TakeoffItem> items)
     {
         string relative = RelativeTakeoffPath(job, folder);
         if (!IsWallFloorFolder(relative))
@@ -279,7 +415,7 @@ public static class PlanSwiftTakeoffExporter
         return items.OrderBy(WallItemSortKey).ToList();
     }
 
-    private static string GroupTitle(OurPlaneCoreJob job, string folder)
+    private static string GroupTitle(OurPlanCoreJob job, string folder)
     {
         string relative = string.IsNullOrWhiteSpace(folder) || IsSamePath(folder, job.TakeoffsRoot)
             ? ""
@@ -343,7 +479,7 @@ public static class PlanSwiftTakeoffExporter
         return matches.Count == 0 ? -1 : int.Parse(matches[^1].Value, CultureInfo.InvariantCulture);
     }
 
-    private static string RelativeTakeoffPath(OurPlaneCoreJob job, string folder)
+    private static string RelativeTakeoffPath(OurPlanCoreJob job, string folder)
     {
         try
         {
@@ -351,7 +487,7 @@ public static class PlanSwiftTakeoffExporter
         }
         catch
         {
-            return OurPlaneCoreJobStore.DisplayName(folder);
+            return OurPlanCoreJobStore.DisplayName(folder);
         }
     }
 

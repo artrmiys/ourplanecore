@@ -8,14 +8,14 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
-// ── Simple layer info returned to the UI ─────────────────────────────────────
+// в”Ђв”Ђ Simple layer info returned to the UI в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 public sealed record PdfLayer(int Number, string Name, bool IsOn, bool IsHighlighted = false);
 public sealed record SheetLegendEntry(
@@ -24,57 +24,131 @@ public sealed record SheetLegendEntry(
     string Quantity,
     string Type,
     string Sign,
-    IReadOnlyList<string>? Details = null);
+    IReadOnlyList<string>? Details = null,
+    MeasurementGlyphKind GlyphKind = MeasurementGlyphKind.Line);
 public sealed record ViewportContextRequest(
     double ScreenX,
     double ScreenY,
     float PdfX,
     float PdfY,
     string PageFolder,
-    Measurement? Measurement);
+    Measurement? Measurement,
+    PageAnnotation? Annotation = null,
+    ViewportOverlayHitKind OverlayHit = ViewportOverlayHitKind.None,
+    int PointVertexIndex = -1);
+public sealed record PointVertexSelection(
+    Measurement Measurement,
+    IReadOnlyList<int> PointIndices);
+public sealed record ViewportAiCropSelectionRequest(
+    SKRect CropRect,
+    SKPoint AnchorPdf,
+    string PageFolder);
+public sealed record SheetOverlayTransformChange(
+    string TargetPageFolder,
+    string OverlayPageFolder,
+    string OverlayId,
+    float OffsetXPt,
+    float OffsetYPt,
+    float OverlayScale,
+    float OverlayRotationDegrees,
+    string Status);
+public sealed record SheetOverlayBitmapLayer(
+    string Id,
+    string SourcePageFolder,
+    string Name,
+    SKBitmap Bitmap,
+    float WidthPt,
+    float HeightPt,
+    float OffsetXPt,
+    float OffsetYPt,
+    float Scale,
+    float RotationDegrees,
+    float Opacity,
+    float BitmapScale,
+    string PdfPath,
+    int PdfPageIndex,
+    IReadOnlyList<PdfLayerInfo> PdfLayers);
+public sealed record BeamMeasurementRequest(
+    SKPoint StartPdf,
+    SKPoint EndPdf,
+    SKPoint CountPointPdf,
+    double LengthFeet,
+    double OrderLengthFeet,
+    string OrderLengthText,
+    string PageFolder,
+    string DimensionId = "");
+public sealed record OpeningMeasurementRequest(
+    SKPoint FirstCornerPdf,
+    SKPoint OppositeCornerPdf,
+    SKPoint CountPointPdf,
+    double WidthFeet,
+    double HeightFeet,
+    string SizeText,
+    string PageFolder);
 
-// ── Tool enum ────────────────────────────────────────────────────────────────
+// в”Ђв”Ђ Tool enum в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-public enum ViewerTool { Pan, Select, Scale, Ruler, DrawLine, DrawArrow, DrawRect, Point, Line, Area }
+public enum ViewerTool { Pan, Select, Scale, Ruler, Pitch, Beam, Openings, DrawHighlight, DrawLine, DrawArrow, DrawRect, DrawCloud, DrawArea, Note, Point, Line, Area, AreaCut }
 public enum PdfLayerTraceMode { Full, Edge, Point, AllEdges }
+public enum ViewportOverlayHitKind { None, SheetLegend, SheetHeader }
 
-// ── Main control ─────────────────────────────────────────────────────────────
+// в”Ђв”Ђ Main control в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 public sealed partial class PdfViewport : SKElement
 {
-    // ── PDF / render state ────────────────────────────────────────────────────
+    // в”Ђв”Ђ PDF / render state в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     private static readonly IDocLib _docLib = DocLib.Instance;
 
     private string  _pdfPath  = "";
     private int     _pdfIndex = 0;
+    private RasterSheetSource? _rasterSheetSource;
 
     private SKBitmap? _pageBitmap;
+    private string _pageBitmapPdfPath = "";
+    private int _pageBitmapPdfIndex = -1;
+    private string _pageBitmapPageFolder = "";
+    private long _pageBitmapGeneration;
+    private long _pagePaintGeneration;
+    private string _pagePaintedPageFolder = "";
     private float     _pdfW, _pdfH;        // page size in PDF points (1pt = 1/72 in)
     private float     _bitmapScale;         // bitmap pixels per PDF point
     private float     _renderedScale;
 
-    // ── Viewport transform ────────────────────────────────────────────────────
+    // в”Ђв”Ђ Viewport transform в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     private float _zoom = 1f;              // screen pixels per PDF point
     private float _panX, _panY;            // PDF-point coord of top-left of screen
 
-    // ── Pan drag ──────────────────────────────────────────────────────────────
+    // в”Ђв”Ђ Pan drag в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     private Point? _dragStart;
     private float  _dragPanX0, _dragPanY0;
     private Point? _rightClickStart;
     private SKPoint? _rightClickPdf;
     private Measurement? _rightClickMeasurement;
+    private int _rightClickPointVertexIndex = -1;
+    private PageAnnotation? _rightClickAnnotation;
+    private ViewportOverlayHitKind _rightClickOverlayHit = ViewportOverlayHitKind.None;
     private bool _rightClickMoved;
 
-    // ── Drawing tools ─────────────────────────────────────────────────────────
+    // в”Ђв”Ђ Drawing tools в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     private ViewerTool              _tool       = ViewerTool.Select;
     private readonly List<SKPoint>  _drawPts    = [];   // in-progress PDF-space points
     private SKPoint?                _rubberEnd;          // rubber-band endpoint
     private SKPoint?                _snapPreview;
+    private string                  _snapPreviewKind = "";
     private SKPoint?                _lastPointerPdf;
+    private bool                    _cursorGuideVisible;
     private bool                    _boxSelecting;
     private SKPoint                 _boxSelectStartPdf;
     private SKPoint                 _boxSelectEndPdf;
     private bool                    _boxSelectAdditive;
+    private bool                    _boxSelectRemove;
+    private bool                    _boxVertexMode;
+    private bool                    _aiCropNoteSelecting;
+    private bool                    _aiCropNoteDragging;
+    private SKPoint                 _aiCropNoteStartPdf;
+    private SKPoint                 _aiCropNoteEndPdf;
+    private SKPoint                 _aiCropNoteAnchorPdf;
+    private Measurement?            _areaCutMeasurement;
 
     // Scale calibration
     private readonly List<SKPoint> _scalePts = [];
@@ -82,22 +156,95 @@ public sealed partial class PdfViewport : SKElement
     private string _aiActionDraftPreviewPage = "";
     private readonly List<SmartAiMarker> _aiMarkers = [];
     private readonly List<SheetLegendEntry> _sheetLegendEntries = [];
-    public  double   ScaleMetersPerPt { get; set; } = 0.0;
+    private double _scaleMetersPerPt;
+    public double ScaleMetersPerPt
+    {
+        get => _scaleMetersPerPt;
+        set
+        {
+            if (_scaleMetersPerPt.Equals(value))
+                return;
+
+            _scaleMetersPerPt = value;
+            RequestRepaint();
+        }
+    }
     public  string   ActiveColor      { get; set; } = "#FF4444";
+    public  string   ActiveAnnotationColor { get; set; } = "#FF4444";
+    public  double   ActiveAnnotationStrokeWidth { get; set; } = 5.0;
+    public  double   RulerStrokeWidth { get; set; } = 1.0;
+    public  double   LiveInputLabelSizePx { get; set; } = AppSettingsStore.LiveInputLabelSizeDefaultPx;
+    public  double   LiveInputLabelOpacity { get; set; } = AppSettingsStore.LiveInputLabelOpacityDefault;
+    private double _pdfSnapBridgeToleranceScreenPx = AppSettingsStore.ViewportPdfSnapBridgeToleranceDefaultPx;
+    public double PdfSnapBridgeToleranceScreenPx
+    {
+        get => _pdfSnapBridgeToleranceScreenPx;
+        set
+        {
+            double clean = AppSettingsStore.NormalizePdfSnapBridgeTolerancePx(value);
+            if (Math.Abs(_pdfSnapBridgeToleranceScreenPx - clean) < 0.001)
+                return;
+
+            _pdfSnapBridgeToleranceScreenPx = clean;
+            ClearEdgeSnapPreview();
+            RequestRepaint();
+        }
+    }
     public  string   ActiveTakeoffFolder { get; set; } = "";
+    public  string   ActiveCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public  UnitMode UnitMode         { get; set; } = UnitMode.Imperial;
-    public  string   ViewBackgroundColor { get; set; } = "#FFFFFF";
+    public float Zoom => _zoom;
+    public SKPoint? LastPointerPdf => _lastPointerPdf;
+    private string _viewBackgroundColor = ViewportBackgroundPolicy.DefaultColor;
+    public  string   ViewBackgroundColor
+    {
+        get => _viewBackgroundColor;
+        set
+        {
+            string clean = ViewportBackgroundPolicy.NormalizeColor(value);
+            if (string.Equals(_viewBackgroundColor, clean, StringComparison.Ordinal))
+                return;
+
+            _viewBackgroundColor = clean;
+            RequestRepaint();
+        }
+    }
+    private string _pageBackgroundColor = ViewportBackgroundPolicy.DefaultColor;
+    public  string   PageBackgroundColor
+    {
+        get => _pageBackgroundColor;
+        set
+        {
+            string clean = ViewportBackgroundPolicy.NormalizeColor(value);
+            if (string.Equals(_pageBackgroundColor, clean, StringComparison.Ordinal))
+                return;
+
+            _pageBackgroundColor = clean;
+            RequestRepaint();
+        }
+    }
     public  bool     ShowMeasurementLabels { get; set; } = true;
     public  bool     ShowLineLabels { get; set; } = true;
     public  bool     ShowAreaLabels { get; set; } = true;
+    public  bool     ShowJoistLabels { get; set; } = true;
     public  bool     ShowCountLabels { get; set; }
+    // Crisp black vector linework drawn on top of the static raster page.
+    public  bool     ShowBlackVectorOverlay { get; set; }
     public  double   MeasurementLabelScale { get; set; } = 1.0;
+    public  double   MeasurementStrokeScale { get; set; } = 1.0;
+    public  double   AreaEdgeScale { get; set; } = 1.0;
+    public  double   AreaFillOpacity { get; set; } = 0.24;
+    public  double   ExtraJoistGlowIntensity { get; set; } = AppSettingsStore.ExtraJoistGlowIntensityDefault;
+    public  double   PointSizeScale { get; set; } = 1.0;
+    // Mouse-wheel zoom step (multiplier per notch). Set from settings.
+    public  double   ZoomWheelFactor { get; set; } = 2.0;
     public  string   SheetLegendAnchor { get; set; } = "BottomLeft";
     public  double   SheetLegendScale { get; set; } = 1.0;
     public  double   SheetHeaderScale { get; set; } = 1.0;
     public  bool     ScaleSheetOverlaysWithPage { get; set; } = false;
     public  bool     ScaleMeasurementLabelsWithPage { get; set; } = false;
     public  bool     ScaleSheetHeaderWithPage { get; set; } = false;
+    public  bool     SimplifyNavigationRendering { get; set; } = false;
 
     private bool _snapEnabled;
     public bool SnapEnabled
@@ -130,28 +277,97 @@ public sealed partial class PdfViewport : SKElement
         }
     }
 
-    // ── Measurements ──────────────────────────────────────────────────────────
+    // в”Ђв”Ђ Measurements в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    private bool _boxModeEnabled;
+    public bool BoxModeEnabled
+    {
+        get => _boxModeEnabled;
+        set
+        {
+            if (_boxModeEnabled == value)
+                return;
+
+            _boxModeEnabled = value;
+            BoxModeChanged?.Invoke(_boxModeEnabled);
+            PostRecordPrompt();
+            RequestRepaint();
+        }
+    }
+
     private readonly List<Measurement> _measurements = [];
+    private readonly HashSet<Measurement> _measurementSet = [];
+    private readonly Dictionary<string, List<Measurement>> _measurementsByPage = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<Measurement> _visibleActivePageMeasurements = [];
+    private string _visibleActivePageMeasurementsPageKey = "";
+    private int _visibleActivePageMeasurementsIndexVersion = -1;
+    private int _visibleActivePageMeasurementsHiddenVersion = -1;
+    private int _visibleActivePageMeasurementsFolderHash;
+    private int _measurementIndexVersion;
+    private int _measurementGeometryVersion;
+    private int _measurementVisibilityVersion;
+    private ViewportMeasurementSpatialIndex? _activePageMeasurementSpatialIndex;
+    private string _activePageMeasurementSpatialIndexPageKey = "";
+    private int _activePageMeasurementSpatialIndexVersion = -1;
+    private int _activePageMeasurementSpatialIndexGeometryVersion = -1;
+    private int _activePageMeasurementSpatialIndexHiddenVersion = -1;
+    private int _activePageMeasurementSpatialIndexFolderHash;
+    private readonly HashSet<string> _hiddenTakeoffFolders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _hiddenMeasurementIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _takeoffLayerRanks = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PageAnnotation> _annotations = [];
+    private bool _hideRulerAnnotations;
     private string _pageFolder = "";
     private Measurement? _selectedMeasurement;
     private readonly HashSet<Measurement> _selectedMeasurements = [];
+    private PageAnnotation? _selectedAnnotation;
+    private readonly HashSet<PageAnnotation> _selectedAnnotations = [];
+    private int _selectedAnnotationVertexIndex = -1;
     private Measurement? _joistDirectionMeasurement;
     private readonly List<SKPoint> _joistDirectionPts = [];
     private SKPoint? _joistDirectionRubberEnd;
     private int _selectedVertexIndex = -1;
+    private readonly Dictionary<Measurement, HashSet<int>> _selectedMeasurementVertexIndices = [];
     private bool _draggingVertex;
     private bool _draggingMeasurement;
+    private bool _draggingAnnotationVertex;
+    private bool _draggingAnnotation;
+    private bool _draggingTransformScale;
+    private bool _draggingTransformRotate;
     private bool _dragMeasurementChanged;
+    private bool _dragAnnotationChanged;
     private Point _dragScreenStart;
     private SKPoint _dragVertexOriginalPoint;
+    private SKPoint _dragAnnotationVertexOriginalPoint;
+    private readonly Dictionary<Measurement, Dictionary<int, SKPoint>> _dragMeasurementVertexOriginalPoints = [];
     private List<SKPoint> _dragMeasurementOriginalPoints = [];
+    private List<List<SKPoint>> _dragMeasurementOriginalHoles = [];
+    private List<SKPoint> _dragAnnotationOriginalPoints = [];
+    private readonly Dictionary<PageAnnotation, List<SKPoint>> _dragAnnotationSelectionOriginalPoints = [];
     private readonly Dictionary<Measurement, List<SKPoint>> _dragSelectionOriginalPoints = [];
+    private readonly Dictionary<Measurement, List<List<SKPoint>>> _dragSelectionOriginalHoles = [];
+    private readonly Dictionary<Measurement, List<SKPoint>> _transformMeasurementOriginalPoints = [];
+    private readonly Dictionary<Measurement, List<List<SKPoint>>> _transformMeasurementOriginalHoles = [];
+    private readonly Dictionary<Measurement, double> _transformMeasurementOriginalJoistDirections = [];
+    private readonly Dictionary<PageAnnotation, List<SKPoint>> _transformAnnotationOriginalPoints = [];
+    private readonly List<ViewportUndoAction> _undoStack = [];
+    private bool _applyingViewportUndo;
+    private SKPoint _transformCenter;
+    private float _transformStartDistance;
+    private float _transformStartAngle;
+    private TransformHandleKind _transformHandle = TransformHandleKind.None;
+    private SKRect _transformStartBounds;
+    private SKPoint _transformStartPdf;
     private readonly Dictionary<int, bool> _layerStates = [];
     private readonly HashSet<int> _highlightedLayers = [];
     private List<PdfLayer> _layers = [];
     private IReadOnlyList<PdfLayerInfo>? _cachedLayers;
+    private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = [];
+    private readonly object _rasterSheetRebuildGate = new();
+    private readonly HashSet<string> _rasterSheetRebuildsInFlight = new(StringComparer.OrdinalIgnoreCase);
+    private bool _pdfLayersLoadedForPage;
     private bool _usingLayerRenderer;
+    private bool _usingRasterSheetRender;
+    private bool _usingRasterSheetOverviewRender;
     private bool _pdfLayerTraceEnabled;
     private PdfLayerTraceMode _pdfLayerTraceMode = PdfLayerTraceMode.Full;
     private int? _activePdfLayerTraceLayer;
@@ -169,14 +385,31 @@ public sealed partial class PdfViewport : SKElement
     private SKPoint? _lastPdfLayerTraceProbePoint;
     private DateTime _lastPdfLayerTraceProbeAt = DateTime.MinValue;
     private readonly System.Windows.Threading.DispatcherTimer _zoomRerenderTimer;
+    private readonly System.Windows.Threading.DispatcherTimer _navigationIdleTimer;
     private bool _zoomRerenderForce;
     private bool _repaintQueued;
-    private bool _isViewDragging;
+    private bool _isFastNavigating;
+    private bool _renderNavigationFastFrame;
+    private bool _showingPreviousPageDuringSwitch;
+    private DateTime _lastFastNavigationAt = DateTime.MinValue;
+    private string _lastRasterSheetMotionWarmupKey = "";
+    private DateTime _lastRasterSheetMotionWarmupAt = DateTime.MinValue;
+    private int _rasterSheetQualityRestoreVersion;
+    private int _rasterSheetQualityRestoreQueuedVersion;
     private DateTime _lastPointerStatusAt = DateTime.MinValue;
+    private DateTime _lastPointerRepaintAt = DateTime.MinValue;
+    private DateTime _lastSlowFrameLogAt = DateTime.MinValue;
+    private DateTime _lastSlowRenderLogAt = DateTime.MinValue;
+    private DateTime _lastSlowSnapLogAt = DateTime.MinValue;
     private readonly Dictionary<string, SKColor> _colorCache = new(StringComparer.OrdinalIgnoreCase);
     private LayerRenderRequest? _pendingLayerRender;
     private bool _layerRenderInProgress;
     private int _layerRenderVersion;
+    private DocnetRenderRequest? _pendingDocnetRender;
+    private bool _docnetRenderInProgress;
+    private int _docnetRenderVersion;
+    private int _persistedPreviewRenderVersion;
+    private int _persistedPreviewRenderInFlightVersion;
 
     private sealed record LayerRenderRequest(
         int Version,
@@ -188,6 +421,8 @@ public sealed partial class PdfViewport : SKElement
         Dictionary<int, bool> LayerStates,
         HashSet<int> HighlightedLayers,
         IReadOnlyList<PdfLayerInfo>? CachedLayers,
+        ViewState? RestoreView,
+        bool FitAfter,
         string? StatusAfter,
         bool FireLayersAfter);
 
@@ -197,47 +432,98 @@ public sealed partial class PdfViewport : SKElement
         PdfLayerRenderResult Result,
         string Error);
 
-    // ── Events ────────────────────────────────────────────────────────────────
+    private sealed record DocnetRenderRequest(
+        int Version,
+        string PdfPath,
+        int PdfIndex,
+        string PageFolder,
+        float RenderScale,
+        IReadOnlyList<PdfLayerInfo>? CachedLayers,
+        ViewState? RestoreView,
+        bool FitAfter,
+        bool QueueLayerAfter,
+        bool ResetLayerStates,
+        string? StatusAfter,
+        bool FireLayersAfter);
+
+    private sealed record DocnetRenderResult(
+        float WidthPt,
+        float HeightPt,
+        float BitmapScale,
+        SKBitmap Bitmap);
+
+    // в”Ђв”Ђ Events в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     public event Action<string>?                          StatusChanged;
     public event Action<double>?                          ScaleChanged;
+    public event Action<float>?                           ZoomChanged;
+    public event Action<SKPoint?>?                        PointerPdfChanged;
     public event Action<string>?                          ToolChanged;
     public event Action<bool>?                            SnapChanged;
     public event Action<bool>?                            OrthoChanged;
+    public event Action<bool>?                            BoxModeChanged;
     public event Action<IReadOnlyList<PdfLayer>>?         LayersChanged;
     public event Action<IReadOnlyList<PdfLayerInfo>>?     PdfLayersDiscovered;
     public event Action?                                  PdfLayerTraceStateChanged;
     public event Action<Measurement>?                     MeasurementAdded;
     public event Action<Measurement>?                     MeasurementRemoved;
+    public event Action<IReadOnlyList<Measurement>>?      MeasurementsAdded;
+    public event Action<IReadOnlyList<Measurement>>?      MeasurementsRemoved;
     public event Action<Measurement>?                     MeasurementChanged;
+    public event Action<IReadOnlyList<Measurement>>?      MeasurementsChanged;
     public event Action<PageAnnotation>?                   PageAnnotationAdded;
     public event Action<PageAnnotation>?                   PageAnnotationRemoved;
+    public event Action<PageAnnotation>?                   PageAnnotationChanged;
+    public event Func<string, string, string, string?>?    PageAnnotationTextRequested;
+    public event Action<bool>?                             TransformSelectionChanged;
     public event Action<Measurement?>?                    MeasurementSelectionChanged;
     public event Action<IReadOnlyList<Measurement>>?      MeasurementsSelectionChanged;
+    public event Action<Measurement?>?                    TakeoffRenameRequested;
     public event Action<IReadOnlyList<Measurement>>?      CopyMeasurementsRequested;
     public event Action<SKPoint?>?                        PasteMeasurementsRequested;
     public event Action<ViewportContextRequest>?          ContextRequested;
+    public event Action<ViewportAiCropSelectionRequest>?  AiCropNoteSelectionCompleted;
     public event Action<Measurement, SKPoint, SKPoint>?   JoistDirectionCaptured;
+    public event Action<BeamMeasurementRequest>?          BeamMeasurementCompleted;
+    public event Action<OpeningMeasurementRequest>?       OpeningMeasurementCompleted;
+    public event Action<SheetOverlayTransformChange>?     SheetOverlayTransformChanged;
+    public event Action<float>?                           SheetOverlayRenderScaleRefreshRequested;
 
-    // ── Constants ─────────────────────────────────────────────────────────────
+    // в”Ђв”Ђ Constants в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     private const float ZoomMin    = 0.05f;
     private const float ZoomMax    = 16.0f;
     private const float RenderDpi  = 144f;           // initial render quality (2 px/pt)
-    private const double PdfPointMeters = 25.4 / 72.0 / 1000.0;
-    private const float SnapToleranceScreenPx = 14f;
+    private const double PdfPointMeters = ViewportConstants.PdfPointMeters;
+    private const float SnapToleranceScreenPx = ViewportConstants.SnapToleranceScreen;
     private const float SnapMarkerScreenPx = 8f;
-    private const float VertexHitToleranceScreenPx = 24f;
-    private const float MeasurementHitToleranceScreenPx = 20f;
-    private const float SelectedVertexHitToleranceScreenPx = 32f;
-    private const float SelectedMeasurementHitToleranceScreenPx = 28f;
+    private const float VertexHitToleranceScreenPx = ViewportConstants.VertexHitRadiusScreen;
+    private const float MeasurementHitToleranceScreenPx = ViewportConstants.MeasurementHitRadiusScreen;
+    private const float SelectedVertexHitToleranceScreenPx = 12f;
+    private const float SelectedMeasurementHitToleranceScreenPx = 10f;
     private const float MeasurementLabelFontScreenPx = 9f;
     private const float MeasurementLabelPaddingScreenPx = 2f;
     private const float JoistSegmentLabelFontScreenPx = 7f;
     private static readonly float[] RenderScaleSteps = [0.75f, 1.00f, 1.50f, 2.25f, 3.00f, 4.00f];
+    private static readonly SKTypeface LabelTypeface =
+        SKTypeface.FromFamilyName("Consolas") ??
+        SKTypeface.FromFamilyName("Cascadia Mono") ??
+        SKTypeface.Default;
+    private static readonly SKTypeface OverlayMonoTypeface =
+        SKTypeface.FromFamilyName("Consolas") ??
+        SKTypeface.FromFamilyName("Cascadia Mono") ??
+        SKTypeface.Default;
+    private static readonly SKTypeface OverlayUiTypeface =
+        SKTypeface.FromFamilyName("Segoe UI") ??
+        SKTypeface.FromFamilyName("Inter") ??
+        SKTypeface.Default;
+    private static readonly SKTypeface OverlayUiBoldTypeface =
+        SKTypeface.FromFamilyName("Segoe UI", SKFontStyle.Bold) ??
+        SKTypeface.FromFamilyName("Inter", SKFontStyle.Bold) ??
+        OverlayUiTypeface;
 
     private static readonly SKColor TempColor = new(0xFF, 0xD7, 0x00);   // yellow
     private static readonly SKColor ScaleClr  = new(0x00, 0xE5, 0xFF);   // cyan
 
-    // ── Constructor ───────────────────────────────────────────────────────────
+    // в”Ђв”Ђ Constructor в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     public PdfViewport()
     {
         Focusable     = true;
@@ -247,7 +533,7 @@ public sealed partial class PdfViewport : SKElement
         ContextMenu   = null;
         _zoomRerenderTimer = new System.Windows.Threading.DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(180),
+            Interval = TimeSpan.FromMilliseconds(ViewportConstants.ZoomRerenderDelayMs),
         };
         _zoomRerenderTimer.Tick += (_, _) =>
         {
@@ -257,562 +543,99 @@ public sealed partial class PdfViewport : SKElement
             RerenderForZoomIfNeeded(force);
             RequestRepaint();
         };
+        _navigationIdleTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(ViewportConstants.NavigationIdleMs),
+        };
+        _navigationIdleTimer.Tick += (_, _) =>
+        {
+            if (ShouldDeferFastNavigationEndForPointer())
+            {
+                _navigationIdleTimer.Stop();
+                _navigationIdleTimer.Start();
+                return;
+            }
+
+            EndFastNavigation();
+        };
+        Unloaded += PdfViewport_Unloaded;
     }
 
-    private void RequestRepaint()
+    private void PdfViewport_Unloaded(object sender, RoutedEventArgs e)
     {
+        CancelExtraJoistPlacement(postStatus: false);
+        _zoomRerenderTimer.Stop();
+        _navigationIdleTimer.Stop();
+        _pendingLayerRender = null;
+        _layerRenderVersion++;
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
+        ClearDetailRender();
+        _showingPreviousPageDuringSwitch = false;
+        _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
+        _pageBitmap?.Dispose();
+        _pageBitmap = null;
+        ClearStaticPageFrameCache();
+        ClearSheetOverlay();
+        _selectedMeasurementVertexIndices.Clear();
+        _dragMeasurementOriginalPoints.Clear();
+        _dragMeasurementOriginalHoles.Clear();
+        _dragMeasurementOriginalExtraJoists.Clear();
+        _dragMeasurementVertexOriginalPoints.Clear();
+        _dragSelectionOriginalPoints.Clear();
+        _dragSelectionOriginalHoles.Clear();
+        _dragSelectionOriginalExtraJoists.Clear();
+        _dragAnnotationSelectionOriginalPoints.Clear();
+        ClearRasterSheetVisualSegments();
+        _transformMeasurementOriginalPoints.Clear();
+        _transformMeasurementOriginalHoles.Clear();
+        _transformMeasurementOriginalJoistDirections.Clear();
+        _transformMeasurementOriginalExtraJoists.Clear();
+        _transformAnnotationOriginalPoints.Clear();
+        ClearViewportUndoStack();
+    }
+
+    private void RequestRepaint(bool crossThreadRequest = false)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => RequestRepaint(crossThreadRequest: true)));
+            return;
+        }
+
+        ViewportPerformanceRecorder.RecordRepaintRequest(_pageFolder, _repaintQueued, crossThreadRequest);
+        if (_repaintQueued)
+            return;
+
+        PrepareBitmapForImmediateRepaint();
+        TryStartPendingSimilarCountSelection();
         if (_repaintQueued)
             return;
 
         _repaintQueued = true;
+        InvalidateVisual();
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() =>
         {
             _repaintQueued = false;
-            InvalidateVisual();
         }));
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // Public API
-    // ═════════════════════════════════════════════════════════════════════════
-
-    public readonly record struct ViewState(float Zoom, float PanX, float PanY);
-
-    public ViewState CaptureViewState() => new(_zoom, _panX, _panY);
-    public bool IsPdfLayerTraceEnabled => _pdfLayerTraceEnabled;
-    public bool CanApplyPdfLayerTrace => _pdfLayerTraceEnabled && _pdfLayerTraceReadyToApply;
-    public string PdfLayerTraceModeTitle => LayerTraceModeTitle(_pdfLayerTraceMode);
-    public string ActivePdfLayerTraceLayerName => _activePdfLayerTraceLayerName;
-    public string PdfLayerTracePhaseTitle =>
-        _pdfLayerTraceChoosingLayer ? "Choose Layer" :
-        _pdfLayerTraceReadyToApply ? "Ready" :
-        _pdfLayerTraceCandidates.Count > 0 ? "Hover" :
-        "Probe";
-
-    public void RestoreViewState(ViewState state)
+    private void PrepareBitmapForImmediateRepaint()
     {
-        _zoom = Math.Clamp(state.Zoom, ZoomMin, ZoomMax);
-        _panX = state.PanX;
-        _panY = state.PanY;
-        ClampPanToPage();
-        ScheduleRerenderForZoom(force: false);
-        RequestRepaint();
-    }
-
-    public void LoadPage(
-        string pdfPath,
-        int pageIndex = 0,
-        string pageFolder = "",
-        IReadOnlyList<PdfLayerInfo>? cachedLayers = null,
-        ViewState? restoreView = null)
-    {
-        _pdfPath    = pdfPath;
-        _pdfIndex   = pageIndex;
-        _pageFolder = pageFolder;
-        _cachedLayers = cachedLayers;
-
-        _pageBitmap?.Dispose();
-        _pageBitmap = null;
-        _drawPts.Clear();
-        _scalePts.Clear();
-        _rubberEnd = null;
-        _boxSelecting = false;
-        SetSnapPreview(null);
-        _aiMarkers.Clear();
-        _annotations.Clear();
-        ClearAiActionDraftPreview();
-        ClearSelection();
-        _layerStates.Clear();
-        _highlightedLayers.Clear();
-        _layers.Clear();
-        _activePdfLayerTraceLayer = null;
-        _activePdfLayerTraceLayerName = "";
-        ClearPdfLayerTraceSession();
-        _usingLayerRenderer = false;
-        _pendingLayerRender = null;
-        _layerRenderVersion++;
-
-        bool hasPreview = false;
         try
         {
-            RenderPageWithDocnet(Math.Clamp(CurrentRenderScale(), 0.50f, 1.25f));
-            hasPreview = true;
+            TryPrepareRasterSheetBitmapForImmediateRepaint();
         }
         catch (Exception ex)
         {
-            PostStatus($"Fast PDF preview unavailable: {ex.Message}");
+            AppLog.Warn(ex, "Viewport immediate repaint bitmap preparation failed.");
         }
-
-        // Fit after WPF has finished layout
-        if (hasPreview)
-        {
-            Dispatcher.InvokeAsync(() =>
-            {
-                if (restoreView.HasValue)
-                    RestoreViewState(restoreView.Value);
-                else
-                    ZoomFit();
-                QueueLayerRender(
-                    resetLayerStates: true,
-                    renderScale: CurrentRenderScale(),
-                    statusAfter: $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}",
-                    fireLayersAfter: true);
-            });
-        }
-        else
-        {
-            if (restoreView.HasValue)
-                RestoreViewState(restoreView.Value);
-            QueueLayerRender(
-                resetLayerStates: true,
-                renderScale: CurrentRenderScale(),
-                statusAfter: $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}",
-                fireLayersAfter: true);
-        }
-        PostStatus($"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
-
-        // Fire layers event
-        FireLayersChanged();
     }
 
-    public void SetTool(string name)
-    {
-        _tool = name.ToLower() switch
-        {
-            "select" => ViewerTool.Select,
-            "scale" => ViewerTool.Scale,
-            "ruler" => ViewerTool.Ruler,
-            "drawline" => ViewerTool.DrawLine,
-            "drawarrow" => ViewerTool.DrawArrow,
-            "drawrect" => ViewerTool.DrawRect,
-            "point" => ViewerTool.Point,
-            "line"  => ViewerTool.Line,
-            "area"  => ViewerTool.Area,
-            _       => ViewerTool.Pan,
-        };
-        CancelDrawing();
-        SetSnapPreview(null);
-        UpdateCursor();
-        PostRecordPrompt();
-    }
-
-    public IReadOnlyList<Measurement> GetSelectedMeasurements() =>
-        _selectedMeasurements
-            .Where(m => _measurements.Contains(m) && IsMeasurementOnActivePage(m))
-            .ToList();
-
-    public void BeginJoistDirectionCapture(Measurement areaMeasurement)
-    {
-        if (areaMeasurement.MType != "area" || !IsMeasurementOnActivePage(areaMeasurement))
-            return;
-
-        _joistDirectionMeasurement = areaMeasurement;
-        _joistDirectionPts.Clear();
-        _joistDirectionRubberEnd = null;
-        CancelDrawing();
-        SelectMeasurements([areaMeasurement]);
-        PostStatus("Joist direction: click two points parallel to the joists. Esc cancels.");
-        RequestRepaint();
-    }
-
-    public void ZoomFit()
-    {
-        if (_pdfW <= 0 || ActualWidth < 2 || ActualHeight < 2) return;
-        _zoom = (float)Math.Min(ActualWidth / _pdfW, ActualHeight / _pdfH) * 0.95f;
-        _panX = _panY = 0;
-        ScheduleRerenderForZoom(force: true);
-        RequestRepaint();
-    }
-
-    public void ZoomIn()  => ApplyZoom(1.25f, (float)(ActualWidth  / 2), (float)(ActualHeight / 2));
-    public void ZoomOut() => ApplyZoom(0.80f, (float)(ActualWidth  / 2), (float)(ActualHeight / 2));
-
-    private bool TrySavePdfCrop(SKRect requestedPdfRect, string outputPath, out SKRect cropPdfRect, out string error)
-    {
-        cropPdfRect = SKRect.Empty;
-        error = "";
-
-        if (_pageBitmap == null || _bitmapScale <= 0 || _pdfW <= 0 || _pdfH <= 0)
-        {
-            error = "No rendered PDF page is available.";
-            return false;
-        }
-
-        float left = Math.Clamp(Math.Min(requestedPdfRect.Left, requestedPdfRect.Right), 0, _pdfW);
-        float top = Math.Clamp(Math.Min(requestedPdfRect.Top, requestedPdfRect.Bottom), 0, _pdfH);
-        float right = Math.Clamp(Math.Max(requestedPdfRect.Left, requestedPdfRect.Right), 0, _pdfW);
-        float bottom = Math.Clamp(Math.Max(requestedPdfRect.Top, requestedPdfRect.Bottom), 0, _pdfH);
-
-        if (right - left < 1 || bottom - top < 1)
-        {
-            error = "Requested crop is outside the PDF page.";
-            return false;
-        }
-
-        int srcLeft = Math.Clamp((int)Math.Floor(left * _bitmapScale), 0, _pageBitmap.Width - 1);
-        int srcTop = Math.Clamp((int)Math.Floor(top * _bitmapScale), 0, _pageBitmap.Height - 1);
-        int srcRight = Math.Clamp((int)Math.Ceiling(right * _bitmapScale), srcLeft + 1, _pageBitmap.Width);
-        int srcBottom = Math.Clamp((int)Math.Ceiling(bottom * _bitmapScale), srcTop + 1, _pageBitmap.Height);
-        int cropWidth = srcRight - srcLeft;
-        int cropHeight = srcBottom - srcTop;
-        if (cropWidth <= 0 || cropHeight <= 0)
-        {
-            error = "Requested crop is too small.";
-            return false;
-        }
-
-        string? directory = Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrWhiteSpace(directory))
-            Directory.CreateDirectory(directory);
-
-        using var crop = new SKBitmap(cropWidth, cropHeight);
-        using (var canvas = new SKCanvas(crop))
-        {
-            canvas.Clear(SKColors.White);
-            canvas.DrawBitmap(
-                _pageBitmap,
-                new SKRectI(srcLeft, srcTop, srcRight, srcBottom),
-                new SKRect(0, 0, cropWidth, cropHeight));
-        }
-
-        using var image = SKImage.FromBitmap(crop);
-        using var data = image.Encode(SKEncodedImageFormat.Png, 92);
-        using var stream = File.Open(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
-        data.SaveTo(stream);
-
-        cropPdfRect = new SKRect(
-            srcLeft / _bitmapScale,
-            srcTop / _bitmapScale,
-            srcRight / _bitmapScale,
-            srcBottom / _bitmapScale);
-        return true;
-    }
-
-
-    // ── Undo ─────────────────────────────────────────────────────────────────
-
-    public void UndoLast()
-    {
-        if (_drawPts.Count > 0)
-        {
-            _drawPts.RemoveAt(_drawPts.Count - 1);
-            _rubberEnd = _drawPts.Count > 0 ? _rubberEnd : null;
-            RequestRepaint();
-            if (_drawPts.Count > 0)
-                PostRecordPrompt();
-            else
-                PostStatus("Undo: drawing cleared.");
-            return;
-        }
-
-        for (int i = _annotations.Count - 1; i >= 0; i--)
-        {
-            if (IsAnnotationOnActivePage(_annotations[i]))
-            {
-                PageAnnotation annotation = _annotations[i];
-                _annotations.RemoveAt(i);
-                RequestRepaint();
-                PostStatus($"Undo: removed {ToolTitle(annotation.Kind)} markup.");
-                PageAnnotationRemoved?.Invoke(annotation);
-                return;
-            }
-        }
-
-        for (int i = _measurements.Count - 1; i >= 0; i--)
-        {
-            if (IsMeasurementOnActivePage(_measurements[i]))
-            {
-                var m = _measurements[i];
-                _measurements.RemoveAt(i);
-                if (ReferenceEquals(_selectedMeasurement, m))
-                    ClearSelection();
-                RequestRepaint();
-                PostStatus($"Undo: removed {ToolTitle(m.MType)}.");
-                MeasurementRemoved?.Invoke(m);
-                return;
-            }
-        }
-        PostStatus("Nothing to undo on this page.");
-    }
-
-    // Remove specific measurements without firing MeasurementRemoved events
-    // (caller handles model cleanup; this just keeps the render list consistent)
-    public void DeleteMeasurements(IEnumerable<Measurement> toRemove)
-    {
-        foreach (var m in toRemove.ToList())
-        {
-            _measurements.Remove(m);
-            _selectedMeasurements.Remove(m);
-            if (ReferenceEquals(_selectedMeasurement, m))
-                _selectedMeasurement = null;
-        }
-        if (_selectedMeasurement == null && _selectedMeasurements.Count > 0)
-            _selectedMeasurement = _selectedMeasurements.LastOrDefault();
-        if (_selectedMeasurement == null)
-            _selectedVertexIndex = -1;
-        RequestRepaint();
-    }
-
-    // Bulk-load measurements restored from a saved file
-    public void LoadMeasurements(IEnumerable<Measurement> measurements)
-    {
-        SetMeasurements(measurements);
-    }
-
-    public void FocusMeasurement(Measurement measurement)
-    {
-        if (!_measurements.Contains(measurement))
-            return;
-
-        SelectMeasurement(measurement, -1);
-        CenterOnMeasurement(measurement);
-        RequestRepaint();
-        PostStatus($"Selected {EntryTitle(measurement.MType)}. Drag the body to move; drag blue handles to reshape.");
-    }
-
-    public void SelectMeasurements(IEnumerable<Measurement> measurements)
-    {
-        var selected = measurements
-            .Where(m => _measurements.Contains(m) && IsMeasurementOnActivePage(m))
-            .Distinct()
-            .ToList();
-        SetSelectedMeasurements(selected, selected.LastOrDefault(), -1);
-        if (selected.Count > 0)
-            PostStatus($"Selected {selected.Count} measurement(s). Ctrl+C copies, Ctrl+V pastes to the active sheet.");
-    }
-
-    public void FocusPdfPoint(float pdfX, float pdfY)
-    {
-        if (ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
-            return;
-
-        float visibleW = (float)ActualWidth / _zoom;
-        float visibleH = (float)ActualHeight / _zoom;
-        _panX = pdfX - visibleW / 2f;
-        _panY = pdfY - visibleH / 2f;
-        ClampPanToPage();
-        ScheduleRerenderForZoom(force: false);
-        RequestRepaint();
-        Focus();
-    }
-
-    public bool InsertMeasurementVertex(Measurement measurement, float pdfX, float pdfY)
-    {
-        if (!_measurements.Contains(measurement) ||
-            !IsMeasurementOnActivePage(measurement) ||
-            measurement.MType is not ("line" or "area"))
-        {
-            return false;
-        }
-
-        var point = new SKPoint(pdfX, pdfY);
-        int insertIndex = measurement.Points.Count;
-
-        if (measurement.Points.Count >= 2)
-        {
-            float bestDistance = float.PositiveInfinity;
-            for (int i = 1; i < measurement.Points.Count; i++)
-            {
-                float distance = DistanceToSegment(point, measurement.Points[i - 1], measurement.Points[i]);
-                if (distance < bestDistance)
-                {
-                    bestDistance = distance;
-                    insertIndex = i;
-                }
-            }
-
-            if (measurement.MType == "area" && measurement.Points.Count > 2)
-            {
-                float closingDistance = DistanceToSegment(point, measurement.Points[^1], measurement.Points[0]);
-                if (closingDistance < bestDistance)
-                    insertIndex = measurement.Points.Count;
-            }
-        }
-
-        measurement.Points.Insert(insertIndex, point);
-        SelectMeasurement(measurement, insertIndex);
-        MeasurementChanged?.Invoke(measurement);
-        RequestRepaint();
-        PostStatus($"Inserted {ToolTitle(measurement.MType)} vertex {insertIndex + 1}.");
-        return true;
-    }
-
-    public bool RemoveNearestMeasurementVertex(Measurement measurement, float pdfX, float pdfY)
-    {
-        if (!_measurements.Contains(measurement) ||
-            !IsMeasurementOnActivePage(measurement) ||
-            measurement.MType is not ("line" or "area") ||
-            measurement.Points.Count == 0)
-        {
-            return false;
-        }
-
-        int minimumPoints = measurement.MType == "area" ? 3 : 2;
-        if (measurement.Points.Count <= minimumPoints)
-        {
-            PostStatus($"{ToolTitle(measurement.MType)} needs at least {minimumPoints} points.");
-            return false;
-        }
-
-        var point = new SKPoint(pdfX, pdfY);
-        int removeIndex = 0;
-        float bestDistance = float.PositiveInfinity;
-        for (int i = 0; i < measurement.Points.Count; i++)
-        {
-            float distance = DistanceSquared(point, measurement.Points[i]);
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                removeIndex = i;
-            }
-        }
-
-        measurement.Points.RemoveAt(removeIndex);
-        SelectMeasurement(measurement, Math.Min(removeIndex, measurement.Points.Count - 1));
-        MeasurementChanged?.Invoke(measurement);
-        RequestRepaint();
-        PostStatus($"Removed {ToolTitle(measurement.MType)} vertex {removeIndex + 1}.");
-        return true;
-    }
-
-    public bool TrySaveContextCrop(
-        float pdfX,
-        float pdfY,
-        float radiusPt,
-        string outputPath,
-        out SKRect cropPdfRect,
-        out string error)
-    {
-        radiusPt = Math.Max(24f, radiusPt);
-        var requested = SKRect.Create(pdfX - radiusPt, pdfY - radiusPt, radiusPt * 2, radiusPt * 2);
-        return TrySavePdfCrop(requested, outputPath, out cropPdfRect, out error);
-    }
-
-    public bool TrySaveMeasurementCrop(
-        Measurement measurement,
-        float paddingPt,
-        string outputPath,
-        out SKRect cropPdfRect,
-        out string error)
-    {
-        cropPdfRect = SKRect.Empty;
-        if (!_measurements.Contains(measurement) || measurement.Points.Count == 0)
-        {
-            error = "Measurement is not loaded in the current viewport.";
-            return false;
-        }
-
-        SKRect bounds = MeasurementBounds(measurement);
-        paddingPt = Math.Max(24f, paddingPt);
-
-        float width = Math.Max(bounds.Width + paddingPt * 2, 240f);
-        float height = Math.Max(bounds.Height + paddingPt * 2, 240f);
-        float centerX = (bounds.Left + bounds.Right) / 2f;
-        float centerY = (bounds.Top + bounds.Bottom) / 2f;
-        var requested = SKRect.Create(centerX - width / 2f, centerY - height / 2f, width, height);
-
-        return TrySavePdfCrop(requested, outputPath, out cropPdfRect, out error);
-    }
-
-    public void SetMeasurements(IEnumerable<Measurement> measurements)
-    {
-        _measurements.Clear();
-        _measurements.AddRange(measurements);
-        ClearSelection();
-        RequestRepaint();
-    }
-
-    public IReadOnlyList<PageAnnotation> GetPageAnnotations() =>
-        _annotations
-            .Where(annotation => IsAnnotationOnActivePage(annotation))
-            .ToList();
-
-    public void SetPageAnnotations(IEnumerable<PageAnnotation> annotations)
-    {
-        _annotations.Clear();
-        _annotations.AddRange(annotations);
-        RequestRepaint();
-    }
-
-    public void SetSheetLegend(IEnumerable<SheetLegendEntry> entries)
-    {
-        _sheetLegendEntries.Clear();
-        _sheetLegendEntries.AddRange(entries
-            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
-            .Take(50));
-        RequestRepaint();
-    }
-
-    public void ShowAiActionDraftPreview(SmartAiActionDraft draft, string pageName)
-    {
-        _aiActionDraftPreview = draft;
-        _aiActionDraftPreviewPage = pageName;
-        RequestRepaint();
-    }
-
-    public void ClearAiActionDraftPreview()
-    {
-        _aiActionDraftPreview = null;
-        _aiActionDraftPreviewPage = "";
-        RequestRepaint();
-    }
-
-    public void SetAiMarkers(IEnumerable<SmartAiMarker> markers)
-    {
-        _aiMarkers.Clear();
-        _aiMarkers.AddRange(markers);
-        RequestRepaint();
-    }
-
-    public void ClearAiMarkers()
-    {
-        _aiMarkers.Clear();
-        RequestRepaint();
-    }
-
-    public void ClearPage()
-    {
-        _pdfPath = "";
-        _pdfIndex = 0;
-        _pageFolder = "";
-        _cachedLayers = null;
-        _zoomRerenderTimer.Stop();
-        _zoomRerenderForce = false;
-        _isViewDragging = false;
-        _pendingLayerRender = null;
-        _layerRenderVersion++;
-        _pdfLayerTraceEnabled = false;
-        _activePdfLayerTraceLayer = null;
-        _activePdfLayerTraceLayerName = "";
-        ClearPdfLayerTraceSession();
-        _pageBitmap?.Dispose();
-        _pageBitmap = null;
-        _pdfW = _pdfH = 0;
-        _drawPts.Clear();
-        _scalePts.Clear();
-        _rubberEnd = null;
-        _boxSelecting = false;
-        _aiActionDraftPreview = null;
-        _aiActionDraftPreviewPage = "";
-        _aiMarkers.Clear();
-        _annotations.Clear();
-        _sheetLegendEntries.Clear();
-        CancelJoistDirectionCapture();
-        ClearSelection();
-        RequestRepaint();
-        FireLayersChanged();
-        PublishPdfLayerTraceState();
-    }
-
-    public int GetPageCount(string pdfPath)
-    {
-        try
-        {
-            using var docReader = _docLib.GetDocReader(pdfPath, new PageDimensions(1.0));
-            return docReader.GetPageCount();
-        }
-        catch { return 0; }
-    }
+    // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+    // Public API
+    // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
     private void PostStatus(string msg) => StatusChanged?.Invoke(msg);
 

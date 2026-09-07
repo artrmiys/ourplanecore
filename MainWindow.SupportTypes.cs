@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -27,31 +27,80 @@ public partial class MainWindow
         string JoistType,
         double SpacingInches,
         double DirectionDegrees,
+        bool DirectionFollowsAreaRotation,
+        bool AddEndJoist,
+        string Pitch,
         string LengthRounding,
-        bool ShowLabels);
+        bool ShowLabels,
+        bool DetailedLabels,
+        bool MoveNote = false);
     private enum MeasurementPasteMode { SameTakeoffs, NewTakeoffs }
+    private sealed record JoistExtraClipboard(SKPoint Start, SKPoint End);
+    private sealed record MeasurementJoistClipboard(
+        bool Enabled,
+        string JoistType,
+        double SpacingInches,
+        double DirectionDegrees,
+        bool DirectionLocked,
+        bool DirectionFollowsAreaRotation,
+        bool AddEndJoist,
+        bool StartEdgeEnabled,
+        bool EndEdgeEnabled,
+        bool EdgeOverridesSet,
+        string Pitch,
+        string LengthRounding,
+        bool ShowLabels,
+        bool DetailedLabels,
+        IReadOnlyList<JoistExtraClipboard> ExtraJoists,
+        bool MoveNote,
+        float NoteOffsetX,
+        float NoteOffsetY,
+        bool NotePositionSet);
+    private sealed record TakeoffJoistClipboard(
+        bool Enabled,
+        string JoistType,
+        double SpacingInches,
+        double DirectionDegrees,
+        bool DirectionFollowsAreaRotation,
+        bool AddEndJoist,
+        string Pitch,
+        string LengthRounding,
+        bool ShowLabels,
+        bool DetailedLabels,
+        bool MoveNote);
     private sealed record MeasurementClipboardEntry(
         string MeasurementType,
         string MeasurementName,
         string MeasurementNotes,
         string MeasurementColor,
+        string MeasurementCountSymbol,
         IReadOnlyList<SKPoint> Points,
+        IReadOnlyList<IReadOnlyList<SKPoint>> Holes,
         string SourcePageFolder,
         double ScaleMetersPerPt,
         string SourceTakeoffFolder,
         string SourceTakeoffName,
         string SourceTakeoffColor,
+        string SourceTakeoffCountSymbol,
         double SourceTakeoffUnitPrice,
-        string SourceTakeoffNotes);
+        string SourceTakeoffNotes,
+        MeasurementJoistClipboard MeasurementJoist,
+        TakeoffJoistClipboard SourceTakeoffJoist);
     private sealed record MeasurementClipboard(IReadOnlyList<MeasurementClipboardEntry> Entries);
 
     private sealed record TakeoffMeasurementNode(TakeoffItem Item, Measurement Measurement);
     private sealed record TakeoffSectionDrag(IReadOnlyList<TakeoffMeasurementNode> Nodes);
     private sealed record PageTakeoffNode(PageInfo Page, TakeoffItem Takeoff);
+    private sealed record PageOverlayNode(
+        PageInfo Page,
+        SheetOverlayLayerInfo Layer,
+        string OverlayName);
     private sealed record PageTakeoffLegendDrag(string PageFolder, IReadOnlyList<string> TakeoffFolders);
     private sealed record AiMarkerInput(string MarkerType, string SampleKind, string Value, string Note);
     private sealed record MarkerSetInput(string Name, string Description);
     private sealed record PdfMetadataPageResult(PageInfo Page, bool Ok, PdfSheetMetadata? Metadata, string Error);
+    private sealed record PdfMetadataApplySummary(int Renamed, int Scaled, int Failed);
+    private sealed record MaterialReportSheetMetadataSummary(int Analyzed, int Renamed, int Scaled, int Failed);
 
     private sealed class PageTabState(string pageFolder, string pageName)
     {

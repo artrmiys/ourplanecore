@@ -5,272 +5,9 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
-public sealed class SmartSheetLearningRecord
-{
-    [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; set; } = 1;
-
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
-
-    [JsonPropertyName("project_id")]
-    public string ProjectId { get; set; } = "";
-
-    [JsonPropertyName("project_name")]
-    public string ProjectName { get; set; } = "";
-
-    [JsonPropertyName("job_root")]
-    public string JobRoot { get; set; } = "";
-
-    [JsonPropertyName("page")]
-    public string Page { get; set; } = "";
-
-    [JsonPropertyName("page_folder")]
-    public string PageFolder { get; set; } = "";
-
-    [JsonPropertyName("event_type")]
-    public string EventType { get; set; } = "sheet_feedback";
-
-    [JsonPropertyName("source")]
-    public string Source { get; set; } = "";
-
-    [JsonPropertyName("user_outcome")]
-    public string UserOutcome { get; set; } = "";
-
-    [JsonPropertyName("source_pdf")]
-    public string SourcePdf { get; set; } = "";
-
-    [JsonPropertyName("pdf_page")]
-    public int PdfPage { get; set; }
-
-    [JsonPropertyName("detection")]
-    public SmartSheetLearningDecision Detection { get; set; } = new();
-
-    [JsonPropertyName("final")]
-    public SmartSheetLearningDecision Final { get; set; } = new();
-
-    [JsonPropertyName("layers")]
-    public List<PdfLayerInfo> Layers { get; set; } = [];
-
-    [JsonPropertyName("warnings")]
-    public List<string> Warnings { get; set; } = [];
-
-    [JsonPropertyName("note")]
-    public string Note { get; set; } = "";
-
-    [JsonPropertyName("created_at_utc")]
-    public string CreatedAtUtc { get; set; } = "";
-}
-
-public sealed class SmartSheetLearningDecision
-{
-    [JsonPropertyName("page_name")]
-    public string PageName { get; set; } = "";
-
-    [JsonPropertyName("sheet_label")]
-    public string SheetLabel { get; set; } = "";
-
-    [JsonPropertyName("sheet_key")]
-    public string SheetKey { get; set; } = "";
-
-    [JsonPropertyName("sheet_title")]
-    public string SheetTitle { get; set; } = "";
-
-    [JsonPropertyName("suffix")]
-    public string Suffix { get; set; } = "";
-
-    [JsonPropertyName("skip_scale")]
-    public bool SkipScale { get; set; }
-
-    [JsonPropertyName("scale_text")]
-    public string ScaleText { get; set; } = "";
-
-    [JsonPropertyName("scale_m_per_pt")]
-    public double ScaleMetersPerPt { get; set; }
-
-    [JsonPropertyName("confidence")]
-    public string Confidence { get; set; } = "";
-}
-
-public sealed class SmartMarkerFeedbackRecord
-{
-    [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; set; } = 1;
-
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
-
-    [JsonPropertyName("project_id")]
-    public string ProjectId { get; set; } = "";
-
-    [JsonPropertyName("project_name")]
-    public string ProjectName { get; set; } = "";
-
-    [JsonPropertyName("job_root")]
-    public string JobRoot { get; set; } = "";
-
-    [JsonPropertyName("event_type")]
-    public string EventType { get; set; } = "marker_candidate_feedback";
-
-    [JsonPropertyName("request_id")]
-    public string RequestId { get; set; } = "";
-
-    [JsonPropertyName("response_id")]
-    public string ResponseId { get; set; } = "";
-
-    [JsonPropertyName("draft_id")]
-    public string DraftId { get; set; } = "";
-
-    [JsonPropertyName("source_marker_id")]
-    public string SourceMarkerId { get; set; } = "";
-
-    [JsonPropertyName("source_marker_type")]
-    public string SourceMarkerType { get; set; } = "";
-
-    [JsonPropertyName("source_marker_sample_kind")]
-    public string SourceMarkerSampleKind { get; set; } = "";
-
-    [JsonPropertyName("outcome")]
-    public string Outcome { get; set; } = "";
-
-    [JsonPropertyName("applied")]
-    public bool Applied { get; set; }
-
-    [JsonPropertyName("action_index")]
-    public int ActionIndex { get; set; }
-
-    [JsonPropertyName("action_type")]
-    public string ActionType { get; set; } = "";
-
-    [JsonPropertyName("label")]
-    public string Label { get; set; } = "";
-
-    [JsonPropertyName("page")]
-    public string Page { get; set; } = "";
-
-    [JsonPropertyName("measurement_type")]
-    public string MeasurementType { get; set; } = "";
-
-    [JsonPropertyName("confidence")]
-    public double Confidence { get; set; }
-
-    [JsonPropertyName("points")]
-    public List<SmartAiActionPoint> Points { get; set; } = [];
-
-    [JsonPropertyName("notes")]
-    public string Notes { get; set; } = "";
-
-    [JsonPropertyName("target_id")]
-    public string TargetId { get; set; } = "";
-
-    [JsonPropertyName("target_name")]
-    public string TargetName { get; set; } = "";
-
-    [JsonPropertyName("target_measurement_type")]
-    public string TargetMeasurementType { get; set; } = "";
-
-    [JsonPropertyName("target_creates_new_item")]
-    public bool TargetCreatesNewItem { get; set; }
-
-    [JsonPropertyName("created_at_utc")]
-    public string CreatedAtUtc { get; set; } = "";
-}
-
-public sealed class SmartSheetLearningSummary
-{
-    [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; set; } = 1;
-
-    [JsonPropertyName("generated_at_utc")]
-    public string GeneratedAtUtc { get; set; } = "";
-
-    [JsonPropertyName("project_id")]
-    public string ProjectId { get; set; } = "";
-
-    [JsonPropertyName("project_name")]
-    public string ProjectName { get; set; } = "";
-
-    [JsonPropertyName("job_root")]
-    public string JobRoot { get; set; } = "";
-
-    [JsonPropertyName("record_count")]
-    public int RecordCount { get; set; }
-
-    [JsonPropertyName("accepted_count")]
-    public int AcceptedCount { get; set; }
-
-    [JsonPropertyName("corrected_count")]
-    public int CorrectedCount { get; set; }
-
-    [JsonPropertyName("rejected_count")]
-    public int RejectedCount { get; set; }
-
-    [JsonPropertyName("manual_final_count")]
-    public int ManualFinalCount { get; set; }
-
-    [JsonPropertyName("suffix_counts")]
-    public Dictionary<string, int> SuffixCounts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-
-    [JsonPropertyName("scale_counts")]
-    public Dictionary<string, int> ScaleCounts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-}
-
-public sealed class SmartLearnedRuleSet
-{
-    [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; set; } = 1;
-
-    [JsonPropertyName("generated_at_utc")]
-    public string GeneratedAtUtc { get; set; } = "";
-
-    [JsonPropertyName("source_record_count")]
-    public int SourceRecordCount { get; set; }
-
-    [JsonPropertyName("rules")]
-    public List<SmartLearnedRule> Rules { get; set; } = [];
-}
-
-public sealed class SmartLearnedRule
-{
-    [JsonPropertyName("enabled")]
-    public bool Enabled { get; set; } = true;
-
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
-
-    [JsonPropertyName("kind")]
-    public string Kind { get; set; } = "title_token_suffix";
-
-    [JsonPropertyName("title_token")]
-    public string TitleToken { get; set; } = "";
-
-    [JsonPropertyName("suffix")]
-    public string Suffix { get; set; } = "";
-
-    [JsonPropertyName("skip_scale")]
-    public bool SkipScale { get; set; }
-
-    [JsonPropertyName("scale_text")]
-    public string ScaleText { get; set; } = "";
-
-    [JsonPropertyName("support")]
-    public int Support { get; set; }
-
-    [JsonPropertyName("confidence")]
-    public string Confidence { get; set; } = "";
-}
-
-public sealed class SmartSheetLearningSignal
-{
-    public string Confidence { get; init; } = "";
-    public string Warning { get; init; } = "";
-    public int SupportingRecords { get; init; }
-    public int ConflictingRecords { get; init; }
-}
-
-public static class SmartLearningStore
+public static partial class SmartLearningStore
 {
     private static readonly JsonSerializerOptions FileJsonOptions = new()
     {
@@ -279,22 +16,22 @@ public static class SmartLearningStore
 
     private static readonly JsonSerializerOptions LineJsonOptions = new();
 
-    public static string ProjectLearningRoot(OurPlaneCoreJob job) =>
+    public static string ProjectLearningRoot(OurPlanCoreJob job) =>
         Path.Combine(job.AIContextRoot, "learning");
 
-    public static string ProjectSheetFeedbackPath(OurPlaneCoreJob job) =>
+    public static string ProjectSheetFeedbackPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "sheet_feedback.jsonl");
 
-    public static string ProjectReviewsPath(OurPlaneCoreJob job) =>
+    public static string ProjectReviewsPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "project_reviews.jsonl");
 
-    public static string ProjectMarkerFeedbackPath(OurPlaneCoreJob job) =>
+    public static string ProjectMarkerFeedbackPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "marker_feedback.jsonl");
 
-    public static string ProjectLearnedRulesPath(OurPlaneCoreJob job) =>
+    public static string ProjectLearnedRulesPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "learned_rules.json");
 
-    public static string ProjectSummaryPath(OurPlaneCoreJob job) =>
+    public static string ProjectSummaryPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "project_learning_summary.json");
 
     public static string GlobalLearningRoot =>
@@ -309,8 +46,9 @@ public static class SmartLearningStore
     public static string GlobalLearnedRulesPath =>
         Path.Combine(GlobalLearningRoot, "learned_rules.json");
 
-    public static void EnsureLearningStore(OurPlaneCoreJob job)
+    public static void EnsureLearningStore(OurPlanCoreJob job)
     {
+        JobWriteAccess.Demand(ProjectLearningRoot(job), "prepare project learning store");
         Directory.CreateDirectory(ProjectLearningRoot(job));
         Directory.CreateDirectory(GlobalLearningRoot);
         EnsureFile(ProjectSheetFeedbackPath(job), "");
@@ -323,7 +61,7 @@ public static class SmartLearningStore
     }
 
     public static SmartSheetLearningRecord AppendSheetFeedback(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo? page,
         SmartSheetLearningRecord record)
     {
@@ -355,7 +93,7 @@ public static class SmartLearningStore
     }
 
     public static SmartMarkerFeedbackRecord AppendMarkerFeedback(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMarkerFeedbackRecord record)
     {
         if (record == null)
@@ -386,31 +124,66 @@ public static class SmartLearningStore
     }
 
     public static SmartSheetLearningRecord CaptureManualPageState(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         string note = "")
     {
+        PdfSheetMetadata metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)
+            ?? new PdfSheetMetadata
+            {
+                Source = "manual",
+                DetectorVersion = "manual",
+                PdfPath = page.PdfPath,
+                PageIndex = page.PdfPage,
+                PageNumber = page.PdfPage + 1,
+                SheetLabel = page.Name,
+                SheetKey = PdfSheetMetadataPolicy.ExtractSheetKey(page.Name),
+                RenameCandidate = page.Name,
+                Confidence = "manual",
+            };
+        SmartSheetLearningDecision final = PdfSheetMetadataService.FinalDecision(
+            page,
+            metadata,
+            page.Name,
+            page.ScaleMetersPerPt);
+        string fingerprint = PdfSheetMetadataService.BuildPdfFingerprint(
+            string.IsNullOrWhiteSpace(metadata.PdfPath) ? page.PdfPath : metadata.PdfPath);
+        string detectorVersion = string.IsNullOrWhiteSpace(metadata.DetectorVersion)
+            ? "manual"
+            : metadata.DetectorVersion;
+        string detectorConfigFingerprint = string.IsNullOrWhiteSpace(metadata.DetectorConfigFingerprint)
+            ? PdfSheetMetadataPolicy.ConfigFingerprint(SheetMetadataRulesService.Active)
+            : metadata.DetectorConfigFingerprint;
         var record = new SmartSheetLearningRecord
         {
             EventType = "manual_page_state",
             Source = "manual",
             UserOutcome = "manual_final",
+            Reviewed = true,
+            NameOutcome = "manual_final",
+            SuffixOutcome = "manual_final",
+            ScaleOutcome = "manual_final",
+            DetectorVersion = detectorVersion,
+            DetectorConfigFingerprint = detectorConfigFingerprint,
+            PdfFingerprint = fingerprint,
+            ObservationKey = PdfSheetMetadataPolicy.BuildObservationKey(
+                fingerprint,
+                page.PdfPage,
+                detectorVersion,
+                detectorConfigFingerprint),
             Note = note.Trim(),
-            Final = new SmartSheetLearningDecision
-            {
-                PageName = page.Name,
-                ScaleMetersPerPt = page.ScaleMetersPerPt,
-                Confidence = "manual",
-            },
+            SourcePdf = string.IsNullOrWhiteSpace(metadata.PdfPath) ? page.PdfPath : metadata.PdfPath,
+            PdfPage = page.PdfPage,
+            Final = final,
         };
 
         return AppendSheetFeedback(job, page, record);
     }
 
-    public static IReadOnlyList<SmartSheetLearningRecord> LoadProjectSheetFeedback(OurPlaneCoreJob job) =>
+    public static IReadOnlyList<SmartSheetLearningRecord> LoadProjectSheetFeedback(OurPlanCoreJob job) =>
         LoadJsonLines<SmartSheetLearningRecord>(ProjectSheetFeedbackPath(job));
 
-    public static IReadOnlyList<SmartMarkerFeedbackRecord> LoadProjectMarkerFeedback(OurPlaneCoreJob job) =>
+    public static IReadOnlyList<SmartMarkerFeedbackRecord> LoadProjectMarkerFeedback(OurPlanCoreJob job) =>
         LoadJsonLines<SmartMarkerFeedbackRecord>(ProjectMarkerFeedbackPath(job));
 
     public static IReadOnlyList<SmartMarkerFeedbackRecord> LoadGlobalMarkerFeedback() =>
@@ -419,9 +192,10 @@ public static class SmartLearningStore
     public static IReadOnlyList<SmartSheetLearningRecord> LoadGlobalSheetFeedback() =>
         LoadJsonLines<SmartSheetLearningRecord>(GlobalSheetFeedbackPath);
 
-    public static SmartLearnedRuleSet LoadProjectLearnedRules(OurPlaneCoreJob job)
+    public static SmartLearnedRuleSet LoadProjectLearnedRules(OurPlanCoreJob job)
     {
-        EnsureLearningStore(job);
+        if (JobWriteAccess.IsWriteAllowed(job.RootPath))
+            EnsureLearningStore(job);
         return LoadJson<SmartLearnedRuleSet>(ProjectLearnedRulesPath(job)) ?? new SmartLearnedRuleSet();
     }
 
@@ -432,7 +206,7 @@ public static class SmartLearningStore
         return LoadJson<SmartLearnedRuleSet>(GlobalLearnedRulesPath) ?? new SmartLearnedRuleSet();
     }
 
-    public static void SaveProjectLearnedRules(OurPlaneCoreJob job, SmartLearnedRuleSet rules)
+    public static void SaveProjectLearnedRules(OurPlanCoreJob job, SmartLearnedRuleSet rules)
     {
         if (rules == null)
             throw new ArgumentNullException(nameof(rules));
@@ -442,7 +216,7 @@ public static class SmartLearningStore
         string path = ProjectLearnedRulesPath(job);
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(rules, FileJsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(rules, FileJsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -459,7 +233,7 @@ public static class SmartLearningStore
         rules.GeneratedAtUtc = DateTime.UtcNow.ToString("O");
         try
         {
-            File.WriteAllText(GlobalLearnedRulesPath, JsonSerializer.Serialize(rules, FileJsonOptions));
+            IoUtil.WriteAllTextAtomic(GlobalLearnedRulesPath, JsonSerializer.Serialize(rules, FileJsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -467,11 +241,12 @@ public static class SmartLearningStore
         }
     }
 
-    public static SmartSheetLearningSummary SaveProjectSummary(OurPlaneCoreJob job)
+    public static SmartSheetLearningSummary SaveProjectSummary(OurPlanCoreJob job)
     {
         SmartProjectContext context = SmartContextStore.EnsureProjectContext(job.RootPath, job.Name);
         EnsureLearningStore(job);
-        IReadOnlyList<SmartSheetLearningRecord> records = LoadProjectSheetFeedback(job);
+        IReadOnlyList<SmartSheetLearningRecord> records = LatestSheetObservations(
+            LoadProjectSheetFeedback(job));
 
         var summary = new SmartSheetLearningSummary
         {
@@ -484,14 +259,18 @@ public static class SmartLearningStore
             CorrectedCount = records.Count(record => IsOutcome(record, "corrected", "overrode")),
             RejectedCount = records.Count(record => IsOutcome(record, "rejected")),
             ManualFinalCount = records.Count(record => IsOutcome(record, "manual_final")),
-            SuffixCounts = CountValues(records.Select(record => record.Final.Suffix)),
-            ScaleCounts = CountValues(records.Select(record => record.Final.ScaleText)),
+            SuffixCounts = CountValues(records
+                .Where(record => IsReviewedField(record, record.SuffixOutcome))
+                .Select(record => record.Final.Suffix)),
+            ScaleCounts = CountValues(records
+                .Where(record => IsReviewedField(record, record.ScaleOutcome))
+                .Select(record => record.Final.ScaleText)),
         };
 
         string path = ProjectSummaryPath(job);
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(summary, FileJsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(summary, FileJsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -503,7 +282,8 @@ public static class SmartLearningStore
 
     public static SmartSheetLearningSignal BuildSheetMetadataSignal(PdfSheetMetadata metadata)
     {
-        IReadOnlyList<SmartSheetLearningRecord> records = LoadGlobalSheetFeedback();
+        IReadOnlyList<SmartSheetLearningRecord> records = LatestSheetObservations(
+            LoadGlobalSheetFeedback());
         if (records.Count == 0)
             return new SmartSheetLearningSignal { Confidence = metadata.Confidence };
 
@@ -517,7 +297,8 @@ public static class SmartLearningStore
         int conflicting = 0;
         foreach (SmartSheetLearningRecord record in records)
         {
-            if (!IsUsefulLearningOutcome(record))
+            if (!IsUsefulLearningOutcome(record) ||
+                !IsReviewedField(record, record.SuffixOutcome))
                 continue;
 
             bool sameSuffix = !string.IsNullOrWhiteSpace(suffix) &&
@@ -582,7 +363,7 @@ public static class SmartLearningStore
         ApplyLearnedRules(metadata, LoadJson<SmartLearnedRuleSet>(GlobalLearnedRulesPath), "global");
     }
 
-    public static void ApplyProjectLearnedRules(OurPlaneCoreJob job, PdfSheetMetadata metadata)
+    public static void ApplyProjectLearnedRules(OurPlanCoreJob job, PdfSheetMetadata metadata)
     {
         ApplyLearnedRules(metadata, LoadProjectLearnedRules(job), "project");
     }
@@ -591,6 +372,12 @@ public static class SmartLearningStore
     {
         if (rules == null || rules.Rules.Count == 0 || string.IsNullOrWhiteSpace(metadata.SheetTitle))
             return;
+        if (string.Equals(scope, "global", StringComparison.OrdinalIgnoreCase) &&
+            (metadata.SuffixSource.StartsWith("project-learned", StringComparison.OrdinalIgnoreCase) ||
+             metadata.ScaleSource.StartsWith("project-learned", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
 
         HashSet<string> titleTokens = TitleTokens(metadata.SheetTitle);
         SmartLearnedRule? rule = rules.Rules
@@ -600,20 +387,69 @@ public static class SmartLearningStore
         if (rule == null)
             return;
 
+        SheetMetadataConfig config = SheetMetadataRulesService.Active;
+        bool projectScope = string.Equals(scope, "project", StringComparison.OrdinalIgnoreCase);
+        bool precise = config.DetectorMode != SheetMetadataDetectorMode.Legacy;
+        bool protectedSuffix = IsProtectedSheetMetadataEvidence(metadata.SuffixSource);
+        bool protectedScale = IsProtectedSheetMetadataEvidence(metadata.ScaleSource);
+        bool strongerSuffix = PdfSheetMetadataPolicy.ConfidenceLevel(rule.Confidence) >
+                              PdfSheetMetadataPolicy.ConfidenceLevel(metadata.SuffixConfidence);
+        bool canReplaceSuffix = projectScope && precise && strongerSuffix &&
+                                !protectedSuffix;
+        bool strongerScale = PdfSheetMetadataPolicy.ConfidenceLevel(rule.Confidence) >
+                             PdfSheetMetadataPolicy.ConfidenceLevel(metadata.ScaleConfidence);
+        bool canReplaceScale = projectScope && precise && strongerScale &&
+                               !protectedScale;
+        bool canFillSuffix = string.IsNullOrWhiteSpace(metadata.Suffix) &&
+                             (!precise || !protectedSuffix);
+        bool canFillScale = string.IsNullOrWhiteSpace(metadata.SelectedScaleText) &&
+                            (!precise || !protectedScale);
         bool applied = false;
-        if (string.IsNullOrWhiteSpace(metadata.Suffix) && !string.IsNullOrWhiteSpace(rule.Suffix))
+        if ((canFillSuffix || canReplaceSuffix) &&
+            !string.IsNullOrWhiteSpace(rule.Suffix))
         {
             metadata.Suffix = rule.Suffix;
-            metadata.SkipScale = rule.SkipScale;
+            metadata.SuffixSource = $"{scope}-learned";
+            metadata.SuffixConfidence = rule.Confidence;
+            metadata.SuffixEvidence =
+                $"title token '{rule.TitleToken}', support {rule.Support}, conflicts {rule.ConflictCount}";
+            if (protectedScale && metadata.SelectedScaleMetersPerPt > 0)
+                metadata.SuffixScalePolicy = "allow";
             applied = true;
         }
 
-        if (string.IsNullOrWhiteSpace(metadata.SelectedScaleText) &&
-            !rule.SkipScale &&
-            !string.IsNullOrWhiteSpace(rule.ScaleText))
+        if (rule.SkipScale && (canFillScale || canReplaceScale))
+        {
+            metadata.SkipScale = true;
+            metadata.SkipReason = $"{scope}-learned no-scale rule";
+            metadata.SelectedScaleText = "";
+            metadata.ScaleText = "";
+            metadata.SelectedScaleRatio = 0;
+            metadata.SelectedScaleMetersPerPt = 0;
+            metadata.ScaleSource = $"{scope}-learned";
+            metadata.ScaleConfidence = rule.Confidence;
+            metadata.ScaleEvidence =
+                $"title token '{rule.TitleToken}', support {rule.Support}, conflicts {rule.ConflictCount}";
+            applied = true;
+        }
+        else if (!rule.SkipScale &&
+                 !string.IsNullOrWhiteSpace(rule.ScaleText) &&
+                 (canFillScale || canReplaceScale) &&
+                 PdfSheetMetadataService.TryParseScaleMetersPerPt(
+                     rule.ScaleText,
+                     out double learnedScaleMetersPerPt))
         {
             metadata.SelectedScaleText = rule.ScaleText;
             metadata.ScaleText = rule.ScaleText;
+            metadata.SelectedScaleMetersPerPt = learnedScaleMetersPerPt;
+            metadata.SelectedScaleRatio = learnedScaleMetersPerPt / ViewportConstants.PdfPointMeters;
+            metadata.SkipScale = false;
+            metadata.SkipReason = "";
+            metadata.SuffixScalePolicy = "allow";
+            metadata.ScaleSource = $"{scope}-learned";
+            metadata.ScaleConfidence = rule.Confidence;
+            metadata.ScaleEvidence =
+                $"title token '{rule.TitleToken}', support {rule.Support}, conflicts {rule.ConflictCount}";
             applied = true;
         }
 
@@ -624,14 +460,28 @@ public static class SmartLearningStore
         }
     }
 
-    private static void FillPageContext(OurPlaneCoreJob job, PageInfo page, SmartSheetLearningRecord record)
+    private static bool IsProtectedSheetMetadataEvidence(string source)
+    {
+        string clean = (source ?? "")
+            .Trim()
+            .ToLowerInvariant()
+            .Replace('_', '-');
+        return clean.Contains("manual-review", StringComparison.Ordinal) ||
+               clean.Contains("sheet-override", StringComparison.Ordinal) ||
+               clean.Contains("configured-rule", StringComparison.Ordinal) ||
+               clean.Contains("sheet-index", StringComparison.Ordinal) ||
+               clean.Contains("drawing-index", StringComparison.Ordinal) ||
+               clean.Contains("title-block", StringComparison.Ordinal);
+    }
+
+    private static void FillPageContext(OurPlanCoreJob job, PageInfo page, SmartSheetLearningRecord record)
     {
         record.Page = string.IsNullOrWhiteSpace(record.Page) ? page.Name : record.Page.Trim();
         record.PageFolder = string.IsNullOrWhiteSpace(record.PageFolder)
             ? Path.GetRelativePath(job.RootPath, page.FolderPath)
             : record.PageFolder.Trim();
 
-        SourceInfo? source = OurPlaneCoreJobStore.ReadSource(page.FolderPath);
+        SourceInfo? source = OurPlanCoreJobStore.ReadSource(page.FolderPath);
         record.SourcePdf = string.IsNullOrWhiteSpace(record.SourcePdf)
             ? source?.Pdf ?? page.PdfPath
             : record.SourcePdf.Trim();
@@ -641,7 +491,7 @@ public static class SmartLearningStore
 
         if (record.Layers.Count == 0)
         {
-            PageLayerManifest? manifest = OurPlaneCoreJobStore.ReadPageLayerManifest(page.FolderPath);
+            PageLayerManifest? manifest = OurPlanCoreJobStore.ReadPageLayerManifest(page.FolderPath);
             IEnumerable<PdfLayerInfo> layerSource = manifest?.Layers ?? page.PdfLayers;
             record.Layers = layerSource
                 .OrderBy(layer => layer.Number)
@@ -652,235 +502,6 @@ public static class SmartLearningStore
                     IsOn = layer.IsOn,
                 })
                 .ToList();
-        }
-    }
-
-    private static IReadOnlyList<T> LoadJsonLines<T>(string path)
-    {
-        if (!File.Exists(path))
-            return [];
-
-        var records = new List<T>();
-        foreach (string line in File.ReadLines(path))
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            try
-            {
-                T? record = JsonSerializer.Deserialize<T>(line);
-                if (record != null)
-                    records.Add(record);
-            }
-            catch
-            {
-                // Keep learning history readable even if a hand-edited row is bad.
-            }
-        }
-
-        return records;
-    }
-
-    private static T? LoadJson<T>(string path)
-    {
-        try
-        {
-            return File.Exists(path)
-                ? JsonSerializer.Deserialize<T>(File.ReadAllText(path))
-                : default;
-        }
-        catch
-        {
-            return default;
-        }
-    }
-
-    private static bool IsOutcome(SmartSheetLearningRecord record, params string[] outcomes) =>
-        outcomes.Any(outcome => string.Equals(record.UserOutcome, outcome, StringComparison.OrdinalIgnoreCase));
-
-    private static string NormalizeOutcome(string outcome)
-    {
-        string clean = string.IsNullOrWhiteSpace(outcome)
-            ? "unknown"
-            : outcome.Trim().ToLowerInvariant();
-
-        return clean switch
-        {
-            "accept" => "accepted",
-            "accepted" => "accepted",
-            "apply" => "accepted",
-            "applied" => "accepted",
-            "reject" => "rejected",
-            "rejected" => "rejected",
-            _ => clean,
-        };
-    }
-
-    private static bool IsUsefulLearningOutcome(SmartSheetLearningRecord record) =>
-        IsOutcome(record, "accepted", "corrected", "manual_final") &&
-        (!string.IsNullOrWhiteSpace(record.Final.Suffix) ||
-         !string.IsNullOrWhiteSpace(record.Final.SheetTitle));
-
-    private static HashSet<string> TitleTokens(string title)
-    {
-        string[] stop =
-        [
-            "plan", "plans", "sheet", "sheets", "typical", "project", "drawing",
-            "title", "floor", "framing",
-        ];
-        var stopSet = new HashSet<string>(stop, StringComparer.OrdinalIgnoreCase);
-        return title
-            .ToLowerInvariant()
-            .Split([' ', '-', '_', '/', '\\', '&', ',', '.', ':', ';', '(', ')'], StringSplitOptions.RemoveEmptyEntries)
-            .Where(token => token.Length >= 4 && !stopSet.Contains(token))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static bool HasTitleOverlap(HashSet<string> tokens, string title)
-    {
-        if (tokens.Count == 0 || string.IsNullOrWhiteSpace(title))
-            return false;
-        var other = TitleTokens(title);
-        return other.Any(tokens.Contains);
-    }
-
-    private static void SaveLearnedRuleSets(OurPlaneCoreJob job, IReadOnlyList<SmartSheetLearningRecord> projectRecords)
-    {
-        SmartLearnedRuleSet projectRules = BuildLearnedRuleSet(projectRecords);
-        string projectRulesPath = ProjectLearnedRulesPath(job);
-        PreserveRuleEnabledStates(projectRulesPath, projectRules);
-        try
-        {
-            File.WriteAllText(projectRulesPath, JsonSerializer.Serialize(projectRules, FileJsonOptions));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(projectRulesPath)}': {ex.Message}", ex);
-        }
-
-        IReadOnlyList<SmartSheetLearningRecord> globalRecords = LoadGlobalSheetFeedback();
-        SmartLearnedRuleSet globalRules = BuildLearnedRuleSet(globalRecords);
-        PreserveRuleEnabledStates(GlobalLearnedRulesPath, globalRules);
-        try
-        {
-            File.WriteAllText(GlobalLearnedRulesPath, JsonSerializer.Serialize(globalRules, FileJsonOptions));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(GlobalLearnedRulesPath)}': {ex.Message}", ex);
-        }
-    }
-
-    private static SmartLearnedRuleSet BuildLearnedRuleSet(IReadOnlyList<SmartSheetLearningRecord> records)
-    {
-        var candidates = new Dictionary<string, LearnedRuleAccumulator>(StringComparer.OrdinalIgnoreCase);
-        foreach (SmartSheetLearningRecord record in records.Where(IsUsefulLearningOutcome))
-        {
-            if (string.IsNullOrWhiteSpace(record.Final.Suffix))
-                continue;
-
-            foreach (string token in TitleTokens(record.Final.SheetTitle))
-            {
-                string key = $"{token}|{record.Final.Suffix}";
-                if (!candidates.TryGetValue(key, out LearnedRuleAccumulator? acc))
-                {
-                    acc = new LearnedRuleAccumulator(token, record.Final.Suffix);
-                    candidates[key] = acc;
-                }
-
-                acc.Support++;
-                if (record.Final.SkipScale)
-                    acc.SkipScaleVotes++;
-                if (!string.IsNullOrWhiteSpace(record.Final.ScaleText))
-                    acc.ScaleCounts[record.Final.ScaleText] = acc.ScaleCounts.GetValueOrDefault(record.Final.ScaleText) + 1;
-            }
-        }
-
-        List<SmartLearnedRule> rules = candidates.Values
-            .Where(acc => acc.Support >= 3)
-            .OrderByDescending(acc => acc.Support)
-            .ThenBy(acc => acc.TitleToken, StringComparer.OrdinalIgnoreCase)
-            .Select(acc => new SmartLearnedRule
-            {
-                Enabled = true,
-                Id = $"rule_{SafeRulePart(acc.TitleToken)}_{SafeRulePart(acc.Suffix)}",
-                TitleToken = acc.TitleToken,
-                Suffix = acc.Suffix,
-                SkipScale = acc.SkipScaleVotes > acc.Support / 2,
-                ScaleText = acc.ScaleCounts
-                    .OrderByDescending(kvp => kvp.Value)
-                    .ThenBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault().Key ?? "",
-                Support = acc.Support,
-                Confidence = acc.Support >= 8 ? "high" : "medium",
-            })
-            .ToList();
-
-        return new SmartLearnedRuleSet
-        {
-            GeneratedAtUtc = DateTime.UtcNow.ToString("O"),
-            SourceRecordCount = records.Count,
-            Rules = rules,
-        };
-    }
-
-    private static void PreserveRuleEnabledStates(string path, SmartLearnedRuleSet newRules)
-    {
-        SmartLearnedRuleSet? existing = LoadJson<SmartLearnedRuleSet>(path);
-        if (existing == null || existing.Rules.Count == 0)
-            return;
-
-        var existingById = existing.Rules
-            .Where(rule => !string.IsNullOrWhiteSpace(rule.Id))
-            .GroupBy(rule => rule.Id, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-
-        foreach (SmartLearnedRule rule in newRules.Rules)
-        {
-            if (existingById.TryGetValue(rule.Id, out SmartLearnedRule? oldRule))
-                rule.Enabled = oldRule.Enabled;
-        }
-    }
-
-    private static string SafeRulePart(string value)
-    {
-        string safe = new(value
-            .ToLowerInvariant()
-            .Where(ch => char.IsLetterOrDigit(ch) || ch == '_')
-            .ToArray());
-        return string.IsNullOrWhiteSpace(safe) ? "x" : safe;
-    }
-
-    private sealed class LearnedRuleAccumulator(string titleToken, string suffix)
-    {
-        public string TitleToken { get; } = titleToken;
-        public string Suffix { get; } = suffix;
-        public int Support { get; set; }
-        public int SkipScaleVotes { get; set; }
-        public Dictionary<string, int> ScaleCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static Dictionary<string, int> CountValues(IEnumerable<string> values) =>
-        values
-            .Select(value => value.Trim())
-            .Where(value => value.Length > 0)
-            .GroupBy(value => value, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
-
-    private static void EnsureFile(string path, string initialContent)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-        if (!File.Exists(path))
-        {
-            try
-            {
-                File.WriteAllText(path, initialContent);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                throw new InvalidOperationException($"Failed to save '{Path.GetFileName(path)}': {ex.Message}", ex);
-            }
         }
     }
 }

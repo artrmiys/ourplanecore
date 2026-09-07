@@ -8,12 +8,12 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -24,8 +24,9 @@ public sealed partial class PdfViewport
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         Focus();
-        var pos    = e.GetPosition(this);
-        float fac  = e.Delta > 0 ? 1.12f : 1f / 1.12f;
+        var pos    = ViewPointToCanvas(e.GetPosition(this));
+        float step = (float)Math.Clamp(ZoomWheelFactor, 1.01, 4.0);
+        float fac  = e.Delta > 0 ? step : 1f / step;
         ApplyZoom(fac, (float)pos.X, (float)pos.Y);
         e.Handled = true;
     }
@@ -33,7 +34,8 @@ public sealed partial class PdfViewport
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         Focus();
-        var pos = e.GetPosition(this);
+        CancelScheduledPointerMoveRepaint();
+        var pos = ViewPointToCanvas(e.GetPosition(this));
 
         if (e.RightButton == MouseButtonState.Pressed && _pageBitmap != null)
         {
@@ -43,13 +45,56 @@ public sealed partial class PdfViewport
             _rightClickPdf = pdf;
             _rightClickMoved = false;
             _rightClickMeasurement = null;
-            if (TryHitMeasurement(pdf, out Measurement measurement))
+            _rightClickPointVertexIndex = -1;
+            _rightClickAnnotation = null;
+            _rightClickOverlayHit = HitSheetOverlay(pos);
+            if (_rightClickOverlayHit != ViewportOverlayHitKind.None)
             {
-                _rightClickMeasurement = measurement;
-                if (_selectedMeasurements.Contains(measurement))
-                    SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1);
-                else
-                    SelectMeasurement(measurement, -1);
+                ClearSelection();
+                ClearAnnotationSelection();
+            }
+            else
+            {
+                PageAnnotation? preferredAnnotation = null;
+                if (_annotationSelectionDomain)
+                    TryHitAnnotation(pdf, out preferredAnnotation);
+
+                if (preferredAnnotation != null)
+                {
+                    _rightClickAnnotation = preferredAnnotation;
+                    if (_selectedAnnotations.Contains(preferredAnnotation))
+                        SetSelectedAnnotations(GetSelectedAnnotations(), preferredAnnotation, -1);
+                    else
+                        SelectAnnotation(preferredAnnotation, -1);
+                }
+                else if (TryHitMeasurement(pdf, out Measurement measurement))
+                {
+                    _rightClickMeasurement = measurement;
+                    bool hitPointVertex = TryHitPointVertexOnMeasurement(
+                        measurement,
+                        pdf,
+                        MeasurementHitToleranceScreenPx,
+                        out int pointVertexIndex);
+                    _rightClickPointVertexIndex = hitPointVertex ? pointVertexIndex : -1;
+                    bool preserveSelectedPointVertices = hitPointVertex &&
+                                                         IsMeasurementVertexSelected(measurement, pointVertexIndex);
+                    if (hitPointVertex && !preserveSelectedPointVertices)
+                    {
+                        SelectMeasurement(measurement, pointVertexIndex);
+                    }
+                    else if (!preserveSelectedPointVertices && _selectedMeasurements.Contains(measurement))
+                        SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1, preserveCutRegions: true);
+                    else if (!preserveSelectedPointVertices)
+                        SelectMeasurement(measurement, -1);
+                }
+                else if (TryHitAnnotation(pdf, out PageAnnotation annotation))
+                {
+                    _rightClickAnnotation = annotation;
+                    if (_selectedAnnotations.Contains(annotation))
+                        SetSelectedAnnotations(GetSelectedAnnotations(), annotation, -1);
+                    else
+                        SelectAnnotation(annotation, -1);
+                }
             }
         }
 
@@ -58,6 +103,49 @@ public sealed partial class PdfViewport
         {
             var pdf = ScreenToPdf((float)pos.X, (float)pos.Y);
             _lastPointerPdf = pdf;
+            if (HandleExtraJoistPlacementClick(pdf)) { e.Handled = true; return; }
+            if (HandleReadOnlyLeftMouseDown(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (HandleAiCropNoteMouseDown(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (HandleSimilarCountMouseDown(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (HandleSheetOverlayPointEditClick(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (TryBeginSheetOverlayDrag(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (HandleThreeDRoofEdgeSelectionClick(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (HandleThreeDRoofClick(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (_joistDirectionMeasurement != null)
             {
                 HandleJoistDirectionClick(ResolveDigitizerPoint(pdf, updatePreview: true));
@@ -67,7 +155,7 @@ public sealed partial class PdfViewport
 
             if (_pdfLayerTraceEnabled)
             {
-                AdvancePdfLayerTrace(pdf);
+                _ = AdvancePdfLayerTraceAsync(pdf);
                 e.Handled = true;
                 return;
             }
@@ -75,23 +163,125 @@ public sealed partial class PdfViewport
             if (_tool == ViewerTool.Select)
             {
                 bool hasInProgressInput = _drawPts.Count > 0 || _scalePts.Count > 0 || _rubberEnd.HasValue;
-                if (IsSelectionModifierActive() && TryHitMeasurement(pdf, out Measurement toggled))
+
+                if (TryBeginJoistNoteDrag(pdf))
                 {
-                    ToggleMeasurementSelection(toggled);
                     e.Handled = true;
                     return;
                 }
 
-                bool preserveSelectionForAdd = IsSelectionModifierActive();
-                if (TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
+                if (TryToggleJoistEdgeControl(pdf))
                 {
-                    if (_draggingVertex || _draggingMeasurement)
+                    e.Handled = true;
+                    return;
+                }
+
+                if (TryBeginExtraJoistEdit(pdf))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                // Alt operates on the selected Line/Area object's vertices.
+                // Click or box toggles handles; empty Alt-click clears handles.
+                if (IsVertexModifierActive() && HasEditableMeasurementSelection())
+                {
+                    if (TryBeginVertexEdit(pdf, pos))
+                    {
+                        if (_draggingVertex)
+                            CaptureMouse();
+                        e.Handled = true;
+                        return;
+                    }
+
+                    BeginVertexBoxSelection(pdf);
+                    e.Handled = true;
+                    return;
+                }
+
+                bool selectionModifierActive = IsSelectionModifierActive();
+                bool deselectModifierActive = IsDeselectModifierActive();
+                if (selectionModifierActive)
+                {
+                    if (TrySelectCutRegionAt(pdf, deselectModifierActive ? HoleSelectMode.Remove : HoleSelectMode.Add))
+                    {
+                        e.Handled = true;
+                        return;
+                    }
+
+                    if (HasEditableMeasurementSelection())
+                    {
+                        BeginBoxSelection(pdf, additive: true, removeMode: deselectModifierActive);
+                        e.Handled = true;
+                        return;
+                    }
+
+                    if (_annotationSelectionDomain &&
+                        TryHitAnnotation(pdf, out PageAnnotation preferredAnnotation))
+                    {
+                        ApplyAnnotationClickGesture(preferredAnnotation, deselectModifierActive);
+                        e.Handled = true;
+                        return;
+                    }
+
+                    if (TryHitMeasurement(pdf, out Measurement toggled))
+                    {
+                        ToggleMeasurementSelection(toggled);
+                        e.Handled = true;
+                        return;
+                    }
+
+                    if (TryHitAnnotation(pdf, out PageAnnotation toggledAnnotation))
+                    {
+                        ApplyAnnotationClickGesture(toggledAnnotation, deselectModifierActive);
+                        e.Handled = true;
+                        return;
+                    }
+                }
+
+                bool preserveSelectionForAdd = selectionModifierActive;
+                if (TryBeginTransformHandleEdit(pdf, pos) ||
+                    TryBeginSelectedCutRegionBundleMove(pdf, pos))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (!TryHitVertex(pdf, out _, out _) &&
+                    TrySelectCutRegionAt(pdf, HoleSelectMode.Replace))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.ClickCount == 2 && TryEditNoteAnnotationAt(pdf))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.ClickCount == 2 && TryRequestTakeoffRenameAt(pdf))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                bool clearSelectionOnMiss = !hasInProgressInput && !preserveSelectionForAdd;
+                bool beganEdit = _annotationSelectionDomain
+                    ? TryBeginAnnotationEdit(pdf, pos, clearSelectionOnMiss: false) ||
+                      TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss)
+                    : TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: false) ||
+                      TryBeginAnnotationEdit(pdf, pos, clearSelectionOnMiss);
+                if (beganEdit)
+                {
+                    if (_draggingVertex || _draggingMeasurement ||
+                        _draggingAnnotationVertex || _draggingAnnotation)
                         CaptureMouse();
                     e.Handled = true;
                     return;
                 }
 
-                BeginBoxSelection(pdf, additive: IsSelectionModifierActive());
+                BeginBoxSelection(pdf, additive: IsSelectionModifierActive(), removeMode: deselectModifierActive);
                 e.Handled = true;
                 return;
             }
@@ -107,7 +297,6 @@ public sealed partial class PdfViewport
             _dragPanX0  = _panX;
             _dragPanY0  = _panY;
             CaptureMouse();
-            _isViewDragging = true;
             e.Handled = true;
             return;
         }
@@ -120,14 +309,31 @@ public sealed partial class PdfViewport
                 return;
             }
 
-            var pdf = ResolveDigitizerPoint(ScreenToPdf((float)pos.X, (float)pos.Y), updatePreview: true);
-            ClearSelection();
+            SKPoint rawPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
+            if (!HasActiveOrthoConstraint() && TryCommitEdgeSnapPreview(rawPdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            var pdf = ResolveDigitizerPoint(rawPdf, updatePreview: true);
+            if (_tool != ViewerTool.AreaCut)
+                ClearSelection();
 
             // Double-click (ClickCount==2) finishes a line/area without adding an extra point.
             // Single-click (ClickCount==1) adds a vertex as usual.
-            if (e.ClickCount == 2 && _tool is ViewerTool.Line or ViewerTool.Area)
+            if (e.ClickCount == 2 && !IsRepeatDrawingActive &&
+                (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.DrawLine or ViewerTool.DrawArea ||
+                 _tool == ViewerTool.AreaCut && !BoxModeEnabled))
             {
-                FinalizeDrawing();
+                if (_tool == ViewerTool.AreaCut)
+                    FinalizeAreaCutPolygon();
+                else if (_tool == ViewerTool.DrawLine)
+                    FinalizeAnnotation("line", useAllPoints: true);
+                else if (_tool == ViewerTool.DrawArea)
+                    FinalizeAreaAnnotation();
+                else
+                    FinalizeDrawing();
                 e.Handled = true;
                 return;
             }
@@ -139,23 +345,85 @@ public sealed partial class PdfViewport
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        var pos = e.GetPosition(this);
+        var pos = ViewPointToCanvas(e.GetPosition(this));
+        if (_pageBitmap != null)
+        {
+            _cursorGuideVisible = true;
+            SetLastPointerPdf(ScreenToPdf((float)pos.X, (float)pos.Y));
+        }
+
         if (_rightClickStart.HasValue &&
             DistanceSquared(_rightClickStart.Value, pos) > 16)
         {
             _rightClickMoved = true;
         }
 
+        if (HandleAiCropNoteMouseMove(pos))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (HandleSimilarCountMouseMove(pos))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (TryUpdateSheetOverlayDrag(ScreenToPdf((float)pos.X, (float)pos.Y)))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (UpdateJoistNoteDrag(ScreenToPdf((float)pos.X, (float)pos.Y)))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (TryUpdateExtraJoistDrag(ScreenToPdf((float)pos.X, (float)pos.Y)))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (_draggingTransformScale || _draggingTransformRotate || _draggingTransformMove)
+        {
+            UpdateTransformDrag(ScreenToPdf((float)pos.X, (float)pos.Y));
+            e.Handled = true;
+            return;
+        }
+
         if (_draggingVertex &&
             _selectedMeasurement != null &&
             _selectedVertexIndex >= 0)
         {
-            SKPoint delta = ScreenDragDeltaToPdf(pos);
-            _selectedMeasurement.Points[_selectedVertexIndex] = new SKPoint(
-                _dragVertexOriginalPoint.X + delta.X,
-                _dragVertexOriginalPoint.Y + delta.Y);
+            SKPoint delta = ResolveVertexDragDelta(pos);
+            if (_dragMeasurementVertexOriginalPoints.Count > 0)
+            {
+                foreach (var (measurement, originalPoints) in _dragMeasurementVertexOriginalPoints)
+                {
+                    foreach (var (index, original) in originalPoints)
+                    {
+                        if (!IsValidMeasurementVertexIndex(measurement, index))
+                            continue;
+
+                        SetMeasurementVertex(measurement, index, new SKPoint(
+                            original.X + delta.X,
+                            original.Y + delta.Y));
+                    }
+                }
+            }
+            else
+            {
+                SetMeasurementVertex(_selectedMeasurement, _selectedVertexIndex, new SKPoint(
+                    _dragVertexOriginalPoint.X + delta.X,
+                    _dragVertexOriginalPoint.Y + delta.Y));
+            }
+
             _dragMeasurementChanged = true;
-            PostDragStatus("Dragging vertex", delta);
+            PostDragStatus(DraggedVertexCount() > 1 ? "Dragging vertices" : "Dragging vertex", delta);
             RequestRepaint();
             e.Handled = true;
             return;
@@ -164,7 +432,7 @@ public sealed partial class PdfViewport
         if (_draggingMeasurement &&
             _selectedMeasurement != null)
         {
-            SKPoint delta = ScreenDragDeltaToPdf(pos);
+            SKPoint delta = ConstrainDragDeltaOrtho(ScreenDragDeltaToPdf(pos));
             if (_dragSelectionOriginalPoints.Count > 0)
             {
                 foreach (var (measurement, originalPoints) in _dragSelectionOriginalPoints)
@@ -174,6 +442,15 @@ public sealed partial class PdfViewport
                         SKPoint original = originalPoints[i];
                         measurement.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
                     }
+
+                    if (_dragSelectionOriginalHoles.TryGetValue(measurement, out var originalHoles))
+                    {
+                        RestoreTransformedHoles(
+                            measurement.Holes,
+                            originalHoles,
+                            point => new SKPoint(point.X + delta.X, point.Y + delta.Y));
+                    }
+                    RestoreTranslatedExtraJoists(measurement, _dragSelectionOriginalExtraJoists.GetValueOrDefault(measurement), delta);
                 }
             }
             else
@@ -183,10 +460,73 @@ public sealed partial class PdfViewport
                     SKPoint original = _dragMeasurementOriginalPoints[i];
                     _selectedMeasurement.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
                 }
+
+                RestoreTransformedHoles(
+                    _selectedMeasurement.Holes,
+                    _dragMeasurementOriginalHoles,
+                    point => new SKPoint(point.X + delta.X, point.Y + delta.Y));
+                RestoreTranslatedExtraJoists(_selectedMeasurement, _dragMeasurementOriginalExtraJoists, delta);
             }
 
             _dragMeasurementChanged = true;
             PostDragStatus("Dragging measurement", delta);
+            RequestRepaint();
+            e.Handled = true;
+            return;
+        }
+
+        if (_draggingAnnotationVertex &&
+            _selectedAnnotation != null &&
+            _selectedAnnotationVertexIndex >= 0)
+        {
+            SKPoint rawDelta = ScreenDragDeltaToPdf(pos);
+            SKPoint rawTarget = new(
+                _dragAnnotationVertexOriginalPoint.X + rawDelta.X,
+                _dragAnnotationVertexOriginalPoint.Y + rawDelta.Y);
+            SKPoint resolved = ResolveConstrainedPoint(
+                rawTarget,
+                _dragAnnotationVertexOriginalPoint,
+                updatePreview: true,
+                IsAnnotationSelfVertexSnap);
+            SKPoint delta = new(
+                resolved.X - _dragAnnotationVertexOriginalPoint.X,
+                resolved.Y - _dragAnnotationVertexOriginalPoint.Y);
+            _selectedAnnotation.Points[_selectedAnnotationVertexIndex] = resolved;
+            _dragAnnotationChanged = true;
+            PostDragStatus("Dragging markup point", delta);
+            RequestRepaint();
+            e.Handled = true;
+            return;
+        }
+
+        if (_draggingAnnotation &&
+            _selectedAnnotation != null)
+        {
+            SKPoint delta = ConstrainDragDeltaOrtho(ScreenDragDeltaToPdf(pos));
+            if (_dragAnnotationSelectionOriginalPoints.Count > 0)
+            {
+                foreach (var (annotation, originalPoints) in _dragAnnotationSelectionOriginalPoints)
+                {
+                    for (int i = 0; i < annotation.Points.Count && i < originalPoints.Count; i++)
+                    {
+                        SKPoint original = originalPoints[i];
+                        annotation.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _selectedAnnotation.Points.Count && i < _dragAnnotationOriginalPoints.Count; i++)
+                {
+                    SKPoint original = _dragAnnotationOriginalPoints[i];
+                    _selectedAnnotation.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
+                }
+            }
+
+            _dragAnnotationChanged = true;
+            PostDragStatus(
+                _dragAnnotationSelectionOriginalPoints.Count > 0 ? "Dragging markups" : "Dragging markup",
+                delta);
             RequestRepaint();
             e.Handled = true;
             return;
@@ -207,8 +547,9 @@ public sealed partial class PdfViewport
             e.RightButton  == MouseButtonState.Pressed ||
             (_tool == ViewerTool.Pan && e.LeftButton == MouseButtonState.Pressed)))
         {
-            _panX = _dragPanX0 - (float)((pos.X - _dragStart.Value.X) / _zoom);
-            _panY = _dragPanY0 - (float)((pos.Y - _dragStart.Value.Y) / _zoom);
+            BeginFastNavigation();
+            _panX = _dragPanX0 - ScreenToPdfDistance((float)(pos.X - _dragStart.Value.X));
+            _panY = _dragPanY0 - ScreenToPdfDistance((float)(pos.Y - _dragStart.Value.Y));
             RequestRepaint();
             e.Handled = true;
             return;
@@ -216,55 +557,152 @@ public sealed partial class PdfViewport
 
         var pointerPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
         _lastPointerPdf = pointerPdf;
+        if (HandleExtraJoistPlacementMouseMove(pointerPdf)) { e.Handled = true; return; }
+        if (IsSheetOverlayPointEditing)
+        {
+            UpdateSheetOverlayPointEditPreview(pointerPdf);
+            RequestRepaint();
+            e.Handled = true;
+            return;
+        }
+
         if (_joistDirectionMeasurement != null)
         {
-            pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
+            pointerPdf = ResolveDigitizerPoint(
+                pointerPdf,
+                updatePreview: true,
+                deferPreviewRepaint: true);
             _lastPointerPdf = pointerPdf;
             if (_joistDirectionPts.Count > 0)
-            {
                 _joistDirectionRubberEnd = pointerPdf;
-                RequestRepaint();
-            }
             PostStatus(_joistDirectionPts.Count == 0
                 ? "Joist direction: click the first point."
                 : "Joist direction: click the second point.");
+            RequestPointerMoveRepaint();
             e.Handled = true;
             return;
         }
 
         if (_pdfLayerTraceEnabled)
         {
-            SetSnapPreview(null);
+            SetSnapPreview(null, deferRepaint: true);
             UpdatePdfLayerTraceHover(pointerPdf);
             e.Handled = true;
             return;
         }
 
+        if (UpdateThreeDRoofPointer(pointerPdf))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        SKPoint rawPointerPdf = pointerPdf;
         if (_pageBitmap != null &&
-            _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area &&
+            _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.Pitch or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut &&
             !IsMissingScaleForLinearArea())
         {
-            pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
+            pointerPdf = ResolveDigitizerPoint(
+                pointerPdf,
+                updatePreview: true,
+                deferPreviewRepaint: true);
             _lastPointerPdf = pointerPdf;
+            if (HasActiveOrthoConstraint())
+                ClearEdgeSnapPreview(deferRepaint: true);
+            else
+                UpdateEdgeSnapPreview(rawPointerPdf, deferRepaint: true);
         }
         else
         {
-            SetSnapPreview(null);
+            SetSnapPreview(null, deferRepaint: true);
+            ClearEdgeSnapPreview(deferRepaint: true);
         }
 
         // Rubber-band
-        if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect)
+        if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Pitch or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.AreaCut)
         {
             _rubberEnd = pointerPdf;
-            RequestRepaint();
         }
 
         if (IsMissingScaleForLinearArea())
             PostScaleRequiredStatus();
-        else
-            PostPointerStatus(pointerPdf);
 
+        UpdateCursor(pointerPdf);
+        RequestPointerMoveRepaint();
         e.Handled = true;
+    }
+
+    private void RequestPointerMoveRepaint()
+    {
+        DateTime now = DateTime.UtcNow;
+        TimeSpan cadence = TimeSpan.FromMilliseconds(ViewportRenderPolicy.PointerMoveRepaintMinIntervalMs);
+        TimeSpan elapsed = now - _lastPointerRepaintAt;
+        if (elapsed < cadence)
+        {
+            SchedulePointerMoveRepaint(cadence - elapsed);
+            return;
+        }
+
+        CancelScheduledPointerMoveRepaint();
+        _lastPointerRepaintAt = now;
+        RequestRepaint();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _pointerMoveRepaintTimer;
+
+    private void SchedulePointerMoveRepaint(TimeSpan delay)
+    {
+        _pointerMoveRepaintTimer ??= CreatePointerMoveRepaintTimer();
+        if (_pointerMoveRepaintTimer.IsEnabled)
+            return;
+
+        _pointerMoveRepaintTimer.Interval = delay > TimeSpan.Zero
+            ? delay
+            : TimeSpan.FromMilliseconds(1);
+        _pointerMoveRepaintTimer.Start();
+    }
+
+    private System.Windows.Threading.DispatcherTimer CreatePointerMoveRepaintTimer()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Render,
+            Dispatcher);
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _lastPointerRepaintAt = DateTime.UtcNow;
+            RequestRepaint();
+        };
+        return timer;
+    }
+
+    private void CancelScheduledPointerMoveRepaint()
+    {
+        _pointerMoveRepaintTimer?.Stop();
+    }
+
+    private void RequestInputPreviewRepaint(bool deferRepaint)
+    {
+        if (deferRepaint)
+        {
+            RequestPointerMoveRepaint();
+            return;
+        }
+
+        CancelScheduledPointerMoveRepaint();
+        _lastPointerRepaintAt = DateTime.UtcNow;
+        RequestRepaint();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        CancelScheduledPointerMoveRepaint();
+        _cursorGuideVisible = false;
+        _extraJoistPlacementPreview = null;
+        ClearSheetOverlayPointEditSnapPreview();
+        ClearEdgeSnapPreview();
+        RequestRepaint();
+        base.OnMouseLeave(e);
     }
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
@@ -273,14 +711,62 @@ public sealed partial class PdfViewport
                                _rightClickStart.HasValue &&
                                !_rightClickMoved &&
                                _rightClickPdf.HasValue &&
-                               _pageBitmap != null;
-        Point contextScreen = _rightClickStart ?? e.GetPosition(this);
+                               _pageBitmap != null &&
+                               !_aiCropNoteSelecting;
+        Point contextScreen = _rightClickStart ?? ViewPointToCanvas(e.GetPosition(this));
         SKPoint contextPdf = _rightClickPdf ?? ScreenToPdf((float)contextScreen.X, (float)contextScreen.Y);
         Measurement? contextMeasurement = _rightClickMeasurement;
+        int contextPointVertexIndex = _rightClickPointVertexIndex;
+        PageAnnotation? contextAnnotation = _rightClickAnnotation;
+        ViewportOverlayHitKind contextOverlayHit = _rightClickOverlayHit;
+
+        if (e.ChangedButton == MouseButton.Left && FinishAiCropNoteSelection())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.Left && FinishSimilarCountSelection())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.Left && FinishSheetOverlayDrag())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.Left && FinishJoistNoteDrag())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.Left && FinishExtraJoistDrag())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (_draggingTransformScale || _draggingTransformRotate || _draggingTransformMove)
+        {
+            FinishTransformDrag();
+            e.Handled = true;
+            return;
+        }
 
         if (_draggingVertex || _draggingMeasurement)
         {
             FinishMeasurementDrag();
+            e.Handled = true;
+            return;
+        }
+
+        if (_draggingAnnotationVertex || _draggingAnnotation)
+        {
+            FinishAnnotationDrag();
             e.Handled = true;
             return;
         }
@@ -298,9 +784,8 @@ public sealed partial class PdfViewport
             e.LeftButton   != MouseButtonState.Pressed)
         {
             _dragStart = null;
-            _isViewDragging = false;
             ReleaseMouseCapture();
-            RequestRepaint();
+            EndFastNavigation();
         }
 
         if (e.ChangedButton == MouseButton.Right)
@@ -308,6 +793,9 @@ public sealed partial class PdfViewport
             _rightClickStart = null;
             _rightClickPdf = null;
             _rightClickMeasurement = null;
+            _rightClickPointVertexIndex = -1;
+            _rightClickAnnotation = null;
+            _rightClickOverlayHit = ViewportOverlayHitKind.None;
             _rightClickMoved = false;
         }
 
@@ -319,7 +807,10 @@ public sealed partial class PdfViewport
                 contextPdf.X,
                 contextPdf.Y,
                 _pageFolder,
-                contextMeasurement));
+                contextMeasurement,
+                contextAnnotation,
+                contextOverlayHit,
+                contextPointVertexIndex));
         }
         e.Handled = true;
     }
@@ -338,15 +829,41 @@ public sealed partial class PdfViewport
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
+        FinishJoistNoteDrag();
+        FinishExtraJoistDrag();
+        FinishTransformDrag();
         FinishMeasurementDrag();
+        FinishAnnotationDrag();
+        if (Mouse.LeftButton != MouseButtonState.Pressed)
+            FinishSheetOverlayDrag();
+        else
+            CancelSheetOverlayDrag(silent: true);
+        if (_aiCropNoteSelecting && Mouse.LeftButton != MouseButtonState.Pressed)
+            CancelAiCropNoteSelection(postStatus: false);
+        if (_similarCountSelecting && _similarCountDragging && Mouse.LeftButton != MouseButtonState.Pressed)
+            CancelSimilarCountSelection(postStatus: false);
         if (_boxSelecting && Mouse.LeftButton != MouseButtonState.Pressed)
             CancelBoxSelection();
+        if (_dragStart.HasValue && Mouse.MiddleButton != MouseButtonState.Pressed &&
+            Mouse.RightButton != MouseButtonState.Pressed &&
+            Mouse.LeftButton != MouseButtonState.Pressed)
+        {
+            _dragStart = null;
+            EndFastNavigation();
+        }
         base.OnLostMouseCapture(e);
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
-        if (_pdfLayerTraceEnabled && e.Key == Key.Tab)
+        Key key = KeyboardShortcutKeys.EffectiveKey(e);
+        if (key == Key.Tab && TryCycleEdgeSnapPreview())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (_pdfLayerTraceEnabled && key == Key.Tab)
         {
             if (_pdfLayerTraceChoosingLayer)
                 CyclePdfLayerTraceCandidate();
@@ -361,9 +878,46 @@ public sealed partial class PdfViewport
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        switch (e.Key)
+        if (HandleReadOnlyKeyDown(e))
+            return;
+
+        if (HandleThreeDRoofKey(e))
+            return;
+
+        if (TryHandleSheetOverlayTransformShortcut(e))
+            return;
+
+        Key key = KeyboardShortcutKeys.EffectiveKey(e);
+        switch (key)
         {
             case Key.Escape:
+                if (FinishJoistNoteDrag(cancel: true)) { e.Handled = true; break; }
+                if (CancelExtraJoistPlacement(postStatus: true)) { e.Handled = true; break; }
+                if (CancelSheetOverlayDrag())
+                {
+                    e.Handled = true;
+                    break;
+                }
+
+                if (IsSheetOverlayPointEditing)
+                {
+                    CancelSheetOverlayPointEdit();
+                    e.Handled = true;
+                    break;
+                }
+
+                if (CancelAiCropNoteSelection())
+                {
+                    e.Handled = true;
+                    break;
+                }
+
+                if (CancelSimilarCountSelection())
+                {
+                    e.Handled = true;
+                    break;
+                }
+
                 if (_pdfLayerTraceEnabled)
                 {
                     if (_pdfLayerTraceChoosingLayer || _pdfLayerTraceReadyToApply)
@@ -388,13 +942,14 @@ public sealed partial class PdfViewport
                     break;
                 }
 
-                CompleteOrCancelDrawing();
+                if (!StopRepeatDrawing())
+                    CompleteOrCancelDrawing();
                 e.Handled = true;
                 break;
             case Key.Enter:
                 if (_pdfLayerTraceEnabled)
                 {
-                    AdvancePdfLayerTrace(_lastPointerPdf);
+                    _ = AdvancePdfLayerTraceAsync(_lastPointerPdf);
                     e.Handled = true;
                 }
                 break;
@@ -405,25 +960,44 @@ public sealed partial class PdfViewport
             case Key.C:
                 if (Keyboard.Modifiers == ModifierKeys.Control)
                 {
-                    CopyMeasurementsRequested?.Invoke(GetSelectedMeasurements());
+                    if (!CopySelectedPageAnnotations() &&
+                        !CopyCurrentMeasurementAndCutRegionSelection())
+                    {
+                        PostStatus("Select measurements, cutouts, or markups before copying.");
+                    }
                     e.Handled = true;
                 }
-                else if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area)
+                else if (_drawPts.Count > 0 &&
+                         (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.DrawLine or ViewerTool.DrawArea ||
+                          _tool == ViewerTool.AreaCut))
                 {
                     CompleteOrCancelDrawing();
                     e.Handled = true;
                 }
                 break;
             case Key.V when Keyboard.Modifiers == ModifierKeys.Control:
-                PasteMeasurementsRequested?.Invoke(_lastPointerPdf);
+                if (IsAnnotationClipboardCurrent)
+                    PasteCopiedPageAnnotations(_lastPointerPdf);
+                else
+                    // Shared resolver covers IsCutRegionClipboardCurrent,
+                    // mixed measurement+cutout, and measurement payloads.
+                    PasteCurrentMeasurementAndCutRegionClipboard(_lastPointerPdf);
                 e.Handled = true;
                 break;
             case Key.Delete:
-                DeleteSelectedMeasurement();
+                DeleteSelectedOverlay();
+                e.Handled = true;
+                break;
+            case Key.F2 when Keyboard.Modifiers == ModifierKeys.None:
+                RequestSelectedTakeoffRename();
                 e.Handled = true;
                 break;
             case Key.F:
                 ZoomFit();
+                e.Handled = true;
+                break;
+            case Key.F3 when Keyboard.Modifiers == ModifierKeys.Control:
+                PdfSnapEnabled = !PdfSnapEnabled;
                 e.Handled = true;
                 break;
             case Key.F3:
@@ -432,6 +1006,10 @@ public sealed partial class PdfViewport
                 break;
             case Key.F8:
                 OrthoEnabled = !OrthoEnabled;
+                e.Handled = true;
+                break;
+            case Key.F9:
+                BoxModeEnabled = !BoxModeEnabled;
                 e.Handled = true;
                 break;
             case Key.Add when Keyboard.Modifiers == ModifierKeys.Control:
@@ -446,7 +1024,7 @@ public sealed partial class PdfViewport
                 UndoLast(); e.Handled = true;
                 break;
             case Key.A when Keyboard.Modifiers == ModifierKeys.Control:
-                SelectAllActivePageMeasurements();
+                SelectAllActivePageObjects();
                 e.Handled = true;
                 break;
             case Key.Back:
@@ -457,17 +1035,51 @@ public sealed partial class PdfViewport
             case Key.E: ToolChanged?.Invoke("select"); e.Handled = true; break;
             case Key.S: ToolChanged?.Invoke("scale"); e.Handled = true; break;
             case Key.R: ToolChanged?.Invoke("ruler"); e.Handled = true; break;
+            case Key.H: ToolChanged?.Invoke("drawhighlight"); e.Handled = true; break;
             case Key.D: ToolChanged?.Invoke("drawline"); e.Handled = true; break;
-            case Key.B: ToolChanged?.Invoke("drawrect"); e.Handled = true; break;
+            case Key.B: ToolChanged?.Invoke("beam"); e.Handled = true; break;
+            case Key.O: ToolChanged?.Invoke("openings"); e.Handled = true; break;
+            case Key.N: ToolChanged?.Invoke("note"); e.Handled = true; break;
             case Key.P: ToolChanged?.Invoke("point"); e.Handled = true; break;
             case Key.L: ToolChanged?.Invoke("line");  e.Handled = true; break;
             case Key.A: ToolChanged?.Invoke("area");  e.Handled = true; break;
+            case Key.J: ToolChanged?.Invoke("joistarea"); e.Handled = true; break;
+            case Key.X: ToolChanged?.Invoke("areacut"); e.Handled = true; break;
         }
     }
 
-
-    private void UpdateCursor()
+    private bool TryRequestTakeoffRenameAt(SKPoint pdf)
     {
+        if (TryHitSelectedMeasurement(pdf, out Measurement selectedMeasurement) ||
+            TryHitMeasurement(pdf, out selectedMeasurement))
+        {
+            SelectMeasurement(selectedMeasurement, -1);
+            TakeoffRenameRequested?.Invoke(selectedMeasurement);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void RequestSelectedTakeoffRename()
+    {
+        Measurement? measurement = GetSelectedMeasurements().LastOrDefault();
+        TakeoffRenameRequested?.Invoke(measurement);
+    }
+
+
+    private void UpdateCursor(SKPoint? pdf = null)
+    {
+        if (_tool == ViewerTool.Select &&
+            pdf.HasValue &&
+            (TryHitVertexOnSelectedMeasurement(pdf.Value, out _, out _) ||
+             TryHitEditableVertex(pdf.Value, out Measurement pointVertexMeasurement, out _) &&
+             pointVertexMeasurement.MType == "point"))
+        {
+            Cursor = Cursors.Cross;
+            return;
+        }
+
         Cursor = _tool switch
         {
             ViewerTool.Pan => Cursors.Hand,

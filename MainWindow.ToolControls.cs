@@ -5,9 +5,9 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -17,8 +17,7 @@ public partial class MainWindow
     {
         if (sender is FrameworkElement btn && btn.Tag is string tool)
         {
-            bool forceNewTakeoff = tool is "point" or "line" or "area" &&
-                                   (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            bool forceNewTakeoff = IsRecordTool(tool);
             SetTool(tool, forceNewTakeoff);
         }
     }
@@ -37,8 +36,8 @@ public partial class MainWindow
         _recordButton.Checked += (_, _) => OnRecordToggled(on: true);
         _recordButton.Unchecked += (_, _) => OnRecordToggled(on: false);
 
-        int areaIndex = MainToolBar.Items.IndexOf(BtnArea);
-        MainToolBar.Items.Insert(areaIndex >= 0 ? areaIndex + 1 : MainToolBar.Items.Count, _recordButton);
+        int areaIndex = ToolStripRow1.Children.IndexOf(BtnAreaCut);
+        ToolStripRow1.Children.Insert(areaIndex >= 0 ? areaIndex + 1 : ToolStripRow1.Children.Count, _recordButton);
     }
 
     // Estimating setup moved to MainWindow.Estimating.cs
@@ -56,38 +55,61 @@ public partial class MainWindow
 
         if (on)
         {
-            string tool = _activeTool is "point" or "line" or "area"
+            string tool = IsRecordTool(_activeTool)
                 ? _activeTool
-                : _lastDrawingTool;
+                : RecordToolForActiveTakeoff();
             SetTool(tool);
-            if (_activeTool is not ("point" or "line" or "area"))
+            if (!IsRecordTool(_activeTool))
                 UpdateRecordButton();
             return;
         }
 
-        if (_activeTool is "point" or "line" or "area")
+        if (IsRecordTool(_activeTool))
             SetTool("select");
     }
 
-    private void SetTool(string tool, bool forceNewTakeoff = false)
+    private void SetTool(string tool, bool forceNewTakeoff = false, bool repeatDrawing = false)
     {
-        if (tool is "point" or "line" or "area" && !EnsureDrawingTakeoff(tool, forceNewTakeoff))
+        if (IsCurrentJobReadOnly && tool is not ("pan" or "select"))
+        {
+            EnsureCurrentJobWritable($"use the {tool} tool");
+            SyncToolButtonsToActiveTool();
+            return;
+        }
+
+        if (!IsToolAllowedByModules(tool))
+        {
+            TxtStatus.Text = $"Tool '{tool}' is disabled in Settings > Modules.";
+            SyncToolButtonsToActiveTool();
+            return;
+        }
+
+        if (IsRecordTool(tool) && !EnsureDrawingTakeoff(tool, forceNewTakeoff))
         {
             SyncToolButtonsToActiveTool();
             return;
         }
 
+        _repeatDrawingTool = repeatDrawing && tool is "beam" or "line" ? tool : null;
         ApplyToolSelection(tool);
     }
 
     private void ApplyToolSelection(string tool)
     {
+        if (_repeatDrawingTool != tool)
+            _repeatDrawingTool = null;
         _activeTool = tool;
-        if (tool is "point" or "line" or "area")
+        if (IsRecordTool(tool))
             _lastDrawingTool = tool;
-        _viewport.SetTool(tool);
+        _viewport.SetTool(ViewportToolName(tool), repeatDrawing: _repeatDrawingTool == tool);
+        // Detached sheet windows follow the main tool so takeoffs can be drawn
+        // there without re-arming the tool inside each window.
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            ApplyDetachedTool(window, tool);
         foreach (var (t, btn) in _toolBtns)
-            btn.IsChecked = t == tool;
+            btn.IsChecked = t == tool && _repeatDrawingTool == null;
+        SyncRepeatDrawingButtons();
+        UpdateAnnotationMenuButton();
         UpdateRecordButton();
         UpdateToolStatus();
     }
@@ -95,7 +117,218 @@ public partial class MainWindow
     private void SyncToolButtonsToActiveTool()
     {
         foreach (var (t, btn) in _toolBtns)
-            btn.IsChecked = t == _activeTool;
+            btn.IsChecked = t == _activeTool && _repeatDrawingTool == null;
+        SyncRepeatDrawingButtons();
+        UpdateAnnotationMenuButton();
+        UpdateRecordButton();
+        UpdateToolStatus();
+    }
+
+    private void BtnAnnotationMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (!RequireModule(ModuleId.Annotations, "Annotation tools"))
+            return;
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = BtnAnnotationMenu,
+            Placement = PlacementMode.Bottom,
+        };
+
+        AddAnnotationToolItem(menu, "Highlighter", "drawhighlight");
+        AddAnnotationToolItem(menu, "Draw line", "drawline");
+        AddAnnotationToolItem(menu, "Arrow", "drawarrow");
+        AddAnnotationToolItem(menu, "Box", "drawrect");
+        AddAnnotationToolItem(menu, "Cloud", "drawcloud");
+        AddAnnotationToolItem(menu, "Area fill", "drawarea");
+        AddAnnotationToolItem(menu, "Note", "note");
+        menu.Items.Add(new Separator());
+        AddAnnotationThicknessMenu(menu);
+        AddAnnotationColorMenu(menu);
+
+        menu.IsOpen = true;
+    }
+
+    private void AddAnnotationToolItem(ContextMenu menu, string label, string tool)
+    {
+        var item = new MenuItem
+        {
+            Header = label,
+            IsCheckable = true,
+            IsChecked = string.Equals(_activeTool, tool, StringComparison.OrdinalIgnoreCase),
+        };
+        item.Click += (_, _) => SetTool(tool);
+        menu.Items.Add(item);
+    }
+
+    private void AddAnnotationThicknessMenu(ContextMenu menu)
+    {
+        var parent = new MenuItem { Header = "Thickness" };
+        foreach (double width in new[] { 1.0, 1.8, 3.0, 5.0, 8.0 })
+        {
+            double selectedWidth = width;
+            var child = new MenuItem
+            {
+                Header = $"{selectedWidth:0.#} px",
+                IsCheckable = true,
+                IsChecked = Math.Abs(_annotationStrokeWidth - selectedWidth) < 0.01,
+            };
+            child.Click += (_, _) => SetAnnotationStrokeWidth(selectedWidth);
+            parent.Items.Add(child);
+        }
+
+        menu.Items.Add(parent);
+    }
+
+    private void AddAnnotationColorMenu(ContextMenu menu)
+    {
+        var parent = new MenuItem { Header = "Color" };
+        foreach (var (label, hex) in AnnotationColorPresets())
+        {
+            string selectedHex = hex;
+            var child = new MenuItem
+            {
+                Header = CreateAnnotationColorHeader(label, hex),
+                IsCheckable = true,
+                IsChecked = string.Equals(_annotationColor, hex, StringComparison.OrdinalIgnoreCase),
+            };
+            child.Click += (_, _) => SetAnnotationColor(selectedHex);
+            parent.Items.Add(child);
+        }
+
+        menu.Items.Add(parent);
+    }
+
+    private void SetAnnotationStrokeWidth(double width)
+    {
+        _annotationStrokeWidth = Math.Clamp(width, 0.75, 12.0);
+        if (_viewport != null)
+            _viewport.ActiveAnnotationStrokeWidth = _annotationStrokeWidth;
+        UpdateAnnotationMenuButton();
+        if (TxtAnnotThickness != null)
+            TxtAnnotThickness.Text = $"{_annotationStrokeWidth:0.#} px";
+        if (SliderAnnotThickness != null && Math.Abs(SliderAnnotThickness.Value - _annotationStrokeWidth) > 0.01)
+            SliderAnnotThickness.Value = _annotationStrokeWidth;
+        TxtStatus.Text = $"Annotation thickness: {_annotationStrokeWidth:0.#} px.";
+    }
+
+    private void SetAnnotationColor(string color)
+    {
+        _annotationColor = color;
+        _viewport.ActiveAnnotationColor = _annotationColor;
+        UpdateAnnotationMenuButton();
+        RefreshAnnotationSwatchSelection();
+        TxtStatus.Text = $"Annotation color: {color}.";
+    }
+
+    private void SliderAnnotThickness_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsInitialized)
+            return; // ignore the coercion that fires while XAML is still loading
+        SetAnnotationStrokeWidth(e.NewValue);
+    }
+
+    // Inline thickness slider + colour swatches in the Annotation ribbon group.
+    private readonly System.Collections.Generic.List<(string Hex, Border Swatch)> _annotationSwatches = new();
+
+    private void BuildAnnotationStyleControls()
+    {
+        if (SliderAnnotThickness != null)
+            SliderAnnotThickness.Value = _annotationStrokeWidth;
+        if (TxtAnnotThickness != null)
+            TxtAnnotThickness.Text = $"{_annotationStrokeWidth:0.#} px";
+
+        if (AnnotationColorSwatches == null)
+            return;
+
+        AnnotationColorSwatches.Children.Clear();
+        _annotationSwatches.Clear();
+        foreach (var (label, hex) in AnnotationColorPresets())
+        {
+            string selectedHex = hex;
+            var swatch = new Border
+            {
+                Width = 17,
+                Height = 17,
+                Margin = new Thickness(0, 0, 4, 0),
+                CornerRadius = new CornerRadius(3),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(2),
+                ToolTip = label,
+                Cursor = Cursors.Hand,
+            };
+            swatch.MouseLeftButtonUp += (_, _) => SetAnnotationColor(selectedHex);
+            _annotationSwatches.Add((hex, swatch));
+            AnnotationColorSwatches.Children.Add(swatch);
+        }
+
+        RefreshAnnotationSwatchSelection();
+    }
+
+    private void RefreshAnnotationSwatchSelection()
+    {
+        Brush ring = Application.Current.Resources["ControlForegroundBrush"] as Brush ?? Brushes.White;
+        foreach (var (hex, swatch) in _annotationSwatches)
+            swatch.BorderBrush = string.Equals(hex, _annotationColor, StringComparison.OrdinalIgnoreCase)
+                ? ring
+                : Brushes.Transparent;
+    }
+
+    private void UpdateAnnotationMenuButton()
+    {
+        string tool = _activeTool switch
+        {
+            "drawhighlight" => "Highlight",
+            "drawline" => "Draw",
+            "drawarrow" => "Arrow",
+            "drawrect" => "Box",
+            "drawcloud" => "Cloud",
+            "drawarea" => "Area",
+            "note" => "Note",
+            _ => "Annotation",
+        };
+        BtnAnnotationMenu.Content = tool == "Annotation" ? "Annot" : $"A: {tool}";
+        BtnAnnotationMenu.ToolTip = $"Annotation tools. Color {_annotationColor}, thickness {_annotationStrokeWidth:0.#} px.";
+    }
+
+    private static IEnumerable<(string Label, string Hex)> AnnotationColorPresets()
+    {
+        foreach (AnnotationColorChoice choice in AnnotationColorPalette.Presets)
+            yield return (choice.Label, choice.Hex);
+    }
+
+    private static FrameworkElement CreateAnnotationColorHeader(string label, string hex)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        var swatch = new Border
+        {
+            Width = 14,
+            Height = 14,
+            Margin = new Thickness(0, 0, 7, 0),
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+            BorderBrush = Brushes.Gray,
+            BorderThickness = new Thickness(1),
+        };
+        panel.Children.Add(swatch);
+        panel.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        return panel;
+    }
+
+    private void SyncToolTypeForTakeoffItem(TakeoffItem item)
+    {
+        string tool = ToolForTakeoffItem(item);
+        _lastDrawingTool = tool;
+
+        if (IsRecordTool(_activeTool))
+        {
+            if (!string.Equals(_activeTool, tool, StringComparison.OrdinalIgnoreCase))
+                ApplyToolSelection(tool);
+            else
+                SyncToolButtonsToActiveTool();
+            return;
+        }
+
         UpdateRecordButton();
         UpdateToolStatus();
     }
@@ -105,16 +338,16 @@ public partial class MainWindow
         if (_recordButton == null)
             return;
 
-        bool recording = _activeTool is "point" or "line" or "area";
-        string recordType = recording ? MeasurementTypeTitle(_activeTool) : "";
+        bool recording = IsRecordTool(_activeTool);
+        string recordType = recording ? RecordToolTitle(_activeTool) : "";
         _updatingRecordButton = true;
         _recordButton.IsChecked = recording;
         _recordButton.Content = recording ? $"Rec {recordType}" : "Record";
         _recordButton.ToolTip = recording
             ? _activeItem == null
                 ? $"Recording {recordType}; no active takeoff target is selected."
-                : $"Recording {recordType} into {_activeItem.Name}. Click to stop."
-            : "Start recording into the active takeoff target.";
+                : $"Recording {recordType} into {_activeItem.Name}. Click or press Space to stop."
+            : "Start recording into the active takeoff target (Space).";
         _recordButton.Background = recording
             ? new SolidColorBrush(Color.FromRgb(196, 32, 32))
             : (Brush)FindResource("ControlBackgroundBrush");
@@ -133,11 +366,91 @@ public partial class MainWindow
     private void BtnSnap_Unchecked(object sender, RoutedEventArgs e) =>
         SetSnapMode(enabled: false);
 
+    private void BtnPdfSnap_Checked(object sender, RoutedEventArgs e) =>
+        SetPdfSnapMode(enabled: true);
+
+    private void BtnPdfSnap_Unchecked(object sender, RoutedEventArgs e) =>
+        SetPdfSnapMode(enabled: false);
+
+    private void BtnRulerSheetVisibility_Changed(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_updatingRulerVisibilityButton)
+            return;
+
+        if (_currentPage == null)
+        {
+            ApplyRulerVisibilityToViewport();
+            TxtStatus.Text = "Open a sheet before hiding ruler markups.";
+            return;
+        }
+
+        string pageKey = NormalizePathForCompare(_currentPage.FolderPath);
+        bool hidden = BtnRulerSheetVisibility.IsChecked == true;
+        if (hidden)
+        {
+            _pagesWithHiddenRulers.Add(pageKey);
+            if (_viewport.HideVisibleRulerAnnotationsOnActivePage())
+            {
+                _currentPageAnnotationsDirty = true;
+                TrySaveCurrentPageAnnotationsFromUi();
+            }
+        }
+        else
+        {
+            _pagesWithHiddenRulers.Remove(pageKey);
+            if (_viewport.ShowAllRulerAnnotationsOnActivePage())
+            {
+                _currentPageAnnotationsDirty = true;
+                TrySaveCurrentPageAnnotationsFromUi();
+            }
+        }
+
+        ApplyRulerVisibilityToViewport();
+        TxtStatus.Text = hidden
+            ? $"Current ruler markups hidden on {_currentPage.Name}. New ruler markups stay visible until you hide again."
+            : $"Ruler markups visible on {_currentPage.Name}.";
+    }
+
+    private void ApplyRulerVisibilityToViewport()
+    {
+        bool hidden = CurrentPageRulersHidden();
+        _viewport.HideRulerAnnotations = hidden;
+        UpdateRulerVisibilityButton(hidden);
+    }
+
+    private bool CurrentPageRulersHidden() =>
+        _currentPage != null &&
+        _pagesWithHiddenRulers.Contains(NormalizePathForCompare(_currentPage.FolderPath));
+
+    private void UpdateRulerVisibilityButton(bool hidden)
+    {
+        _updatingRulerVisibilityButton = true;
+        try
+        {
+            BtnRulerSheetVisibility.IsEnabled = _currentPage != null;
+            BtnRulerSheetVisibility.IsChecked = hidden;
+            BtnRulerSheetVisibility.ToolTip = hidden
+                ? "Show all ruler markups on this sheet"
+                : "Hide all ruler markups on this sheet";
+        }
+        finally
+        {
+            _updatingRulerVisibilityButton = false;
+        }
+    }
+
     private void BtnOrtho_Checked(object sender, RoutedEventArgs e) =>
         SetOrthoMode(enabled: true);
 
     private void BtnOrtho_Unchecked(object sender, RoutedEventArgs e) =>
         SetOrthoMode(enabled: false);
+
+    private void BtnBoxMode_Checked(object sender, RoutedEventArgs e) =>
+        SetBoxMode(enabled: true);
+
+    private void BtnBoxMode_Unchecked(object sender, RoutedEventArgs e) =>
+        SetBoxMode(enabled: false);
 
     private void SetSnapMode(bool enabled)
     {
@@ -145,6 +458,18 @@ public partial class MainWindow
             return;
 
         _viewport.SnapEnabled = enabled;
+        SynchronizeSnapAcrossViewports(enabled);
+        UpdateConstraintButtons();
+        UpdateToolStatus();
+    }
+
+    private void SetPdfSnapMode(bool enabled)
+    {
+        if (_updatingConstraintButtons)
+            return;
+
+        _viewport.PdfSnapEnabled = enabled;
+        SynchronizePdfSnapAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
@@ -155,18 +480,46 @@ public partial class MainWindow
             return;
 
         _viewport.OrthoEnabled = enabled;
+        SynchronizeOrthoAcrossViewports(enabled);
+        UpdateConstraintButtons();
+        UpdateToolStatus();
+    }
+
+    private void SetBoxMode(bool enabled)
+    {
+        if (_updatingConstraintButtons)
+            return;
+
+        _viewport.BoxModeEnabled = enabled;
+        SynchronizeBoxModeAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
 
     private void OnViewportSnapChanged(bool enabled)
     {
+        SynchronizeSnapAcrossViewports(enabled);
+        UpdateConstraintButtons();
+        UpdateToolStatus();
+    }
+
+    private void OnViewportPdfSnapChanged(bool enabled)
+    {
+        SynchronizePdfSnapAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
 
     private void OnViewportOrthoChanged(bool enabled)
     {
+        SynchronizeOrthoAcrossViewports(enabled);
+        UpdateConstraintButtons();
+        UpdateToolStatus();
+    }
+
+    private void OnViewportBoxModeChanged(bool enabled)
+    {
+        SynchronizeBoxModeAcrossViewports(enabled);
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
@@ -177,9 +530,13 @@ public partial class MainWindow
         try
         {
             BtnSnap.IsChecked = _viewport.SnapEnabled;
-            BtnSnap.Content = _viewport.SnapEnabled ? "Snap On" : "Snap";
+            BtnSnap.Content = "Snap";
+            BtnPdfSnap.IsChecked = _viewport.PdfSnapEnabled;
+            BtnPdfSnap.Content = "PDF";
             BtnOrtho.IsChecked = _viewport.OrthoEnabled;
-            BtnOrtho.Content = _viewport.OrthoEnabled ? "Ortho On" : "Ortho";
+            BtnOrtho.Content = "Ortho";
+            BtnBoxMode.IsChecked = _viewport.BoxModeEnabled;
+            BtnBoxMode.Content = "Box";
         }
         finally
         {
@@ -187,66 +544,91 @@ public partial class MainWindow
         }
     }
 
+    // Record can land on the main viewport or on any detached sheet window,
+    // so the pre-record scale gate passes when at least one of those surfaces
+    // is scaled. Each viewport still blocks unscaled Line/Area draws itself
+    // at click time with its own status message.
+    private bool HasScaledRecordSurface() =>
+        _currentPage is { ScaleMetersPerPt: > 0 } ||
+        _detachedSheetWindows.Any(window => window.Viewport.ScaleMetersPerPt > 0);
+
     private bool EnsureDrawingTakeoff(string tool, bool forceNewTakeoff = false)
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Takeoff Item",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before drawing measurements.");
             return false;
         }
 
-        if (_currentPage == null)
+        if (_currentPage == null && _detachedSheetWindows.Count == 0)
         {
-            MessageBox.Show("Select a page before drawing measurements.", "Takeoff Item",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Select a page before drawing measurements.");
             return false;
         }
 
-        string mtype = OurPlaneCoreJobStore.NormalizeMeasurementType(tool);
-        if (mtype is "line" or "area" && _currentPage.ScaleMetersPerPt <= 0)
+        string mtype = RecordMeasurementType(tool);
+        bool joistArea = IsJoistAreaTool(tool);
+        if (mtype is "line" or "area" && !HasScaledRecordSurface())
         {
-            MessageBox.Show(
-                "Set the page scale before drawing Line or Area measurements.",
-                "Scale Required",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            PostStatusWarning("Set the page scale before drawing Line or Area measurements.");
             return false;
         }
 
         if (!forceNewTakeoff &&
             _activeItem != null &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == mtype)
+            CanRecordIntoActiveTakeoff(_activeItem, mtype, joistArea))
         {
             _activeItem.MeasurementType = mtype;
             _viewport.ActiveColor = _activeItem.Color;
             _viewport.ActiveTakeoffFolder = _activeItem.FolderPath;
+            if (mtype == "point")
+                _viewport.ActiveCountSymbol = _activeItem.CountSymbol;
             return true;
         }
 
-        if (!forceNewTakeoff && !ConfirmCreateDrawingTakeoffTarget(mtype))
+        if (!forceNewTakeoff && !ConfirmCreateDrawingTakeoffTarget(mtype, joistArea))
             return false;
 
-        string parentFolder = NewTakeoffItemParentFolder();
-        string defaultColor = ResolveTakeoffFolderDefaultColor(
-            parentFolder,
-            _activeItem?.Color ?? _viewport.ActiveColor);
+        string parentFolder = NewTakeoffItemParentFolderForUserCreate();
+        // Every new takeoff gets its own random color not already on the
+        // sheet; still editable in the dialog and later via properties.
+        string defaultColor = RandomTakeoffColor(_activeItem?.Color ?? _viewport.ActiveColor);
         var dlg = new NewItemDialog(
             mtype,
-            DefaultTakeoffNameForFolder(mtype, parentFolder),
+            joistArea ? DefaultJoistAreaTakeoffNameForFolder(parentFolder) : DefaultTakeoffNameForFolder(mtype, parentFolder),
             lockType: true,
-            defaultColor: defaultColor)
+            defaultColor: defaultColor,
+            defaultCountSymbol: _newCountSymbol,
+            showOffsetLines: true,
+            unitMode: _viewport.UnitMode)
         {
             Owner = this,
         };
         if (dlg.ShowDialog() != true)
             return false;
 
+        if (mtype == "point")
+        {
+            RememberNewCountSymbol(dlg.ItemCountSymbol);
+        }
+
         var newItem = CreateUniqueTakeoffItem(dlg.ItemName, dlg.ItemColor, mtype, parentFolder);
         ApplyTakeoffFolderDefaultsToNewItem(newItem, parentFolder);
+        ApplyNewCountSymbolToItemIfNeeded(newItem, mtype);
+        if (joistArea)
+            ApplyDefaultJoistAreaSettings(newItem);
+        List<TakeoffItem> offsetCompanions =
+            OurPlanCoreJobStore.NormalizeMeasurementType(mtype) == "line" && dlg.OffsetLines.Count > 0
+                ? CreateMultiLineCompanions(newItem, dlg.OffsetLines)
+                : [];
         _takeoffItems.Add(newItem);
         var treeParent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;
         var tvi = AddTakeoffTreeItem(newItem, treeParent);
+        foreach (TakeoffItem companion in offsetCompanions)
+        {
+            _takeoffItems.Add(companion);
+            AddTakeoffTreeItem(companion, treeParent);
+        }
         if (treeParent is TreeViewItem parentTvi)
             parentTvi.IsExpanded = true;
 
@@ -254,6 +636,7 @@ public partial class MainWindow
         _activeTakeoffParentFolder = parentFolder;
         _viewport.ActiveColor = newItem.Color;
         _viewport.ActiveTakeoffFolder = newItem.FolderPath;
+        _viewport.ActiveCountSymbol = newItem.CountSymbol;
         tvi.IsSelected = true;
         UpdateToolStatus();
         RefreshActiveTakeoffVisuals();
@@ -261,18 +644,344 @@ public partial class MainWindow
         return true;
     }
 
-    private bool ConfirmCreateDrawingTakeoffTarget(string measurementType)
+    private static bool IsRecordTool(string tool) =>
+        tool is "point" or "line" or "area" or "joistarea";
+
+    private static bool IsJoistAreaTool(string tool) =>
+        string.Equals(tool, "joistarea", StringComparison.OrdinalIgnoreCase);
+
+    private static string RecordMeasurementType(string tool) =>
+        IsJoistAreaTool(tool)
+            ? "area"
+            : OurPlanCoreJobStore.NormalizeMeasurementType(tool);
+
+    private static string ViewportToolName(string tool) =>
+        IsJoistAreaTool(tool) ? "area" : tool;
+
+    private static string RecordToolTitle(string tool) =>
+        IsJoistAreaTool(tool) ? "J Area" : MeasurementTypeTitle(tool);
+
+    private static string ToolForTakeoffItem(TakeoffItem item) =>
+        item.IsJoistArea
+            ? "joistarea"
+            : OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+
+    private string RecordToolForActiveTakeoff()
     {
-        string targetType = MeasurementTypeTitle(measurementType);
+        if (_activeItem != null)
+            return ToolForTakeoffItem(_activeItem);
+
+        return IsRecordTool(_lastDrawingTool) ? _lastDrawingTool : "point";
+    }
+
+    private static bool CanRecordIntoActiveTakeoff(TakeoffItem item, string measurementType, bool requiresJoistArea)
+    {
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != measurementType)
+            return false;
+
+        return !requiresJoistArea || item.IsJoistArea;
+    }
+
+    private void ApplyDefaultJoistAreaSettings(TakeoffItem item)
+    {
+        JoistTakeoffDefaults.ApplyToNewJoistArea(item);
+        QueueTakeoffAutosave(item);
+    }
+
+    private string DefaultJoistAreaTakeoffNameForFolder(string parentFolder)
+    {
+        string baseName = _currentPage != null ? $"{_currentPage.Name} J Area" : "J Area Item";
+        string prefix = ResolveTakeoffFolderDefaultNamePrefix(parentFolder);
+        if (string.IsNullOrWhiteSpace(prefix) ||
+            baseName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return baseName;
+        }
+
+        return prefix.EndsWith(" ", StringComparison.Ordinal) ||
+               prefix.EndsWith("-", StringComparison.Ordinal) ||
+               prefix.EndsWith("_", StringComparison.Ordinal)
+            ? prefix + baseName
+            : $"{prefix} {baseName}";
+    }
+
+    private bool ConfirmCreateDrawingTakeoffTarget(string measurementType, bool joistArea)
+    {
+        string targetType = joistArea ? "J Area" : MeasurementTypeTitle(measurementType);
         string message = _activeItem == null
             ? $"No active takeoff target is selected.\n\nCreate a {targetType} takeoff item before recording?"
-            : $"Active target is {_activeItem.Name} ({MeasurementTypeTitle(_activeItem.MeasurementType)}).\n\n{targetType} recording needs a {targetType} takeoff item. Create a separate target?";
+            : $"Active target is {_activeItem.Name} ({TakeoffTypeTitle(_activeItem)}).\n\n{targetType} recording needs a {targetType} takeoff item. Create a separate target?";
 
         return MessageBox.Show(
             message,
             "Create Takeoff Target",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question) == MessageBoxResult.Yes;
+    }
+
+    private void BtnMirrorHorizontal_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewport == null)
+            return;
+
+        if (_viewport.MirrorSelectedHorizontal())
+            ResetTransformEditSliders();
+        UpdateTransformEditControls();
+    }
+
+    private void BtnMirrorVertical_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewport == null)
+            return;
+
+        if (_viewport.MirrorSelectedVertical())
+            ResetTransformEditSliders();
+        UpdateTransformEditControls();
+    }
+
+    private void SliderRotateSelection_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_updatingTransformSliders || _viewport == null)
+            return;
+
+        double newValue = ResolveTransformRotateSliderValue(e.NewValue);
+        double delta = newValue - _lastTransformRotateSliderValue;
+        if (Math.Abs(delta) < 0.001)
+            return;
+
+        if (_viewport.RotateSelectedBy(delta))
+        {
+            _lastTransformRotateSliderValue = newValue;
+        }
+        else
+        {
+            ResetTransformEditSliders();
+        }
+
+        UpdateTransformEditControls();
+    }
+
+    private double ResolveTransformRotateSliderValue(double value)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            return value;
+
+        double snapped = TransformEditConstraints.SnapRotationDegrees(value);
+        if (Math.Abs(snapped - value) < 0.001)
+            return snapped;
+
+        _updatingTransformSliders = true;
+        try
+        {
+            SliderRotateSelection.Value = snapped;
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+
+        return snapped;
+    }
+
+    private void SliderScaleSelection_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_updatingTransformSliders || _viewport == null)
+            return;
+
+        ApplyTransformScaleValue(e.NewValue, syncSlider: false);
+    }
+
+    private bool ApplyTransformScaleValue(double newValue, bool syncSlider)
+    {
+        double previous = Math.Max(0.05, _lastTransformScaleSliderValue);
+        double factor = newValue / previous;
+        if (Math.Abs(factor - 1.0) < 0.0001)
+        {
+            SyncTransformScaleValueDisplay(newValue, syncSlider);
+            return true;
+        }
+
+        if (_viewport.ScaleSelectedBy(factor))
+        {
+            SyncTransformScaleValueDisplay(newValue, syncSlider);
+            UpdateTransformEditControls();
+            return true;
+        }
+
+        ResetTransformEditSliders();
+        UpdateTransformEditControls();
+        return false;
+    }
+
+    private void SyncTransformScaleValueDisplay(double value, bool syncSlider)
+    {
+        _updatingTransformSliders = true;
+        try
+        {
+            if (syncSlider)
+                SliderScaleSelection.Value = value;
+            TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(value);
+            _lastTransformScaleSliderValue = value;
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+    }
+
+    private void BtnResetRotateSelection_Click(object sender, RoutedEventArgs e)
+    {
+        SetTransformRotateSlider(0);
+        UpdateTransformEditControls();
+    }
+
+    private void TxtScaleSelectionFactor_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Return || e.Key == Key.Enter)
+        {
+            ApplyTransformScaleTextEntry();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(_lastTransformScaleSliderValue);
+            e.Handled = true;
+        }
+    }
+
+    private void TxtScaleSelectionFactor_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyTransformScaleTextEntry();
+
+    private void ApplyTransformScaleTextEntry()
+    {
+        if (_updatingTransformSliders || _viewport == null)
+            return;
+
+        if (!_viewport.HasTransformSelection)
+        {
+            TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(_lastTransformScaleSliderValue);
+            TxtStatus.Text = "Select measurements or markups before typing a transform scale.";
+            return;
+        }
+
+        if (!TryParseTransformScaleFactor(TxtScaleSelectionFactor.Text, out double value))
+        {
+            TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(_lastTransformScaleSliderValue);
+            TxtStatus.Text = "Enter a scale factor like 1.25x or 125%.";
+            return;
+        }
+
+        double normalized = Math.Clamp(value, SliderScaleSelection.Minimum, SliderScaleSelection.Maximum);
+        if (Math.Abs(normalized - value) > 0.0001)
+            TxtStatus.Text = $"Scale factor limited to {FormatTransformScaleLabel(SliderScaleSelection.Minimum)} - {FormatTransformScaleLabel(SliderScaleSelection.Maximum)}.";
+
+        ApplyTransformScaleValue(normalized, syncSlider: true);
+    }
+
+    private void OnViewportTransformSelectionChanged(bool hasSelection) =>
+        UpdateTransformEditControls(hasSelection);
+
+    private void UpdateTransformEditControls(bool? hasSelection = null)
+    {
+        if (_viewport == null)
+            return;
+
+        bool enabled = hasSelection ?? _viewport.HasTransformSelection;
+        BtnMirrorHorizontal.IsEnabled = enabled;
+        BtnMirrorVertical.IsEnabled = enabled;
+        SliderRotateSelection.IsEnabled = enabled;
+        SliderScaleSelection.IsEnabled = enabled;
+        BtnResetRotateSelection.IsEnabled = enabled;
+        TxtScaleSelectionFactor.IsEnabled = enabled;
+
+        if (!enabled)
+            ResetTransformEditSliders();
+    }
+
+    private void ResetTransformEditSliders()
+    {
+        _updatingTransformSliders = true;
+        try
+        {
+            SetTransformRotateSliderCore(0);
+            SetTransformScaleSliderCore(1);
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+    }
+
+    private void SetTransformRotateSlider(double value)
+    {
+        _updatingTransformSliders = true;
+        try
+        {
+            SetTransformRotateSliderCore(value);
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+    }
+
+    private void SetTransformScaleSlider(double value)
+    {
+        _updatingTransformSliders = true;
+        try
+        {
+            SetTransformScaleSliderCore(value);
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+    }
+
+    private void SetTransformRotateSliderCore(double value)
+    {
+        SliderRotateSelection.Value = value;
+        _lastTransformRotateSliderValue = value;
+    }
+
+    private void SetTransformScaleSliderCore(double value)
+    {
+        SliderScaleSelection.Value = value;
+        TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(value);
+        _lastTransformScaleSliderValue = value;
+    }
+
+    private static string FormatTransformScaleLabel(double value) =>
+        $"{Math.Clamp(value, 0.01, 99.0).ToString("0.##", CultureInfo.InvariantCulture)}x";
+
+    private static bool TryParseTransformScaleFactor(string text, out double value)
+    {
+        string clean = (text ?? "")
+            .Trim()
+            .ToLowerInvariant()
+            .Replace('×', 'x');
+
+        bool percent = clean.EndsWith("%", StringComparison.Ordinal);
+        if (percent)
+            clean = clean[..^1].Trim();
+        if (clean.EndsWith("x", StringComparison.Ordinal))
+            clean = clean[..^1].Trim();
+
+        clean = clean.Replace(',', '.');
+        if (!double.TryParse(clean, NumberStyles.Float, CultureInfo.InvariantCulture, out value) ||
+            double.IsNaN(value) ||
+            double.IsInfinity(value) ||
+            value <= 0)
+        {
+            value = 0;
+            return false;
+        }
+
+        if (percent)
+            value /= 100.0;
+        return true;
     }
 
     private void BtnFit_Click(object sender, RoutedEventArgs e)    => _viewport.ZoomFit();
@@ -291,8 +1000,7 @@ public partial class MainWindow
     {
         if (!PdfSheetMetadataService.TryParseScaleMetersPerPt(TxtScaleRatio.Text, out double scaleMetersPerPt))
         {
-            MessageBox.Show("Enter an imperial scale, e.g. 1/8\" = 1'0\".",
-                            "Scale", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter an imperial scale, e.g. 1/8\" = 1'0\".");
             return;
         }
 
@@ -302,6 +1010,7 @@ public partial class MainWindow
         ApplyScaleToCurrentPageMeasurements(_viewport.ScaleMetersPerPt);
         SaveCurrentPageScale();
         UpdateScaleUi(_viewport.ScaleMetersPerPt);
+        RefreshFloatingPageSetup(_currentPage?.FolderPath);
         TxtStatus.Text = $"Scale set: {PdfSheetMetadataService.FormatImperialScale(_viewport.ScaleMetersPerPt)}";
         RefreshAllTotals();
     }

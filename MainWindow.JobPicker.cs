@@ -6,9 +6,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -22,6 +22,7 @@ public partial class MainWindow
             _settings.JobsRootPath,
             SetRecentJobPinned,
             RemoveRecentJob,
+            RemoveJobsRoot,
             AppSettingsStore.CurrentJobsRootPaths(_settings))
         {
             Owner = this,
@@ -30,7 +31,7 @@ public partial class MainWindow
         if (dialog.ShowDialog() != true)
             return;
 
-        HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath);
+        HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath, dialog.SelectedJobsRootPath);
     }
 
     private void ShowStartupJobPickerIfUseful()
@@ -38,6 +39,7 @@ public partial class MainWindow
         if (_currentJob != null)
             return;
 
+        UpdateNoJobOverlay();   // show the empty-state Start card behind the picker
         ShowRecentJobPicker();
     }
 
@@ -57,13 +59,13 @@ public partial class MainWindow
             AddJobPickerItem(
                 items,
                 seen,
-                name: string.IsNullOrWhiteSpace(recent.Name) ? Path.GetFileName(path) : recent.Name.Trim(),
+                name: string.IsNullOrWhiteSpace(recent.Name) ? ProjectNameFromPath(path) : recent.Name.Trim(),
                 path,
                 thumbnailPath: File.Exists(recent.ThumbnailPath)
                     ? recent.ThumbnailPath
                     : JobThumbnailService.ExistingThumbnailPath(path),
-                lastOpened: FormatRecentJobTime(recent.LastOpenedUtc),
-                source: "Recent",
+                lastOpenedUtc: ParseRecentJobTime(recent.LastOpenedUtc),
+                sourceLabel: BuildSourceLabel(rootPath, fallback: "Recent"),
                 isPinned: recent.IsPinned,
                 isRecent: true,
                 rootPath: rootPath);
@@ -71,12 +73,18 @@ public partial class MainWindow
 
         foreach (string rootPath in roots)
         {
+            if (JobRootSelectorBar.ClassifyJobRootPath(rootPath) == JobRootLocationKind.Network)
+            {
+                // Never block the WPF dispatcher on an automatic UNC enumeration. Network
+                // projects remain available through Recent and the explicit Browse actions.
+                continue;
+            }
             if (!Directory.Exists(rootPath))
                 continue;
 
-            foreach (string folder in Directory.EnumerateDirectories(rootPath)
-                         .Where(IsJobFolder)
-                         .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            string sourceLabel = BuildSourceLabel(rootPath, fallback: "Local");
+
+            foreach (string folder in EnumerateProjectFoldersSafe(rootPath))
             {
                 AddJobPickerItem(
                     items,
@@ -84,8 +92,23 @@ public partial class MainWindow
                     name: Path.GetFileName(folder),
                     path: folder,
                     thumbnailPath: JobThumbnailService.ExistingThumbnailPath(folder),
-                    lastOpened: "",
-                    source: $"Jobs: {Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}",
+                    lastOpenedUtc: ReadJobDataMtimeUtc(folder),
+                    sourceLabel: sourceLabel,
+                    isPinned: false,
+                    isRecent: false,
+                    rootPath: rootPath);
+            }
+
+            foreach (string package in EnumerateProjectPackagesSafe(rootPath))
+            {
+                AddJobPickerItem(
+                    items,
+                    seen,
+                    name: ProjectNameFromPath(package),
+                    path: package,
+                    thumbnailPath: JobThumbnailService.ExistingThumbnailPath(package),
+                    lastOpenedUtc: ReadJobDataMtimeUtc(package),
+                    sourceLabel: sourceLabel,
                     isPinned: false,
                     isRecent: false,
                     rootPath: rootPath);
@@ -95,14 +118,48 @@ public partial class MainWindow
         return items;
     }
 
+    private static IReadOnlyList<string> EnumerateProjectFoldersSafe(string rootPath)
+    {
+        try
+        {
+            return Directory.EnumerateDirectories(rootPath)
+                .Where(IsJobFolder)
+                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warn(ex, $"Could not enumerate folder projects in '{rootPath}'.");
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<string> EnumerateProjectPackagesSafe(string rootPath)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(
+                    rootPath,
+                    $"*{OurPlanPackageFormat.Extension}",
+                    SearchOption.TopDirectoryOnly)
+                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warn(ex, $"Could not enumerate project files in '{rootPath}'.");
+            return [];
+        }
+    }
+
     private static void AddJobPickerItem(
         List<JobPickerItem> items,
         HashSet<string> seen,
         string name,
         string path,
         string thumbnailPath,
-        string lastOpened,
-        string source,
+        DateTime? lastOpenedUtc,
+        string sourceLabel,
         bool isPinned,
         bool isRecent,
         string rootPath = "")
@@ -111,25 +168,63 @@ public partial class MainWindow
         if (!seen.Add(key))
             return;
 
-        bool exists = Directory.Exists(path) && IsJobFolder(path);
-        items.Add(new JobPickerItem(
-            string.IsNullOrWhiteSpace(name) ? Path.GetFileName(path) : name,
-            path,
-            thumbnailPath,
-            lastOpened,
-            source,
-            exists,
-            isPinned,
-            isRecent,
-            rootPath));
+        bool networkRecent = isRecent &&
+                             !string.IsNullOrWhiteSpace(rootPath) &&
+                             JobRootSelectorBar.ClassifyJobRootPath(rootPath) == JobRootLocationKind.Network;
+        bool exists = networkRecent || (OurPlanPackageFormat.HasPackageExtension(path)
+            ? File.Exists(path)
+            : Directory.Exists(path) && IsJobFolder(path));
+        items.Add(new JobPickerItem
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(path) : name,
+            Path = path,
+            ThumbnailPath = thumbnailPath,
+            LastOpenedUtc = lastOpenedUtc,
+            SourceLabel = sourceLabel,
+            Exists = exists,
+            IsPinned = isPinned,
+            IsRecent = isRecent,
+            RootPath = rootPath,
+        });
     }
 
-    private void HandleJobPickerAction(JobPickerAction action, string selectedJobPath)
+    private static DateTime? ReadJobDataMtimeUtc(string jobFolder)
+    {
+        try
+        {
+            if (File.Exists(jobFolder) && OurPlanPackageFormat.HasPackageExtension(jobFolder))
+                return File.GetLastWriteTimeUtc(jobFolder);
+            string dataXml = Path.Combine(jobFolder, "Data.xml");
+            if (!File.Exists(dataXml))
+                return null;
+
+            return File.GetLastWriteTimeUtc(dataXml);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string BuildSourceLabel(string rootPath, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            return fallback;
+
+        string trimmed = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string name = Path.GetFileName(trimmed);
+        return string.IsNullOrWhiteSpace(name) ? fallback : name;
+    }
+
+    private void HandleJobPickerAction(JobPickerAction action, string selectedJobPath, string selectedJobsRootPath = "")
     {
         switch (action)
         {
             case JobPickerAction.OpenSelected:
                 OpenJobSafely(selectedJobPath);
+                break;
+            case JobPickerAction.BrowsePackage:
+                OpenOurPlanProjectDialog();
                 break;
             case JobPickerAction.BrowseJob:
                 OpenJobFromFolderDialog();
@@ -138,29 +233,37 @@ public partial class MainWindow
                 OpenJobFromJobsRootDialog();
                 break;
             case JobPickerAction.NewJob:
-                CreateJobFromDialog();
+                CreateJobFromDialog(selectedJobsRootPath);
+                break;
+            case JobPickerAction.BlankJob:
+                CreateBlankJobFromDialog(selectedJobsRootPath);
                 break;
             case JobPickerAction.CreateSample:
-                CreateSampleJob();
+                CreateSampleJob(selectedJobsRootPath);
                 break;
         }
     }
 
     private void OpenJobFromFolderDialog()
     {
-        string? folder = SelectFolder("Select OurPlaneCore job folder", _settings.JobsRootPath);
+        string? folder = SelectFolder("Select an existing project folder", _settings.JobsRootPath);
         if (folder == null)
             return;
 
         OpenJobSafely(folder);
     }
 
+    private static string ProjectNameFromPath(string path) =>
+        OurPlanPackageFormat.HasPackageExtension(path)
+            ? Path.GetFileNameWithoutExtension(path)
+            : Path.GetFileName(path);
+
     private void OpenJobFromJobsRootDialog()
     {
         string initial = Directory.Exists(_settings.JobsRootPath)
             ? _settings.JobsRootPath
             : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        string? root = SelectFolder("Select folder with OurPlaneCore jobs", initial);
+        string? root = SelectFolder("Select folder with OurPlanCore jobs", initial);
         if (root == null)
             return;
 
@@ -173,8 +276,7 @@ public partial class MainWindow
             .ToList();
         if (jobs.Count == 0)
         {
-            MessageBox.Show("No OurPlaneCore jobs found in configured job folders.", "Open Jobs Folder",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("No OurPlanCore jobs found in configured job folders.");
             return;
         }
 
@@ -183,6 +285,7 @@ public partial class MainWindow
             _settings.JobsRootPath,
             SetRecentJobPinned,
             RemoveRecentJob,
+            RemoveJobsRoot,
             AppSettingsStore.CurrentJobsRootPaths(_settings))
         {
             Owner = this,
@@ -190,79 +293,257 @@ public partial class MainWindow
         if (dialog.ShowDialog() != true)
             return;
 
-        HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath);
+        HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath, dialog.SelectedJobsRootPath);
     }
 
-    private void CreateJobFromDialog()
+    private void CreateJobFromDialog(string? preferredParent = null)
     {
-        string? parent = SelectFolder("Choose parent folder for the new job", _settings.JobsRootPath);
-        if (parent == null)
+        string? pdfFolder = SelectFolder("Select folder with PDFs for the new project", NewJobInitialFolder(preferredParent));
+        if (pdfFolder == null)
             return;
 
-        string? name = ShowInputDialog("Job name:", "New Job", "New Job");
+        IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(pdfFolder);
+        if (pdfPaths.Count == 0)
+        {
+            PostStatusInfo("No PDF files were found in the selected folder or its subfolders.");
+            return;
+        }
+
+        string? name = ShowInputDialog("Project name:", DefaultNewJobName(pdfFolder), "New Project");
         if (string.IsNullOrWhiteSpace(name))
             return;
 
-        try
+        if (CreateNewPackageProject(name, out OurPlanCoreJob? createdJob, preferredParent) && createdJob != null)
+            QueuePdfImportForNewJob(pdfPaths, pdfFolder, createdJob);
+    }
+
+    private void QueuePdfImportForNewJob(
+        IReadOnlyList<string> pdfPaths,
+        string pdfFolder,
+        OurPlanCoreJob expectedJob)
+    {
+        TxtStatus.Text = $"New job created. Importing {pdfPaths.Count} PDF file(s) from {pdfFolder}.";
+        Dispatcher.BeginInvoke(
+            new Action(async () =>
+            {
+                await RunAsyncUiHandler(
+                    () => ImportPdfPathsAsync(
+                        pdfPaths,
+                        this,
+                        confirmPageNames: false,
+                        expectedJob: expectedJob),
+                    "Import PDF failed.",
+                    "Import PDF");
+                if (_currentJob != null &&
+                    SameJobPath(_currentJob.RootPath, expectedJob.RootPath) &&
+                    HasCurrentPackageSession)
+                {
+                    _currentPackageSession!.HasUnpackagedChanges = true;
+                    TrySaveCurrentPackage("new project PDF import");
+                }
+            }),
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private void CreateBlankJobFromDialog(string? preferredParent = null)
+    {
+        string? name = ShowInputDialog("Project name:", "New Project", "Blank Project");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        if (CreateNewPackageProject(name, out OurPlanCoreJob? job, preferredParent) && job != null)
+            TxtStatus.Text = $"Blank project created: {job.Name}. Use Blank Sheet to add an empty sheet.";
+    }
+
+    private static string DefaultNewJobName(string pdfFolder)
+    {
+        string clean = pdfFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string name = Path.GetFileName(clean);
+        return string.IsNullOrWhiteSpace(name) ? "New Job" : name;
+    }
+
+    private string? ResolveNewJobParent(string? preferredParent)
+    {
+        foreach (string candidate in NewJobParentCandidates(preferredParent))
         {
-            _settings.JobsRootPath = parent;
-            AppSettingsStore.AddJobsRoot(_settings, parent);
-            SaveAppSettings();
-            var job = OurPlaneCoreJobStore.CreateJob(parent, name);
-            OpenJob(job.RootPath);
+            if (Directory.Exists(candidate))
+                return candidate;
         }
-        catch (Exception ex)
+
+        return null;
+    }
+
+    private string? NewJobInitialFolder(string? preferredParent)
+    {
+        foreach (string candidate in NewJobParentCandidates(preferredParent))
         {
-            MessageBox.Show($"Cannot create job:\n{ex.Message}", "New Job",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
+            if (Directory.Exists(candidate))
+                return candidate;
+        }
+
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        return Directory.Exists(desktop) ? desktop : null;
+    }
+
+    private IEnumerable<string> NewJobParentCandidates(string? preferredParent)
+    {
+        if (!string.IsNullOrWhiteSpace(preferredParent))
+            yield return preferredParent.Trim();
+
+        if (HasCurrentPackageSession)
+        {
+            string? artifactParent = Path.GetDirectoryName(_currentPackageSession!.PackagePath);
+            if (!string.IsNullOrWhiteSpace(artifactParent))
+                yield return artifactParent;
+        }
+        else if (_currentJob != null)
+        {
+            string? currentParent = Path.GetDirectoryName(_currentJob.RootPath);
+            if (!string.IsNullOrWhiteSpace(currentParent))
+                yield return currentParent;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_settings.JobsRootPath))
+            yield return _settings.JobsRootPath.Trim();
+
+        foreach (string root in AppSettingsStore.CurrentJobsRootPaths(_settings))
+        {
+            if (!string.IsNullOrWhiteSpace(root))
+                yield return root.Trim();
+        }
+
+        foreach (var recent in _settings.RecentJobs ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(recent.Path))
+                continue;
+
+            string? recentParent = Path.GetDirectoryName(recent.Path);
+            if (!string.IsNullOrWhiteSpace(recentParent))
+                yield return recentParent;
         }
     }
 
-    private void CreateSampleJob()
+    private void CreateSampleJob(string? preferredParent = null)
     {
-        string parent = Directory.Exists(_settings.JobsRootPath)
+        string parent = !string.IsNullOrWhiteSpace(preferredParent) && Directory.Exists(preferredParent)
+            ? preferredParent
+            : Directory.Exists(_settings.JobsRootPath)
             ? _settings.JobsRootPath
             : SampleJobService.DefaultJobsRoot;
+        if (!PrepareCurrentJobForSwitch())
+            return;
 
+        OurPlanManagedWorkspaceReservation? reservation = null;
+        OurPlanPackageSession? packageSession = null;
         try
         {
             Directory.CreateDirectory(parent);
             _settings.JobsRootPath = parent;
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
-            OurPlaneCoreJob job = SampleJobService.CreateSampleJob(parent);
-            OpenJob(job.RootPath);
-            TxtStatus.Text = $"Sample job created: {job.Name}.";
+
+            (string displayName, string packagePath) = UniqueSamplePackageDestination(parent);
+            OurPlanManagedWorkspaceReservation activeReservation =
+                OurPlanPackageWorkspace.ReserveManagedWorkspace(displayName);
+            reservation = activeReservation;
+            (OurPlanCoreJob managedJob, OurPlanPackageSession createdSession) =
+                RunResponsivePackageOperation(() =>
+                {
+                    OurPlanCoreJob stagedJob = SampleJobService.CreateSampleJob(
+                        activeReservation.ImportParentRoot);
+                    OurPlanCoreJob completedJob = OurPlanPackageWorkspace.CompleteManagedWorkspace(
+                        activeReservation,
+                        stagedJob.RootPath);
+                    OurPlanPackageSession session = OurPlanPackageWriter.SaveAs(
+                        completedJob.RootPath,
+                        packagePath,
+                        displayName,
+                        overwriteExisting: false,
+                        projectId: activeReservation.ProjectId);
+                    return (completedJob, session);
+                });
+            packageSession = createdSession;
+
+            _openingPackageSession = createdSession;
+            // Re-enter OpenJob's checkpointed switch preparation after sample generation.
+            if (!OpenJob(managedJob.RootPath))
+            {
+                OurPlanPackageWorkspace.MarkSessionClosed(createdSession);
+                throw new IOException(
+                    $"The sample .ourplan file was created at '{createdSession.PackagePath}', " +
+                    "but its managed working copy could not be opened safely.");
+            }
+
+            createdSession.HasUnpackagedChanges = true;
+            if (!TrySaveCurrentPackage("sample project initialization"))
+                return;
+            TxtStatus.Text = $"Sample project created: {managedJob.Name}.";
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Cannot create sample job:\n{ex.Message}", "Sample Job",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
+            AppLog.Error(ex, "Sample project creation failed.");
+            MessageBox.Show(
+                $"Cannot create sample project:\n{ex.Message}",
+                "Sample Project",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            _openingPackageSession = null;
+            if (reservation != null && packageSession == null)
+                OurPlanPackageWorkspace.AbandonManagedWorkspace(reservation);
         }
     }
 
-    private void OpenJobSafely(string folder)
+    private static (string DisplayName, string PackagePath) UniqueSamplePackageDestination(
+        string parent)
+    {
+        const string baseName = "OurPlanCore Guide Sample";
+        string displayName = baseName;
+        for (int index = 2; ; index++)
+        {
+            string safeName = OurPlanCoreJobStore.SanitizeName(displayName, 120);
+            string folderPath = Path.Combine(parent, safeName);
+            string packagePath = folderPath + OurPlanPackageFormat.Extension;
+            if (!Directory.Exists(folderPath) &&
+                !Directory.Exists(packagePath) &&
+                !File.Exists(packagePath))
+            {
+                return (displayName, packagePath);
+            }
+
+            displayName = $"{baseName} {index}";
+        }
+    }
+
+    private bool OpenJobSafely(string folder)
     {
         if (string.IsNullOrWhiteSpace(folder))
-            return;
+            return false;
 
         try
         {
-            OpenJob(folder);
+            return OpenProjectPathSafely(folder);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Cannot open job:\n{ex.Message}", "Open Job",
                             MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
     }
 
-    private void QueueRecentJobThumbnailGeneration(OurPlaneCoreJob job)
+    private void QueueRecentJobThumbnailGeneration(OurPlanCoreJob job, string documentPath)
     {
-        string jobRoot = job.RootPath;
+        string identityPath = documentPath;
         Task.Run(() =>
         {
-            bool ok = JobThumbnailService.TryCreateThumbnail(job, out string thumbnailPath, out string error);
+            bool ok = JobThumbnailService.TryCreateThumbnail(
+                job,
+                identityPath,
+                out string thumbnailPath,
+                out string error);
             return (ok, thumbnailPath, error);
         }).ContinueWith(task =>
         {
@@ -273,7 +554,7 @@ public partial class MainWindow
             if (!ok)
                 return;
 
-            AppSettingsStore.UpdateRecentJobThumbnail(_settings, jobRoot, thumbnailPath);
+            AppSettingsStore.UpdateRecentJobThumbnail(_settings, identityPath, thumbnailPath);
             SaveAppSettings();
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
@@ -290,12 +571,18 @@ public partial class MainWindow
         SaveAppSettings();
     }
 
-    private static string FormatRecentJobTime(string value)
+    private void RemoveJobsRoot(string rootPath)
+    {
+        AppSettingsStore.RemoveJobsRoot(_settings, rootPath);
+        SaveAppSettings();
+    }
+
+    private static DateTime? ParseRecentJobTime(string value)
     {
         if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime utc))
-            return "";
+            return null;
 
-        return utc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+        return utc;
     }
 
     private static string RootForJobPath(string jobPath, IEnumerable<string> roots)

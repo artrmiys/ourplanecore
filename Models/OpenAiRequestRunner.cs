@@ -8,8 +8,9 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class SmartAiRunResult
 {
@@ -25,6 +26,7 @@ public static class OpenAiRequestRunner
 {
     private const string Endpoint = "https://api.openai.com/v1/responses";
     public const string DefaultModel = "gpt-5-mini";
+    public const string QuickCropNoteModel = "gpt-5-mini";
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(2) };
     private static readonly string[] RoofRecognitionMarkerTypes =
     [
@@ -42,8 +44,70 @@ public static class OpenAiRequestRunner
         WriteIndented = true,
     };
 
+    private sealed record HttpResponseSnapshot(bool IsSuccess, int StatusCode, string Reason, string Body);
+
+    // One transient failure (network blip, 429, 5xx) used to be terminal for
+    // the whole AI request. Retry up to 3 times with growing backoff; user
+    // cancellation and 4xx errors are never retried.
+    private static async Task<(bool Sent, HttpResponseSnapshot Response, string Error)> SendWithRetriesAsync(
+        string requestJson,
+        string apiKey,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 3;
+        string lastError = "";
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+                {
+                    Content = new StringContent(requestJson, Encoding.UTF8, "application/json"),
+                };
+                httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+
+                using HttpResponseMessage response = await _http.SendAsync(httpRequest, cancellationToken);
+                string body = await response.Content.ReadAsStringAsync(cancellationToken);
+                int statusCode = (int)response.StatusCode;
+                bool transient = statusCode == 429 || statusCode >= 500;
+                if (!transient || attempt == maxAttempts)
+                {
+                    return (true,
+                        new HttpResponseSnapshot(
+                            response.IsSuccessStatusCode,
+                            statusCode,
+                            response.ReasonPhrase ?? response.StatusCode.ToString(),
+                            body),
+                        "");
+                }
+
+                lastError = $"HTTP {statusCode}";
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+            {
+                lastError = ex.Message;
+                if (attempt == maxAttempts)
+                {
+                    return (false,
+                        new HttpResponseSnapshot(false, 0, "", ""),
+                        $"OpenAI request failed after {maxAttempts} attempts: {lastError}");
+                }
+            }
+
+            int delaySeconds = attempt * attempt * 2;
+            AppLog.Warn($"OpenAI request attempt {attempt}/{maxAttempts} failed ({lastError}); retrying in {delaySeconds}s.");
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
+        }
+
+        return (false, new HttpResponseSnapshot(false, 0, "", ""), lastError);
+    }
+
     public static async Task<SmartAiRunResult> RunAsync(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartAiRequest request,
         string apiKey,
         string model,
@@ -69,7 +133,7 @@ public static class OpenAiRequestRunner
             },
         };
 
-        string? cropPath = ResolveContextPath(job, request.CropPath, job.AIContextRoot);
+        string? cropPath = ResolveContextPath(job.AIContextRoot, request.CropPath, job.AIContextRoot);
         AddImageContent(content, cropPath, "high");
 
         foreach (string contextCropPath in request.ContextCropPaths
@@ -79,18 +143,18 @@ public static class OpenAiRequestRunner
         {
             AddImageContent(
                 content,
-                ResolveContextPath(job, contextCropPath, job.AIContextRoot),
+                ResolveContextPath(job.AIContextRoot, contextCropPath, job.AIContextRoot),
                 "high");
         }
 
-        var payload = new
+        var payload = new Dictionary<string, object?>
         {
-            model = cleanModel,
-            instructions =
+            ["model"] = cleanModel,
+            ["instructions"] =
                 "You are an assistant inside a construction takeoff application. " +
                 "Use only the provided plan crop and JSON context. Be concise, " +
                 "call out uncertainty, and do not invent dimensions or quantities.",
-            input = new[]
+            ["input"] = new[]
             {
                 new
                 {
@@ -98,39 +162,189 @@ public static class OpenAiRequestRunner
                     content,
                 },
             },
-            store = false,
-            max_output_tokens = string.Equals(request.Type, "roof_recognition_request", StringComparison.OrdinalIgnoreCase)
-                ? 1800
-                : 1400,
+            ["store"] = false,
+            ["max_output_tokens"] = MaxOutputTokensForRequest(request.Type),
         };
+        AddReasoningOptions(payload, cleanModel);
 
         string requestJson = JsonSerializer.Serialize(payload, JsonOptions);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
-        {
-            Content = new StringContent(requestJson, Encoding.UTF8, "application/json"),
-        };
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
-
-        using HttpResponseMessage response = await _http.SendAsync(httpRequest, cancellationToken);
-        string body = await response.Content.ReadAsStringAsync(cancellationToken);
-        string rawPath = SaveRawResponse(job, request, body);
-        string providerResponseId = ExtractString(body, "id");
-
-        if (!response.IsSuccessStatusCode)
+        (bool sent, HttpResponseSnapshot http, string sendError) =
+            await SendWithRetriesAsync(requestJson, apiKey, cancellationToken);
+        if (!sent)
         {
             return new SmartAiRunResult
             {
                 Success = false,
-                Error = ExtractError(body, response.ReasonPhrase ?? response.StatusCode.ToString()),
+                Error = sendError,
+                Model = cleanModel,
+            };
+        }
+
+        string body = http.Body;
+        string rawPath = SaveRawResponse(job, request, body);
+        string providerResponseId = OpenAiResponseParser.ExtractString(body, "id");
+
+        if (!http.IsSuccess)
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractError(body, http.Reason),
                 Model = cleanModel,
                 ProviderResponseId = providerResponseId,
                 RawResponsePath = rawPath,
             };
         }
 
-        string output = ExtractOutputText(body);
+        string status = OpenAiResponseParser.ExtractString(body, "status");
+        if (string.Equals(status, "incomplete", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractIncompleteError(body),
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
+
+        string output = OpenAiResponseParser.ExtractOutputText(body);
         if (string.IsNullOrWhiteSpace(output))
-            output = "OpenAI returned no output text. See raw response JSON.";
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = "OpenAI returned no output text. See raw response JSON.",
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
+
+        return new SmartAiRunResult
+        {
+            Success = true,
+            OutputText = output.Trim(),
+            Model = cleanModel,
+            ProviderResponseId = providerResponseId,
+            RawResponsePath = rawPath,
+        };
+    }
+
+    public static async Task<SmartAiRunResult> RunStructuredJsonAsync(
+        OurPlanCoreJob job,
+        string requestId,
+        string prompt,
+        object jsonSchema,
+        string schemaName,
+        string instructions,
+        string apiKey,
+        string model,
+        int maxOutputTokens,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = "OPENAI_API_KEY is not set.",
+                Model = CleanModel(model),
+            };
+        }
+
+        string cleanModel = CleanModel(model);
+        var payload = new Dictionary<string, object?>
+        {
+            ["model"] = cleanModel,
+            ["instructions"] = string.IsNullOrWhiteSpace(instructions)
+                ? "Return only JSON that matches the requested schema."
+                : instructions.Trim(),
+            ["input"] = new[]
+            {
+                new
+                {
+                    role = "user",
+                    content = new[]
+                    {
+                        new
+                        {
+                            type = "input_text",
+                            text = prompt,
+                        },
+                    },
+                },
+            },
+            ["text"] = new
+            {
+                format = new
+                {
+                    type = "json_schema",
+                    name = string.IsNullOrWhiteSpace(schemaName) ? "structured_output" : schemaName.Trim(),
+                    strict = true,
+                    schema = jsonSchema,
+                },
+            },
+            ["store"] = false,
+            ["max_output_tokens"] = Math.Clamp(maxOutputTokens, 512, 12000),
+        };
+        AddReasoningOptions(payload, cleanModel);
+
+        string requestJson = JsonSerializer.Serialize(payload, JsonOptions);
+        (bool sent, HttpResponseSnapshot http, string sendError) =
+            await SendWithRetriesAsync(requestJson, apiKey, cancellationToken);
+        if (!sent)
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = sendError,
+                Model = cleanModel,
+            };
+        }
+
+        string body = http.Body;
+        string rawPath = SaveRawResponse(job, requestId, body);
+        string providerResponseId = OpenAiResponseParser.ExtractString(body, "id");
+
+        if (!http.IsSuccess)
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractError(body, http.Reason),
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
+
+        string status = OpenAiResponseParser.ExtractString(body, "status");
+        if (string.Equals(status, "incomplete", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractIncompleteError(body),
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
+
+        string output = OpenAiResponseParser.ExtractOutputText(body);
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = "OpenAI returned no output text. See raw response JSON.",
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
 
         return new SmartAiRunResult
         {
@@ -145,12 +359,60 @@ public static class OpenAiRequestRunner
     private static string CleanModel(string model) =>
         string.IsNullOrWhiteSpace(model) ? DefaultModel : model.Trim();
 
-    private static void AddImageContent(List<object> content, string? path, string detail)
+    private static int MaxOutputTokensForRequest(string requestType)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        return requestType switch
+        {
+            "quick_crop_note_request" => 4096,
+            "roof_recognition_request" => 4096,
+            "pdf_sheet_metadata_fallback" => 3000,
+            _ => 2400,
+        };
+    }
+
+    private static void AddReasoningOptions(Dictionary<string, object?> payload, string model)
+    {
+        if (!IsReasoningModel(model))
             return;
 
-        string dataUrl = $"data:image/png;base64,{Convert.ToBase64String(File.ReadAllBytes(path))}";
+        payload["reasoning"] = new { effort = "low" };
+    }
+
+    private static bool IsReasoningModel(string model)
+    {
+        string clean = model.Trim();
+        return clean.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase) ||
+               clean.StartsWith("o1", StringComparison.OrdinalIgnoreCase) ||
+               clean.StartsWith("o3", StringComparison.OrdinalIgnoreCase) ||
+               clean.StartsWith("o4", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddImageContent(List<object> content, string? path, string detail)
+    {
+        const long maxImageBytes = 25L * 1024 * 1024;
+        if (string.IsNullOrWhiteSpace(path) ||
+            !File.Exists(path) ||
+            !ProjectPathSafety.IsSafeImagePath(path))
+            return;
+
+        var info = new FileInfo(path);
+        if (info.Length is <= 0 or > maxImageBytes)
+            return;
+        byte[] bytes = File.ReadAllBytes(path);
+        using SKData data = SKData.CreateCopy(bytes);
+        using SKCodec? codec = SKCodec.Create(data);
+        if (codec == null || codec.Info.Width <= 0 || codec.Info.Height <= 0)
+            return;
+
+        string mime = codec.EncodedFormat switch
+        {
+            SKEncodedImageFormat.Jpeg => "image/jpeg",
+            SKEncodedImageFormat.Webp => "image/webp",
+            SKEncodedImageFormat.Gif => "image/gif",
+            SKEncodedImageFormat.Bmp => "image/bmp",
+            _ => "image/png",
+        };
+        string dataUrl = $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
         content.Add(new
         {
             type = "input_image",
@@ -159,7 +421,7 @@ public static class OpenAiRequestRunner
         });
     }
 
-    private static string BuildPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         if (string.Equals(request.Type, "pdf_sheet_metadata_fallback", StringComparison.OrdinalIgnoreCase))
             return BuildPdfSheetMetadataPrompt(job, request);
@@ -172,6 +434,9 @@ public static class OpenAiRequestRunner
 
         if (string.Equals(request.Type, "roof_recognition_request", StringComparison.OrdinalIgnoreCase))
             return BuildRoofRecognitionPrompt(job, request);
+
+        if (string.Equals(request.Type, "quick_crop_note_request", StringComparison.OrdinalIgnoreCase))
+            return BuildQuickCropNotePrompt(job, request);
 
         var sb = new StringBuilder();
         sb.AppendLine("Analyze this takeoff request.");
@@ -214,7 +479,37 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildRoofRecognitionPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildQuickCropNotePrompt(OurPlanCoreJob job, SmartAiRequest request)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Read the attached construction-plan crop and create note text for a visible sheet note.");
+        sb.AppendLine("Return only the note text. Do not include JSON, explanations, or markdown fences.");
+        sb.AppendLine();
+        sb.AppendLine("Formatting rules:");
+        sb.AppendLine("- Preserve the visible content as closely as possible.");
+        sb.AppendLine("- If the crop is a table or schedule, return a compact Markdown table with the same row/column meaning.");
+        sb.AppendLine("- If the crop is a callout, key note, dimension note, or title block fragment, keep the line breaks and labels.");
+        sb.AppendLine("- If there are abbreviations, keep them exactly as shown unless unreadable.");
+        sb.AppendLine("- If the crop is unreadable or empty, return: [unreadable]");
+        sb.AppendLine();
+        sb.AppendLine("Request:");
+        sb.AppendLine(request.Prompt);
+        sb.AppendLine();
+        sb.AppendLine("Request JSON:");
+        sb.AppendLine(JsonSerializer.Serialize(request, JsonOptions));
+
+        string? layerPath = ResolveContextPath(job, request.LayerManifestPath, job.RootPath);
+        if (!string.IsNullOrWhiteSpace(layerPath) && File.Exists(layerPath))
+        {
+            sb.AppendLine();
+            sb.AppendLine("Page layers.json:");
+            sb.AppendLine(File.ReadAllText(layerPath));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string BuildRoofRecognitionPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Detect reviewable roof marker candidates from a construction-plan sheet crop.");
@@ -299,7 +594,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildFindSimilarMarkerPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildFindSimilarMarkerPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         SmartAiMarker? marker = FindSourceMarker(job, request);
         var sb = new StringBuilder();
@@ -400,7 +695,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static void AppendMarkerFeedbackContext(OurPlaneCoreJob job, SmartAiMarker marker, StringBuilder sb)
+    private static void AppendMarkerFeedbackContext(OurPlanCoreJob job, SmartAiMarker marker, StringBuilder sb)
     {
         IReadOnlyList<SmartMarkerFeedbackRecord> feedback = SmartLearningStore.LoadProjectMarkerFeedback(job)
             .Where(record =>
@@ -432,7 +727,7 @@ public static class OpenAiRequestRunner
         }
     }
 
-    private static string BuildCropBookmarkPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildCropBookmarkPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Analyze this bookmarked construction-plan crop.");
@@ -491,7 +786,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildPdfSheetMetadataPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildPdfSheetMetadataPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are reading a construction sheet title block for Auto Rename / Auto Scale.");
@@ -500,9 +795,9 @@ public static class OpenAiRequestRunner
         sb.AppendLine();
         sb.AppendLine("JSON shape:");
         sb.AppendLine("{");
-        sb.AppendLine("  \"sheet_label\": \"S-100\",");
-        sb.AppendLine("  \"sheet_key\": \"s100\",");
-        sb.AppendLine("  \"sheet_title\": \"FOUNDATION PLAN\",");
+        sb.AppendLine("  \"sheet_label\": \"A-700\",");
+        sb.AppendLine("  \"sheet_key\": \"a700\",");
+        sb.AppendLine("  \"sheet_title\": \"FINISH PLAN\",");
         sb.AppendLine("  \"suffix\": \"f\",");
         sb.AppendLine("  \"skip_scale\": false,");
         sb.AppendLine("  \"selected_scale_text\": \"1/8\\\" = 1'0\\\"\",");
@@ -510,19 +805,9 @@ public static class OpenAiRequestRunner
         sb.AppendLine("  \"warnings\": []");
         sb.AppendLine("}");
         sb.AppendLine();
-        sb.AppendLine("Suffix rules:");
-        sb.AppendLine("- GENERAL NOTES / NOTES -> n, skip scale");
-        sb.AppendLine("- SCHEDULE / SCHEDULES -> sc, skip scale");
-        sb.AppendLine("- DETAILS / DETAIL / typical details -> d, skip scale");
-        sb.AppendLine("- FOUNDATION PLAN -> f");
-        sb.AppendLine("- FIRST/1ST FLOOR -> 1st; SECOND/2ND -> 2nd; THIRD/3RD -> 3rd; FOURTH/4TH -> 4th");
-        sb.AppendLine("- ROOF / ROOF FRAMING -> rf");
-        sb.AppendLine("- SECTION / SECTIONS -> sec and scale eligible");
-        sb.AppendLine("- UNIT PLANS -> u; WALL/PARTITION TYPES -> wt; FLOOR TYPES/FLOOR-CEILING -> ft");
-        sb.AppendLine();
-        sb.AppendLine("Allowed scales:");
-        sb.AppendLine("1/32\" = 1'0\", 3/64\" = 1'0\", 1/16\" = 1'0\", 3/32\" = 1'0\", 1/10\" = 1'0\", 1/8\" = 1'0\", 3/16\" = 1'0\", 1/4\" = 1'0\", 3/8\" = 1'0\", 1/2\" = 1'0\", 3/4\" = 1'0\", 1\" = 1'0\", 1-1/2\" = 1'0\", 3\" = 1'0\", 1\" = 1\".");
-        sb.AppendLine("If the title block says AS NOTED and no body scale is visible in the crop, leave selected_scale_text empty and add a warning.");
+        sb.AppendLine("Active naming and scale policy:");
+        foreach (string policyLine in SheetMetadataPromptPolicy.BuildPromptLines())
+            sb.AppendLine(policyLine);
         sb.AppendLine("If unreadable, leave uncertain fields empty and set confidence to gpt-image-low.");
         sb.AppendLine();
         sb.AppendLine("Request prompt:");
@@ -542,7 +827,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static SmartAiMarker? FindSourceMarker(OurPlaneCoreJob job, SmartAiRequest request)
+    private static SmartAiMarker? FindSourceMarker(OurPlanCoreJob job, SmartAiRequest request)
     {
         string markerId = ExtractSourceMarkerId(request.MeasurementSummary);
         if (string.IsNullOrWhiteSpace(markerId))
@@ -554,14 +839,14 @@ public static class OpenAiRequestRunner
             return marker;
         }
 
-        string? requestCropPath = ResolveContextPath(job, request.CropPath, job.AIContextRoot);
+        string? requestCropPath = ResolveContextPath(job.AIContextRoot, request.CropPath, job.AIContextRoot);
         if (string.IsNullOrWhiteSpace(requestCropPath))
             return null;
 
         string normalizedRequestCrop = Path.GetFullPath(requestCropPath);
         return SmartContextStore.LoadAiMarkers(job).FirstOrDefault(marker =>
         {
-            string? markerCropPath = ResolveContextPath(job, marker.CropPath, job.AIContextRoot);
+            string? markerCropPath = ResolveContextPath(job.AIContextRoot, marker.CropPath, job.AIContextRoot);
             return !string.IsNullOrWhiteSpace(markerCropPath) &&
                    string.Equals(
                        Path.GetFullPath(markerCropPath),
@@ -594,93 +879,32 @@ public static class OpenAiRequestRunner
 
     private static string? ResolveContextPath(string jobRoot, string value, string basePath)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-
-        return Path.IsPathFullyQualified(value)
-            ? value
-            : Path.GetFullPath(Path.Combine(basePath, value));
+        return ProjectPathSafety.ResolveInside(jobRoot, value, basePath);
     }
 
-    private static string? ResolveContextPath(OurPlaneCoreJob job, string value, string basePath) =>
+    private static string? ResolveContextPath(OurPlanCoreJob job, string value, string basePath) =>
         ResolveContextPath(job.RootPath, value, basePath);
 
-    private static string SaveRawResponse(OurPlaneCoreJob job, SmartAiRequest request, string body)
+    private static string SaveRawResponse(OurPlanCoreJob job, SmartAiRequest request, string body)
     {
-        string path = Path.Combine(job.AIContextRoot, "responses", $"{request.Id}.openai.raw.json");
+        return SaveRawResponse(job, request.Id, body);
+    }
+
+    private static string SaveRawResponse(OurPlanCoreJob job, string requestId, string body)
+    {
+        string cleanRequestId = string.IsNullOrWhiteSpace(requestId)
+            ? $"openai_{DateTime.UtcNow:yyyyMMdd_HHmmss}"
+            : requestId.Trim();
+        string path = SmartContextFileId.FilePath(
+            job,
+            "responses",
+            cleanRequestId,
+            ".openai.raw.json",
+            "AI request id");
+        JobWriteAccess.Demand(path, "save raw AI response");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
-        File.WriteAllText(path, body);
+        IoUtil.WriteAllTextAtomic(path, body);
         return Path.GetRelativePath(job.RootPath, path);
     }
 
-    private static string ExtractOutputText(string json)
-    {
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(json);
-            var parts = new List<string>();
-            CollectOutputText(doc.RootElement, parts);
-            return string.Join(Environment.NewLine, parts.Where(part => !string.IsNullOrWhiteSpace(part)));
-        }
-        catch
-        {
-            return "";
-        }
-    }
-
-    private static void CollectOutputText(JsonElement element, List<string> parts)
-    {
-        if (element.ValueKind == JsonValueKind.Object)
-        {
-            if (element.TryGetProperty("type", out JsonElement type) &&
-                string.Equals(type.GetString(), "output_text", StringComparison.Ordinal) &&
-                element.TryGetProperty("text", out JsonElement text))
-            {
-                parts.Add(text.GetString() ?? "");
-            }
-
-            foreach (JsonProperty prop in element.EnumerateObject())
-                CollectOutputText(prop.Value, parts);
-        }
-        else if (element.ValueKind == JsonValueKind.Array)
-        {
-            foreach (JsonElement child in element.EnumerateArray())
-                CollectOutputText(child, parts);
-        }
-    }
-
-    private static string ExtractError(string json, string fallback)
-    {
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("error", out JsonElement error) &&
-                error.ValueKind == JsonValueKind.Object &&
-                error.TryGetProperty("message", out JsonElement message))
-            {
-                return message.GetString() ?? fallback;
-            }
-        }
-        catch
-        {
-            // Fall through to the HTTP reason phrase.
-        }
-
-        return fallback;
-    }
-
-    private static string ExtractString(string json, string propertyName)
-    {
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(json);
-            return doc.RootElement.TryGetProperty(propertyName, out JsonElement value)
-                ? value.GetString() ?? ""
-                : "";
-        }
-        catch
-        {
-            return "";
-        }
-    }
 }

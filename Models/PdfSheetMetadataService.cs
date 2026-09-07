@@ -8,7 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class PdfSheetMetadata
 {
@@ -20,6 +20,15 @@ public sealed class PdfSheetMetadata
 
     [JsonPropertyName("source")]
     public string Source { get; set; } = "";
+
+    [JsonPropertyName("detector_version")]
+    public string DetectorVersion { get; set; } = "legacy-v1";
+
+    [JsonPropertyName("detector_preset")]
+    public string DetectorPreset { get; set; } = "";
+
+    [JsonPropertyName("detector_config_fingerprint")]
+    public string DetectorConfigFingerprint { get; set; } = "";
 
     [JsonPropertyName("pdf_path")]
     public string PdfPath { get; set; } = "";
@@ -48,11 +57,41 @@ public sealed class PdfSheetMetadata
     [JsonPropertyName("sheet_title")]
     public string SheetTitle { get; set; } = "";
 
+    [JsonPropertyName("title_source")]
+    public string TitleSource { get; set; } = "";
+
+    [JsonPropertyName("title_confidence")]
+    public string TitleConfidence { get; set; } = "";
+
+    [JsonPropertyName("title_evidence")]
+    public string TitleEvidence { get; set; } = "";
+
     [JsonPropertyName("suffix")]
     public string Suffix { get; set; } = "";
 
+    [JsonPropertyName("suffix_source")]
+    public string SuffixSource { get; set; } = "";
+
+    [JsonPropertyName("suffix_confidence")]
+    public string SuffixConfidence { get; set; } = "";
+
+    [JsonPropertyName("suffix_evidence")]
+    public string SuffixEvidence { get; set; } = "";
+
+    [JsonPropertyName("suffix_scale_policy")]
+    public string SuffixScalePolicy { get; set; } = "";
+
+    [JsonPropertyName("suffix_override_action")]
+    public string SuffixOverrideAction { get; set; } = "";
+
+    [JsonPropertyName("suffix_explicit_clear")]
+    public bool SuffixExplicitClear { get; set; }
+
     [JsonPropertyName("skip_scale")]
     public bool SkipScale { get; set; }
+
+    [JsonPropertyName("skip_reason")]
+    public string SkipReason { get; set; } = "";
 
     [JsonPropertyName("title_scale_text")]
     public string TitleScaleText { get; set; } = "";
@@ -78,8 +117,23 @@ public sealed class PdfSheetMetadata
     [JsonPropertyName("selected_scale_m_per_pt")]
     public double SelectedScaleMetersPerPt { get; set; }
 
+    [JsonPropertyName("scale_source")]
+    public string ScaleSource { get; set; } = "";
+
+    [JsonPropertyName("scale_override_action")]
+    public string ScaleOverrideAction { get; set; } = "";
+
+    [JsonPropertyName("scale_confidence")]
+    public string ScaleConfidence { get; set; } = "";
+
+    [JsonPropertyName("scale_evidence")]
+    public string ScaleEvidence { get; set; } = "";
+
     [JsonPropertyName("rename_candidate")]
     public string RenameCandidate { get; set; } = "";
+
+    [JsonPropertyName("rename_override_applied")]
+    public bool RenameOverrideApplied { get; set; }
 
     [JsonPropertyName("has_details")]
     public bool HasDetails { get; set; }
@@ -105,23 +159,31 @@ public sealed class PdfSheetMetadata
     public string ProposedPageName()
     {
         if (!string.IsNullOrWhiteSpace(RenameCandidate))
-            return RenameCandidate.Trim();
+            return PdfSheetMetadataService.VisibleSheetDisplayName(RenameCandidate).ToLowerInvariant();
 
-        string key = EffectiveSheetKey.Trim();
+        string key = (EffectiveSheetKey ?? "").Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(key))
-            return "-";
-        return string.IsNullOrWhiteSpace(Suffix)
+            return "";
+        string suffix = (Suffix ?? "").Trim().ToLowerInvariant();
+        string proposed = string.IsNullOrWhiteSpace(Suffix)
             ? key
-            : $"{key} {Suffix.Trim()}";
+            : $"{key} {suffix}";
+        return PdfSheetMetadataService.VisibleSheetDisplayName(proposed);
     }
 
     public bool CanApplyScale() =>
         !SkipScale && SelectedScaleMetersPerPt > 0;
 }
 
-public static class PdfSheetMetadataService
+public static partial class PdfSheetMetadataService
 {
-    private const double PdfPointMeters = 25.4 / 72.0 / 1000.0;
+    private const double PdfPointMeters = ViewportConstants.PdfPointMeters;
+
+    public static string VisibleSheetDisplayName(string value)
+    {
+        string clean = Regex.Replace((value ?? "").Trim(), @"\s+", " ");
+        return Regex.Replace(clean, @"\s+\(\d+\)\s*$", "", RegexOptions.CultureInvariant).Trim();
+    }
 
     public static string FormatImperialScale(double scaleMetersPerPt)
     {
@@ -129,7 +191,16 @@ public static class PdfSheetMetadataService
         return FormatImperialScaleRatio(ratio);
     }
 
-    public static string FormatImperialScaleRatio(double ratio)
+    public static string FormatImperialScaleExact(double scaleMetersPerPt)
+    {
+        double ratio = scaleMetersPerPt > 0 ? scaleMetersPerPt / PdfPointMeters : 0;
+        return FormatImperialScaleRatioCore(ratio, snapToNearbyPreset: false);
+    }
+
+    public static string FormatImperialScaleRatio(double ratio) =>
+        FormatImperialScaleRatioCore(ratio, snapToNearbyPreset: true);
+
+    private static string FormatImperialScaleRatioCore(double ratio, bool snapToNearbyPreset)
     {
         if (ratio <= 0)
             return "";
@@ -137,10 +208,15 @@ public static class PdfSheetMetadataService
         (double Ratio, string Label)[] presets =
         [
             (1,   "1\" = 1\""),
+            (2,   "6\" = 1'0\""),
+            (3,   "4\" = 1'0\""),
             (4,   "3\" = 1'0\""),
-            (8,   "1-1/2\" = 1'0\""),
+            (6,   "2\" = 1'0\""),
+            (8,   "1 1/2\" = 1'0\""),
+            (9.6, "1 1/4\" = 1'0\""),
             (12,  "1\" = 1'0\""),
             (16,  "3/4\" = 1'0\""),
+            (19.2,"5/8\" = 1'0\""),
             (24,  "1/2\" = 1'0\""),
             (32,  "3/8\" = 1'0\""),
             (48,  "1/4\" = 1'0\""),
@@ -153,9 +229,16 @@ public static class PdfSheetMetadataService
 
         foreach (var preset in presets)
         {
-            if (Math.Abs(ratio - preset.Ratio) <= 0.25)
+            if (snapToNearbyPreset && Math.Abs(ratio - preset.Ratio) <= 0.25)
+                return preset.Label;
+            if (!snapToNearbyPreset && Math.Abs(ratio - preset.Ratio) <= 0.000000001)
                 return preset.Label;
         }
+
+        double feetPerInch = ratio / 12.0;
+        double roundedFeet = Math.Round(feetPerInch);
+        if (roundedFeet >= 10 && Math.Abs(feetPerInch - roundedFeet) <= 0.05)
+            return $"1\" = {roundedFeet:0}'0\"";
 
         double inchesPerFoot = 12.0 / ratio;
         string inchLabel = FormatScaleInches(inchesPerFoot);
@@ -182,7 +265,7 @@ public static class PdfSheetMetadataService
             int numerator = remainder / divisor;
             int denominator = 64 / divisor;
             return whole > 0
-                ? $"{whole}-{numerator}/{denominator}"
+                ? $"{whole} {numerator}/{denominator}"
                 : $"{numerator}/{denominator}";
         }
 
@@ -209,9 +292,12 @@ public static class PdfSheetMetadataService
         string.Equals(metadata.Source, "pdf-empty-text", StringComparison.OrdinalIgnoreCase) ||
         string.IsNullOrWhiteSpace(metadata.SheetLabel) ||
         string.IsNullOrWhiteSpace(metadata.SheetTitle) ||
+        (string.IsNullOrWhiteSpace(metadata.Suffix) &&
+         PdfSheetMetadataPolicy.ConfidenceLevel(metadata.SuffixConfidence) == SheetMetadataConfidence.Low) ||
         (!metadata.SkipScale &&
          metadata.SelectedScaleMetersPerPt <= 0 &&
-         IsScaleLikelyNeeded(metadata.Suffix));
+         (string.IsNullOrWhiteSpace(metadata.Suffix) ||
+          SheetMetadataRulesService.Active.IsScaleCapableSuffix(metadata.Suffix)));
 
     public static bool TrySaveFallbackCrop(
         PageInfo page,
@@ -262,7 +348,7 @@ public static class PdfSheetMetadataService
     }
 
     public static bool TryAnalyzePage(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         out PdfSheetMetadata metadata,
         out string error)
@@ -277,7 +363,7 @@ public static class PdfSheetMetadataService
         PageInfo page,
         out PdfSheetMetadata metadata,
         out string error,
-        OurPlaneCoreJob? job = null)
+        OurPlanCoreJob? job = null)
     {
         metadata = new PdfSheetMetadata();
         error = "";
@@ -286,6 +372,9 @@ public static class PdfSheetMetadataService
         {
             Pdf = page.PdfPath,
             Page = page.PdfPage,
+            SheetMetadataConfig = SheetMetadataRulesService.Active.Clone(),
+            CropTemplate = job == null ? null : PdfSheetMetadataCropService.LoadTemplate(job),
+            CropTemplates = job == null ? null : PdfSheetMetadataCropService.LoadCatalog(job),
         };
 
         if (!PdfLayerRenderService.TryInvokeHelper("sheetmeta", request, out SheetMetaResponse? response, out error))
@@ -303,7 +392,7 @@ public static class PdfSheetMetadataService
     }
 
     public static bool TryAnalyzeAndSave(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         out PdfSheetMetadata metadata,
         out string error)
@@ -311,16 +400,12 @@ public static class PdfSheetMetadataService
         if (!TryAnalyzePage(job, page, out metadata, out error))
             return false;
 
-        OurPlaneCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
-        SmartLearningStore.AppendSheetFeedback(
-            job,
-            page,
-            BuildLearningRecord(page, metadata, "pending_review", "Detection saved from PDF metadata analyze."));
+        OurPlanCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
         return true;
     }
 
     private static bool TryAnalyzeFromResolvedSource(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         out PdfSheetMetadata metadata,
         out string error)
@@ -332,7 +417,7 @@ public static class PdfSheetMetadataService
         var candidatePdfs = ResolveSourcePdfCandidates(job).ToList();
         if (candidatePdfs.Count == 0)
         {
-            error = $"Source PDF is missing and no E-Wood/source candidate folder was found: {page.PdfPath}";
+            error = $"Source PDF is missing and no source candidate folder was found: {page.PdfPath}";
             return false;
         }
 
@@ -347,6 +432,7 @@ public static class PdfSheetMetadataService
             }
             catch (Exception ex)
             {
+                AppLog.Warn(ex, $"PDF source scan failed for {pdf}");
                 scanErrors.Add($"{Path.GetFileName(pdf)}: {ex.Message}");
                 continue;
             }
@@ -393,16 +479,16 @@ public static class PdfSheetMetadataService
         return false;
     }
 
-    private static IEnumerable<string> ResolveSourcePdfCandidates(OurPlaneCoreJob job)
+    private static IEnumerable<string> ResolveSourcePdfCandidates(OurPlanCoreJob job)
     {
         var roots = new List<string>();
         string jobSources = Path.Combine(job.RootPath, "sources");
         if (Directory.Exists(jobSources))
             roots.Add(jobSources);
 
-        string? ewoodSource = ResolveEWoodSourceRoot(job.RootPath);
-        if (!string.IsNullOrWhiteSpace(ewoodSource) && Directory.Exists(ewoodSource))
-            roots.Add(ewoodSource);
+        string? projectSource = ResolveProjectSourceRoot(job.RootPath);
+        if (!string.IsNullOrWhiteSpace(projectSource) && Directory.Exists(projectSource))
+            roots.Add(projectSource);
 
         return roots
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -421,7 +507,7 @@ public static class PdfSheetMetadataService
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static string? ResolveEWoodSourceRoot(string jobRoot)
+    private static string? ResolveProjectSourceRoot(string jobRoot)
     {
         string full = Path.GetFullPath(jobRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         string marker = Path.Combine("3.Final_for_check", "---", "Jobs");
@@ -439,79 +525,11 @@ public static class PdfSheetMetadataService
 
     private static string ExtractSheetKey(string value)
     {
-        Match match = Regex.Match(value ?? "", @"\b([A-Za-z]{1,3})-?(\d{1,4}[A-Za-z]?)\b");
+        Match match = Regex.Match(value ?? "", @"\b([A-Za-z]{1,3})-?(\d{1,4}(?:\.\d+)?[A-Za-z]?)\b");
         if (!match.Success)
             return "";
         return (match.Groups[1].Value + match.Groups[2].Value).ToLowerInvariant();
     }
-
-    private static bool IsScaleLikelyNeeded(string suffix) =>
-        string.IsNullOrWhiteSpace(suffix) ||
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "1st", "2nd", "3rd", "4th", "5th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw",
-        }.Contains(suffix);
-
-    public static SmartSheetLearningRecord BuildLearningRecord(
-        PageInfo page,
-        PdfSheetMetadata metadata,
-        string userOutcome,
-        string note,
-        SmartSheetLearningDecision? final = null)
-    {
-        var detection = new SmartSheetLearningDecision
-        {
-            PageName = metadata.ProposedPageName(),
-            SheetLabel = metadata.SheetLabel,
-            SheetKey = metadata.EffectiveSheetKey,
-            SheetTitle = metadata.SheetTitle,
-            Suffix = metadata.Suffix,
-            SkipScale = metadata.SkipScale,
-            ScaleText = metadata.EffectiveScaleText,
-            ScaleMetersPerPt = metadata.SelectedScaleMetersPerPt,
-            Confidence = string.IsNullOrWhiteSpace(metadata.Confidence) ? metadata.Source : metadata.Confidence,
-        };
-
-        return new SmartSheetLearningRecord
-        {
-            EventType = "sheet_feedback",
-            Source = string.IsNullOrWhiteSpace(metadata.Source) ? "pdf-text" : metadata.Source,
-            UserOutcome = userOutcome,
-            SourcePdf = metadata.PdfPath,
-            PdfPage = metadata.PageIndex,
-            Detection = detection,
-            Final = final ?? new SmartSheetLearningDecision(),
-            Layers = metadata.Layers
-                .OrderBy(layer => layer.Number)
-                .Select(layer => new PdfLayerInfo
-                {
-                    Number = layer.Number,
-                    Name = layer.Name,
-                    IsOn = layer.IsOn,
-                })
-                .ToList(),
-            Warnings = metadata.Warnings.ToList(),
-            Note = note,
-        };
-    }
-
-    public static SmartSheetLearningDecision FinalDecision(
-        PageInfo page,
-        PdfSheetMetadata metadata,
-        string pageName,
-        double scaleMetersPerPt) =>
-        new()
-        {
-            PageName = pageName,
-            SheetLabel = metadata.SheetLabel,
-            SheetKey = metadata.EffectiveSheetKey,
-            SheetTitle = metadata.SheetTitle,
-            Suffix = metadata.Suffix,
-            SkipScale = metadata.SkipScale,
-            ScaleText = scaleMetersPerPt > 0 ? metadata.EffectiveScaleText : "",
-            ScaleMetersPerPt = scaleMetersPerPt,
-            Confidence = "manual_review",
-        };
 
     public static bool TryBuildMetadataFromFallbackResponse(
         PageInfo page,
@@ -519,7 +537,7 @@ public static class PdfSheetMetadataService
         SmartAiResponse response,
         out PdfSheetMetadata metadata,
         out string error,
-        OurPlaneCoreJob? job = null)
+        OurPlanCoreJob? job = null)
     {
         metadata = new PdfSheetMetadata();
         error = "";
@@ -538,6 +556,9 @@ public static class PdfSheetMetadataService
                     SchemaVersion = 1,
                     GeneratedAtUtc = DateTime.UtcNow.ToString("O"),
                     Source = "gpt-image",
+                    DetectorVersion = JsonString(root, "detector_version"),
+                    DetectorPreset = JsonString(root, "detector_preset"),
+                    DetectorConfigFingerprint = JsonString(root, "detector_config_fingerprint"),
                     PdfPath = page.PdfPath,
                     PageIndex = page.PdfPage,
                     PageNumber = page.PdfPage + 1,
@@ -545,10 +566,26 @@ public static class PdfSheetMetadataService
                     SheetKey = JsonString(root, "sheet_key"),
                     NormalizedSheetName = JsonString(root, "normalized_sheet_name"),
                     SheetTitle = JsonString(root, "sheet_title"),
+                    TitleSource = JsonString(root, "title_source"),
+                    TitleConfidence = JsonString(root, "title_confidence"),
+                    TitleEvidence = JsonString(root, "title_evidence"),
                     Suffix = JsonString(root, "suffix"),
+                    SuffixSource = JsonString(root, "suffix_source"),
+                    SuffixConfidence = JsonString(root, "suffix_confidence"),
+                    SuffixEvidence = JsonString(root, "suffix_evidence"),
+                    SuffixScalePolicy = JsonString(root, "suffix_scale_policy"),
+                    SuffixOverrideAction = JsonString(root, "suffix_override_action"),
+                    SuffixExplicitClear = JsonBool(root, "suffix_explicit_clear"),
                     SkipScale = JsonBool(root, "skip_scale"),
+                    SkipReason = JsonString(root, "skip_reason"),
                     SelectedScaleText = JsonString(root, "selected_scale_text"),
                     ScaleText = JsonString(root, "scale_text"),
+                    ScaleSource = JsonString(root, "scale_source"),
+                    ScaleOverrideAction = JsonString(root, "scale_override_action"),
+                    ScaleConfidence = JsonString(root, "scale_confidence"),
+                    ScaleEvidence = JsonString(root, "scale_evidence"),
+                    RenameCandidate = JsonString(root, "rename_candidate"),
+                    RenameOverrideApplied = JsonBool(root, "rename_override_applied"),
                     Confidence = string.IsNullOrWhiteSpace(JsonString(root, "confidence"))
                         ? "gpt-image"
                         : JsonString(root, "confidence"),
@@ -574,12 +611,28 @@ public static class PdfSheetMetadataService
         return false;
     }
 
-    private static void NormalizeMetadata(PageInfo page, PdfSheetMetadata metadata, OurPlaneCoreJob? job = null)
+    private static void NormalizeMetadata(PageInfo page, PdfSheetMetadata metadata, OurPlanCoreJob? job = null)
     {
         metadata.SchemaVersion = metadata.SchemaVersion <= 0 ? 1 : metadata.SchemaVersion;
+        metadata.DetectorVersion = string.IsNullOrWhiteSpace(metadata.DetectorVersion)
+            ? "legacy-v1"
+            : metadata.DetectorVersion.Trim();
+        SheetMetadataConfig config = SheetMetadataRulesService.Active;
+        metadata.DetectorPreset = string.IsNullOrWhiteSpace(metadata.DetectorPreset)
+            ? config.PresetName
+            : metadata.DetectorPreset.Trim();
+        metadata.DetectorConfigFingerprint = string.IsNullOrWhiteSpace(metadata.DetectorConfigFingerprint)
+            ? PdfSheetMetadataPolicy.ConfigFingerprint(config)
+            : metadata.DetectorConfigFingerprint.Trim();
         metadata.PdfPath = string.IsNullOrWhiteSpace(metadata.PdfPath) ? page.PdfPath : metadata.PdfPath;
         metadata.PageIndex = metadata.PageIndex < 0 ? page.PdfPage : metadata.PageIndex;
         metadata.PageNumber = metadata.PageNumber <= 0 ? metadata.PageIndex + 1 : metadata.PageNumber;
+        metadata.Suffix = (metadata.Suffix ?? "").Trim().ToLowerInvariant();
+        metadata.SuffixSource = (metadata.SuffixSource ?? "").Trim();
+        metadata.SuffixOverrideAction = (metadata.SuffixOverrideAction ?? "").Trim();
+        metadata.ScaleSource = (metadata.ScaleSource ?? "").Trim();
+        metadata.ScaleOverrideAction = (metadata.ScaleOverrideAction ?? "").Trim();
+        metadata.RenameCandidate = (metadata.RenameCandidate ?? "").Trim();
         metadata.SheetKey = NormalizeSheetKey(metadata.SheetKey, metadata.SheetLabel);
         metadata.NormalizedSheetName = string.IsNullOrWhiteSpace(metadata.NormalizedSheetName)
             ? metadata.SheetKey
@@ -594,6 +647,31 @@ public static class PdfSheetMetadataService
             SmartLearningStore.ApplyProjectLearnedRules(job, metadata);
         SmartLearningStore.ApplyLearnedRules(metadata);
 
+        if (config.ShouldSkipScaleSuffix(
+                metadata.Suffix,
+                PdfSheetMetadataPolicy.ParseSuffixScalePolicy(metadata.SuffixScalePolicy)))
+        {
+            metadata.SkipScale = true;
+            metadata.SkipReason = string.IsNullOrWhiteSpace(metadata.SkipReason)
+                ? $"suffix '{metadata.Suffix}' is configured as no-scale"
+                : metadata.SkipReason;
+            metadata.SelectedScaleText = "";
+            metadata.ScaleText = "";
+            metadata.SelectedScaleRatio = 0;
+            metadata.SelectedScaleMetersPerPt = 0;
+        }
+        else if (!config.AllowScaleInference &&
+                 PdfSheetMetadataPolicy.IsInferredSource(metadata.ScaleSource))
+        {
+            metadata.Warnings.Add("inferred scale suppressed by active sheet metadata settings");
+            metadata.SelectedScaleText = "";
+            metadata.ScaleText = "";
+            metadata.SelectedScaleRatio = 0;
+            metadata.SelectedScaleMetersPerPt = 0;
+        }
+
+        PdfSheetMetadataPolicy.PreserveReviewedScaleClear(page, metadata, config);
+
         if (string.IsNullOrWhiteSpace(metadata.SelectedScaleText) && !string.IsNullOrWhiteSpace(metadata.ScaleText))
             metadata.SelectedScaleText = metadata.ScaleText;
         if (string.IsNullOrWhiteSpace(metadata.ScaleText) && !string.IsNullOrWhiteSpace(metadata.SelectedScaleText))
@@ -604,21 +682,50 @@ public static class PdfSheetMetadataService
             double ratio = ParseScaleRatio(metadata.EffectiveScaleText);
             metadata.SelectedScaleRatio = ratio;
             metadata.SelectedScaleMetersPerPt = ratio > 0
-                ? (25.4 / 72.0 / 1000.0) * ratio
+                ? ViewportConstants.PdfPointMeters * ratio
                 : 0;
         }
 
-        if (string.IsNullOrWhiteSpace(metadata.RenameCandidate))
-            metadata.RenameCandidate = metadata.ProposedPageName();
+        metadata.RenameCandidate = string.IsNullOrWhiteSpace(metadata.RenameCandidate)
+            ? metadata.ProposedPageName()
+            : NormalizeProposedPageName(metadata.RenameCandidate);
+
+        metadata.TitleSource = PdfSheetMetadataPolicy.FieldSource(metadata.TitleSource, metadata.Source);
+        metadata.SuffixSource = PdfSheetMetadataPolicy.FieldSource(metadata.SuffixSource, metadata.Source);
+        metadata.ScaleSource = PdfSheetMetadataPolicy.FieldSource(metadata.ScaleSource, metadata.Source);
+        metadata.TitleConfidence = PdfSheetMetadataPolicy.FieldConfidence(
+            metadata.TitleConfidence,
+            metadata.Confidence,
+            !string.IsNullOrWhiteSpace(metadata.SheetTitle));
+        metadata.SuffixConfidence = PdfSheetMetadataPolicy.FieldConfidence(
+            metadata.SuffixConfidence,
+            metadata.Confidence,
+            !string.IsNullOrWhiteSpace(metadata.Suffix));
+        metadata.ScaleConfidence = PdfSheetMetadataPolicy.FieldConfidence(
+            metadata.ScaleConfidence,
+            metadata.Confidence,
+            metadata.SelectedScaleMetersPerPt > 0);
     }
 
     private static string NormalizeSheetKey(string value, string sheetLabel)
     {
         string source = string.IsNullOrWhiteSpace(value) ? sheetLabel : value;
+        string compact = Regex.Replace(source.Trim(), @"\s+", "").Replace("-", "");
+        if (Regex.IsMatch(compact, @"^[A-Za-z]{1,3}\d{1,4}(?:\.(?:R\d+[A-Za-z]?|[0-9]?U\d+[A-Za-z]?|\d+[A-Za-z]{0,2}))?[A-Za-z]{0,2}$"))
+            return compact.ToLowerInvariant();
+
         return new string(source
             .ToLowerInvariant()
             .Where(char.IsLetterOrDigit)
             .ToArray());
+    }
+
+    private static string NormalizeProposedPageName(string value)
+    {
+        string compact = VisibleSheetDisplayName(value);
+        return string.IsNullOrWhiteSpace(compact)
+            ? ""
+            : compact.ToLowerInvariant();
     }
 
     public static bool TryParseScaleMetersPerPt(string scaleText, out double scaleMetersPerPt)
@@ -642,6 +749,23 @@ public static class PdfSheetMetadataService
             return 0;
         }
 
+        Match ratioPairMatch = Regex.Match(
+            clean,
+            @"^(?<left>\d+(?:\.\d+)?)\s*(?::|k|r|к|to)\s*(?<right>\d+(?:\.\d+)?)$",
+            RegexOptions.IgnoreCase);
+        if (ratioPairMatch.Success &&
+            double.TryParse(ratioPairMatch.Groups["left"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double leftRatio) &&
+            double.TryParse(ratioPairMatch.Groups["right"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double rightRatio))
+        {
+            if (leftRatio <= 0 || rightRatio <= 0)
+                return 0;
+
+            if (leftRatio < 1.0 && Math.Abs(rightRatio - 1.0) <= 0.000001)
+                return 12.0 / leftRatio;
+
+            return rightRatio / leftRatio;
+        }
+
         Match ratioMatch = Regex.Match(clean, @"^1\s*:\s*(?<ratio>\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
         if (ratioMatch.Success &&
             double.TryParse(ratioMatch.Groups["ratio"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double directRatio))
@@ -652,7 +776,10 @@ public static class PdfSheetMetadataService
         if (!clean.Contains('=', StringComparison.Ordinal) &&
             double.TryParse(clean, NumberStyles.Float, CultureInfo.InvariantCulture, out directRatio))
         {
-            return directRatio > 0 ? directRatio : 0;
+            if (directRatio <= 0)
+                return 0;
+
+            return directRatio < 1.0 ? 12.0 / directRatio : directRatio;
         }
 
         if (string.Equals(
@@ -663,12 +790,25 @@ public static class PdfSheetMetadataService
             return 1;
         }
 
-        string left = (clean.Contains('=', StringComparison.Ordinal)
-                ? clean.Split('=')[0]
-                : clean)
-            .Replace("\"", "", StringComparison.Ordinal)
-            .Trim();
-        double inches = ParseInches(left);
+        if (clean.Contains('=', StringComparison.Ordinal))
+        {
+            string[] pieces = clean.Split('=', 2);
+            double leftInches = ParseInches(
+                pieces[0]
+                    .Replace("\"", "", StringComparison.Ordinal)
+                    .Replace("inches", "", StringComparison.OrdinalIgnoreCase)
+                    .Replace("inch", "", StringComparison.OrdinalIgnoreCase)
+                    .Replace("in.", "", StringComparison.OrdinalIgnoreCase)
+                    .Replace("in", "", StringComparison.OrdinalIgnoreCase)
+                    .Trim());
+            double rightInches = ParseRightScaleInches(pieces[1]);
+            if (leftInches > 0 && leftInches < 1.0 && IsBareOneScaleRight(pieces[1]))
+                return 12.0 / leftInches;
+
+            return leftInches > 0 && rightInches > 0 ? rightInches / leftInches : 0;
+        }
+
+        double inches = ParseInches(clean.Replace("\"", "", StringComparison.Ordinal).Trim());
         return inches > 0 ? 12.0 / inches : 0;
     }
 
@@ -681,22 +821,74 @@ public static class PdfSheetMetadataService
             .Replace("\u2019", "'", StringComparison.Ordinal)
             .Replace("\u2018", "'", StringComparison.Ordinal)
             .Replace("\u2032", "'", StringComparison.Ordinal)
+            .Replace(",", ".", StringComparison.Ordinal)
+            .Replace(" feet", "'", StringComparison.OrdinalIgnoreCase)
+            .Replace(" foot", "'", StringComparison.OrdinalIgnoreCase)
+            .Replace(" ft", "'", StringComparison.OrdinalIgnoreCase)
             .Replace("'-0\"", "'0\"", StringComparison.Ordinal);
+
+    private static bool IsBareOneScaleRight(string value)
+    {
+        string clean = NormalizeScaleInput(value)
+            .Replace("\"", "", StringComparison.Ordinal)
+            .Trim();
+        return string.Equals(clean, "1", StringComparison.Ordinal);
+    }
+
+    private static double ParseRightScaleInches(string value)
+    {
+        string clean = NormalizeScaleInput(value);
+        Match feetMatch = Regex.Match(clean, @"(?<feet>\d+(?:\.\d+)?)\s*(?:'|ft|feet|foot)", RegexOptions.IgnoreCase);
+        if (feetMatch.Success)
+        {
+            double feet = double.Parse(feetMatch.Groups["feet"].Value, CultureInfo.InvariantCulture);
+            string remainder = clean[feetMatch.Index..];
+            remainder = remainder[(feetMatch.Length)..];
+            Match inchesMatch = Regex.Match(remainder, @"^\s*-?\s*(?<inches>\d+(?:\s+\d+/\d+|-\d+/\d+|/\d+)?(?:\.\d+)?)\s*(?:""|in|inch|inches)?", RegexOptions.IgnoreCase);
+            double inches = inchesMatch.Success ? ParseInches(inchesMatch.Groups["inches"].Value) : 0;
+            return feet * 12.0 + Math.Max(0, inches);
+        }
+
+        Match dashFeetMatch = Regex.Match(clean, @"^\s*(?<feet>\d+(?:\.\d+)?)\s*-\s*(?<inches>\d+(?:\.\d+)?)\s*""?\s*$");
+        if (dashFeetMatch.Success)
+        {
+            double feet = double.Parse(dashFeetMatch.Groups["feet"].Value, CultureInfo.InvariantCulture);
+            double inches = double.Parse(dashFeetMatch.Groups["inches"].Value, CultureInfo.InvariantCulture);
+            return feet * 12.0 + inches;
+        }
+
+        return ParseInches(
+            clean
+                .Replace("\"", "", StringComparison.Ordinal)
+                .Replace("inches", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("inch", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("in.", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("in", "", StringComparison.OrdinalIgnoreCase)
+                .Trim());
+    }
 
     private static double ParseInches(string value)
     {
         try
         {
-            if (value.Contains('-', StringComparison.Ordinal))
+            string clean = value.Trim();
+            Match mixedMatch = Regex.Match(clean, @"^(?<whole>\d+(?:\.\d+)?)\s+(?<fraction>\d+\s*/\s*\d+)$");
+            if (mixedMatch.Success)
             {
-                string[] pieces = value.Split('-', 2);
+                return double.Parse(mixedMatch.Groups["whole"].Value, CultureInfo.InvariantCulture) +
+                       ParseFraction(mixedMatch.Groups["fraction"].Value);
+            }
+
+            if (clean.Contains('-', StringComparison.Ordinal))
+            {
+                string[] pieces = clean.Split('-', 2);
                 return double.Parse(pieces[0], CultureInfo.InvariantCulture) + ParseFraction(pieces[1]);
             }
 
-            if (value.Contains('/', StringComparison.Ordinal))
-                return ParseFraction(value);
+            if (clean.Contains('/', StringComparison.Ordinal))
+                return ParseFraction(clean);
 
-            return double.Parse(value, CultureInfo.InvariantCulture);
+            return double.Parse(clean, CultureInfo.InvariantCulture);
         }
         catch
         {
@@ -798,8 +990,20 @@ public static class PdfSheetMetadataService
 
     private sealed class SheetMetaRequest
     {
+        [JsonPropertyName("pdf")]
         public string Pdf { get; set; } = "";
+
+        [JsonPropertyName("page")]
         public int Page { get; set; }
+
+        [JsonPropertyName("sheet_metadata_config")]
+        public SheetMetadataConfig SheetMetadataConfig { get; set; } = SheetMetadataConfig.BuildDefault();
+
+        [JsonPropertyName("crop_template")]
+        public PdfSheetMetadataCropTemplate? CropTemplate { get; set; }
+
+        [JsonPropertyName("crop_templates")]
+        public PdfSheetMetadataCropCatalog? CropTemplates { get; set; }
     }
 
     private sealed class SheetMetaResponse

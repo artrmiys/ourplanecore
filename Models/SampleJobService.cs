@@ -1,14 +1,13 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Text;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class SampleJobService
 {
-    private const double SampleScaleMetersPerPt = 25.4 / 72.0 / 1000.0 * 96.0;
+    private const double SampleScaleMetersPerPt = ViewportConstants.PdfPointMeters * 96.0;
 
     public static string DefaultJobsRoot
     {
@@ -16,32 +15,38 @@ public static class SampleJobService
         {
             string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             return string.IsNullOrWhiteSpace(documents)
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "OurPlaneCore Jobs")
-                : Path.Combine(documents, "OurPlaneCore Jobs");
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "OurPlanCore Jobs")
+                : Path.Combine(documents, "OurPlanCore Jobs");
         }
     }
 
-    public static OurPlaneCoreJob CreateSampleJob(string parentDir)
+    public static OurPlanCoreJob CreateSampleJob(string parentDir)
     {
         Directory.CreateDirectory(parentDir);
-        string jobName = UniqueJobName(parentDir, "Sample Job");
-        OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(parentDir, jobName);
+        string jobName = UniqueJobName(parentDir, "OurPlanCore Guide Sample");
+        OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parentDir, jobName);
 
-        string tempPdf = Path.Combine(Path.GetTempPath(), $"ourplanecore_sample_{Guid.NewGuid():N}.pdf");
+        string tempPdf = Path.Combine(Path.GetTempPath(), $"ourplancore_guide_sample_{Guid.NewGuid():N}.pdf");
         try
         {
-            WriteSamplePdf(tempPdf);
-            string archFolder = Path.Combine(job.PagesRoot, "00. imported", "Arch");
-            Directory.CreateDirectory(archFolder);
-            PageInfo page = OurPlaneCoreJobStore.CreatePageFromPdf(
+            SampleJobGuideBuilder.WriteGuidePdf(tempPdf);
+            string guideFolder = OurPlanCoreJobStore.CreateFolder(job.PagesRoot, SampleJobGuideBuilder.GuideFolderName);
+            IReadOnlyList<PageInfo> pages = OurPlanCoreJobStore.ImportPdf(
                 job,
                 tempPdf,
-                "A101 Sample Plan",
-                archFolder,
-                pdfPage: 0,
-                scaleMetersPerPt: SampleScaleMetersPerPt);
+                SampleJobGuideBuilder.PageNames,
+                guideFolder);
 
-            CreateSampleTakeoffs(job, page);
+            PageInfo planPage = pages[^1];
+            planPage.ScaleMetersPerPt = SampleScaleMetersPerPt;
+            OurPlanCoreJobStore.SavePageScale(planPage.FolderPath, SampleScaleMetersPerPt);
+
+            CreateSampleTakeoffs(job, planPage);
+            CreateSampleAnnotations(planPage);
+            AddSampleObservations(job, planPage);
+            WriteSampleMaterials(job, planPage);
+            SampleThreeDModelBuilder.BuildAndSave(job, planPage, SampleScaleMetersPerPt);
+            SampleJobGuideBuilder.WriteGuideFiles(job);
         }
         finally
         {
@@ -50,167 +55,273 @@ public static class SampleJobService
                 if (File.Exists(tempPdf))
                     File.Delete(tempPdf);
             }
-            catch { }
+            catch
+            {
+            }
         }
 
-        return OurPlaneCoreJobStore.LoadJob(job.RootPath);
+        return OurPlanCoreJobStore.LoadJob(job.RootPath);
     }
 
-    private static void CreateSampleTakeoffs(OurPlaneCoreJob job, PageInfo page)
+    private static void CreateSampleTakeoffs(OurPlanCoreJob job, PageInfo page)
     {
-        string generalFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "GENERAL");
-        string openingsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "OPENINGS");
+        var g = SamplePlanGeometry.Instance;
 
-        TakeoffItem exterior = OurPlaneCoreJobStore.CreateTakeoffItem(
-            job,
-            generalFolder,
-            "Sample Exterior Walls",
-            "#2196F3",
-            "line");
-        exterior.UnitPrice = 14.50;
-        exterior.Notes = "Sample line takeoff around the exterior wall outline.";
-        exterior.Measurements.Add(new Measurement
-        {
-            Name = "Exterior wall loop",
-            MType = "line",
-            Color = exterior.Color,
-            PageFolder = page.FolderPath,
-            TakeoffFolder = exterior.FolderPath,
-            ScaleMetersPerPt = SampleScaleMetersPerPt,
-            Points =
-            [
-                new SKPoint(120, 140),
-                new SKPoint(672, 140),
-                new SKPoint(672, 470),
-                new SKPoint(120, 470),
-                new SKPoint(120, 140),
-            ],
-        });
-        OurPlaneCoreJobStore.SaveTakeoffItem(exterior);
+        // Folders. "1st" levels under sqfts/walls let the 3D Auto builder lift walls and slabs.
+        string sqftsFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts1st = OurPlanCoreJobStore.CreateTakeoffFolder(job, sqftsFolder, "1st");
+        string wallsFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string walls1st = OurPlanCoreJobStore.CreateTakeoffFolder(job, wallsFolder, "1st");
+        string openingsFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "openings");
+        string framingFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "framing");
+        string areasFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "areas");
+        string roofFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "rf");
 
-        TakeoffItem floor = OurPlaneCoreJobStore.CreateTakeoffItem(
-            job,
-            generalFolder,
-            "Sample Floor Area",
-            "#4CAF50",
-            "area");
-        floor.UnitPrice = 6.25;
-        floor.Notes = "Sample area takeoff for the main plan footprint.";
-        floor.Measurements.Add(new Measurement
-        {
-            Name = "Main footprint",
-            MType = "area",
-            Color = floor.Color,
-            PageFolder = page.FolderPath,
-            TakeoffFolder = floor.FolderPath,
-            ScaleMetersPerPt = SampleScaleMetersPerPt,
-            Points =
-            [
-                new SKPoint(120, 140),
-                new SKPoint(672, 140),
-                new SKPoint(672, 470),
-                new SKPoint(120, 470),
-            ],
-        });
-        OurPlaneCoreJobStore.SaveTakeoffItem(floor);
+        // AREA - whole floor footprint (feeds the 3D 1st-floor slab).
+        CreateMeasuredTakeoff(
+            job, sqfts1st, page, "Floor Area", "#4CAF50", "area", 6.25,
+            "Area takeoff: whole interior footprint. Drives sqft totals and the 3D 1st-floor slab.",
+            null,
+            new Measurement { Name = "Interior footprint", Points = [.. g.FloorAreaPolygon] });
 
-        TakeoffItem doors = OurPlaneCoreJobStore.CreateTakeoffItem(
-            job,
-            openingsFolder,
-            "Sample Doors",
-            "#FF9800",
-            "point");
-        doors.UnitPrice = 350.0;
-        doors.Notes = "Sample count takeoff for door openings.";
-        doors.Measurements.Add(new Measurement
+        // AREA + CUT - demonstrates a subtracted hole (Area Cut tool).
+        CreateMeasuredTakeoff(
+            job, areasFolder, page, "Living w/ Cut", "#26A69A", "area", 0,
+            "Area Cut demo: a hole is subtracted from the polygon (try the Cut tool, shortcut X).",
+            null,
+            new Measurement
+            {
+                Name = "Living minus opening",
+                Points = [.. g.LivingRoomPolygon],
+                Holes = [[new SKPoint(220, 340), new SKPoint(300, 340), new SKPoint(300, 410), new SKPoint(220, 410)]],
+            });
+
+        // LINE with SECTIONS - four exterior wall runs in one item (feeds 3D walls).
+        CreateMeasuredTakeoff(
+            job, walls1st, page, "Exterior Walls", "#2196F3", "line", 14.50,
+            "Line takeoff with four sections (one per wall run), 9 ft tall. Auto-builds the 3D walls.",
+            null,
+            WallRun("North wall", g, 165, 145, 627, 145),
+            WallRun("East wall", g, 627, 145, 627, 467),
+            WallRun("South wall", g, 627, 467, 165, 467),
+            WallRun("West wall", g, 165, 467, 165, 145));
+
+        // LINE - beam (Beam tool result).
+        CreateMeasuredTakeoff(
+            job, framingFolder, page, "Ridge Beam", "#5E35B1", "line", 22.0,
+            "Line/Beam takeoff: a single structural beam along the building center.",
+            null,
+            new Measurement { Name = "Ridge beam", Points = [new SKPoint(170, 300), new SKPoint(622, 300)] });
+
+        // JOIST AREA - locked direction (Joist Area tool).
+        CreateMeasuredTakeoff(
+            job, framingFolder, page, "Floor Joists 2x10 @16", "#009688", "area", 3.95,
+            "Joist Area takeoff with a locked direction; total is joist linear feet, not area.",
+            item =>
+            {
+                item.IsJoistTakeoff = true;
+                item.JoistType = "2x10";
+                item.JoistSpacingInches = 16;
+                item.JoistDirectionDegrees = 0;
+                item.JoistLengthRounding = JoistTakeoffCalculator.RoundingNearestFoot;
+                item.JoistShowLabels = true;
+            },
+            new Measurement
+            {
+                Name = "Living joists",
+                JoistDirectionLocked = true,
+                JoistDirectionDegrees = 0,
+                Points = [.. g.LivingRoomPolygon],
+            });
+
+        // COUNT - doors, with the Cross symbol, one point per drawn door.
+        CreateMeasuredTakeoff(
+            job, openingsFolder, page, "Doors", "#FF9800", "point", 350.0,
+            "Count takeoff (Cross symbol): one marker on every door in the plan.",
+            item => item.CountSymbol = CountDisplaySymbol.Cross,
+            new Measurement { Name = "Door count", Points = [.. g.DoorPoints] });
+
+        // COUNT - windows, with the Square symbol.
+        CreateMeasuredTakeoff(
+            job, openingsFolder, page, "Windows", "#7E57C2", "point", 285.0,
+            "Count takeoff (Square symbol): one marker on every window in the plan.",
+            item => item.CountSymbol = CountDisplaySymbol.Square,
+            new Measurement { Name = "Window count", Points = [.. g.WindowPoints] });
+
+        // AREA - roof footprint (drives the 3D roof base / Generate Roof).
+        CreateMeasuredTakeoff(
+            job, roofFolder, page, "Roof Area", "#8BC34A", "area", 7.10,
+            "Roof footprint area. Use 3D > Roof Base + Generate Roof (or Auto) to build the pitched roof.",
+            null,
+            new Measurement { Name = "Roof footprint", Points = [.. g.RoofFootprintPolygon] });
+
+        // LINE - roof guide edges for the 3D roof workflow.
+        CreateMeasuredTakeoff(
+            job, roofFolder, page, "Front Eave Guide", "#E53935", "line", 0,
+            "Roof guide: front eave edge. Select it in 3D > Select Edge to set eave pitch.",
+            null,
+            new Measurement { Name = "Front eave", Points = [new SKPoint(g.OuterL, g.OuterB), new SKPoint(g.OuterR, g.OuterB)] });
+
+        CreateMeasuredTakeoff(
+            job, roofFolder, page, "Left Rake Guide", "#C2185B", "line", 0,
+            "Roof guide: left rake edge. Mark it as Rake for a gable end.",
+            null,
+            new Measurement { Name = "Left rake", Points = [new SKPoint(g.OuterL, g.OuterB), new SKPoint(g.OuterL, g.OuterT)] });
+    }
+
+    private static Measurement WallRun(string name, SamplePlanGeometry g, float x1, float y1, float x2, float y2) =>
+        new() { Name = name, Points = [new SKPoint(x1, y1), new SKPoint(x2, y2)] };
+
+    private static TakeoffItem CreateMeasuredTakeoff(
+        OurPlanCoreJob job,
+        string parentFolder,
+        PageInfo page,
+        string name,
+        string color,
+        string measurementType,
+        double unitPrice,
+        string notes,
+        Action<TakeoffItem>? configure,
+        params Measurement[] measurements)
+    {
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, parentFolder, name, color, measurementType);
+        item.UnitPrice = unitPrice;
+        item.Notes = notes;
+        configure?.Invoke(item);
+
+        foreach (Measurement measurement in measurements)
         {
-            Name = "Door count",
-            MType = "point",
-            Color = doors.Color,
-            PageFolder = page.FolderPath,
-            TakeoffFolder = doors.FolderPath,
-            ScaleMetersPerPt = SampleScaleMetersPerPt,
-            Points =
+            measurement.MType = measurementType;
+            measurement.Color = color;
+            measurement.PageFolder = page.FolderPath;
+            measurement.TakeoffFolder = item.FolderPath;
+            measurement.ScaleMetersPerPt = SampleScaleMetersPerPt;
+            measurement.CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
+            item.Measurements.Add(measurement);
+        }
+
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.SaveTakeoffItem(item);
+        return item;
+    }
+
+    private static void CreateSampleAnnotations(PageInfo page)
+    {
+        // One clean note demonstrating the Annotation tool, pinned in the left margin so it
+        // does not overlap the drawing or the takeoff overlays.
+        OurPlanCoreJobStore.SavePageAnnotations(
+            page.FolderPath,
             [
-                new SKPoint(392, 140),
-                new SKPoint(672, 305),
-                new SKPoint(396, 470),
+                new PageAnnotation
+                {
+                    Kind = "note",
+                    Text = "Start here: select a takeoff on the right, then try Record, Export, Takeoff Manager, and 3D.",
+                    Color = "#1565C0",
+                    PageFolder = page.FolderPath,
+                    ScaleMetersPerPt = SampleScaleMetersPerPt,
+                    Points = [new SKPoint(60, 250)],
+                },
+            ]);
+    }
+
+    private static void AddSampleObservations(OurPlanCoreJob job, PageInfo page)
+    {
+        // Preloaded AI observations so the AI Manager grid and the AI Inbox are not empty -
+        // they show what the model produces without requiring a network call or API key.
+        SmartContextStore.AddObservation(job, page, "scale",
+            "Detected drawing scale 1/8\" = 1'-0\" from the title block.");
+        SmartContextStore.AddObservation(job, page, "count",
+            "Counted 6 door symbols and 4 window symbols on A101; compare with the Doors / Windows takeoffs.");
+        SmartContextStore.AddObservation(job, page, "area",
+            "Interior footprint reads about 780 SF across 5 rooms; verify against the Floor Area takeoff.");
+        SmartContextStore.AddObservation(job, page, "note",
+            "Exterior wall perimeter looks like a clean rectangle - good candidate for Auto 3D walls.");
+    }
+
+    private static void WriteSampleMaterials(OurPlanCoreJob job, PageInfo page)
+    {
+        // Preloaded material extraction example so the Materials tab shows a realistic summary
+        // for the sample house without running the Python extractor.
+        const string sheet = "A101";
+        const string pdf = "A101 Sample Plan";
+        int pageNo = 17;
+
+        MaterialExtractionRow Row(string cat, string family, string item, string size, string qty, string unit, double conf, params string[] flags) =>
+            new()
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                PdfFile = pdf,
+                PdfPage = pageNo,
+                Sheet = sheet,
+                SourceType = "schedule",
+                Category = cat,
+                MaterialFamily = family,
+                Item = item,
+                Size = size,
+                Qty = qty,
+                Unit = unit,
+                PageRef = sheet,
+                ScheduleRef = cat == "Openings" ? (family == "Door" ? "Door Schedule" : "Window Schedule") : "",
+                RawText = $"{item} {size} - {qty} {unit}",
+                Confidence = conf,
+                ReviewFlags = [.. flags],
+            };
+
+        var result = new MaterialExtractionResult
+        {
+            JobName = job.Name,
+            InputFiles = [new MaterialInputFile { PdfName = pdf, SourcePath = page.PdfPath, TotalPages = pageNo }],
+            Rows =
+            [
+                Row("Framing", "Lumber", "Exterior wall stud", "2x6", "196", "LF", 0.92),
+                Row("Framing", "Lumber", "Floor joist", "2x10", "15", "EA", 0.89),
+                Row("Framing", "Beam", "Ridge beam", "6x12", "47", "LF", 0.81),
+                Row("Sheathing", "Plywood", "Wall sheathing", "1/2\"", "1,860", "SF", 0.85),
+                Row("Roofing", "Shingles", "Asphalt shingle (cross-gable roof)", "-", "2,226", "SF", 0.83),
+                Row("Openings", "Door", "Door unit", "3'-0\" x 6'-8\"", "6", "EA", 0.90),
+                Row("Openings", "Window", "Window unit", "3'-0\" x 4'-0\"", "4", "EA", 0.90),
+                Row("Concrete", "Slab", "Floor slab on grade", "4\"", "780", "SF", 0.74, "verify thickness"),
+                Row("Insulation", "Batt", "Wall insulation", "R-21", "1,860", "SF", 0.70, "review assembly"),
+                Row("Finishes", "Drywall", "Gypsum board", "1/2\"", "2,400", "SF", 0.76),
             ],
-        });
-        OurPlaneCoreJobStore.SaveTakeoffItem(doors);
+            Stats = new MaterialExtractionStats { PagesRead = pageNo, PagesOcr = 0, RowsTotal = 10, SchedulesTotal = 2 },
+            Quality = new MaterialQualitySummary
+            {
+                RowsTotal = 10,
+                HighConfidenceRows = 7,
+                TakeoffReadyRows = 7,
+                ReviewRows = 3,
+                SchedulesTotal = 2,
+                PdfPlumberAvailable = true,
+                OcrAvailable = false,
+            },
+        };
+
+        string outputFolder = MaterialExtractionService.OutputFolder(job);
+        Directory.CreateDirectory(outputFolder);
+        File.WriteAllText(
+            MaterialExtractionService.LatestJsonPath(job),
+            System.Text.Json.JsonSerializer.Serialize(result, OurPlanCoreJobStore.JsonOptions));
+        try
+        {
+            MaterialExtractionService.WriteReviewCsvs(result, outputFolder);
+        }
+        catch
+        {
+            // CSV export is a convenience; the JSON drives the Materials grid.
+        }
     }
 
     private static string UniqueJobName(string parentDir, string baseName)
     {
         string candidate = baseName;
         int index = 2;
-        while (Directory.Exists(Path.Combine(parentDir, OurPlaneCoreJobStore.SanitizeName(candidate, 120))))
+        while (Directory.Exists(Path.Combine(parentDir, OurPlanCoreJobStore.SanitizeName(candidate, 120))))
         {
             candidate = $"{baseName} {index.ToString(CultureInfo.InvariantCulture)}";
             index++;
         }
 
         return candidate;
-    }
-
-    private static void WriteSamplePdf(string path)
-    {
-        string contents = """
-            q
-            1 1 1 rg 0 0 792 612 re f
-            0.12 0.14 0.16 RG 2 w
-            120 140 m 672 140 l 672 470 l 120 470 l h S
-            0.55 0.55 0.55 RG 1 w
-            120 305 m 672 305 l S
-            396 140 m 396 470 l S
-            258 305 m 258 470 l S
-            534 140 m 534 305 l S
-            0.10 0.35 0.70 RG 4 w
-            392 140 m 430 140 l S
-            672 305 m 672 345 l S
-            396 470 m 438 470 l S
-            0 0 0 rg
-            BT /F1 22 Tf 72 552 Td (OurPlaneCore Sample Job) Tj ET
-            BT /F1 12 Tf 72 528 Td (Use Select, Ctrl+Shift+P, Ctrl+Shift+O, Snap, Ortho, and Estimating.) Tj ET
-            BT /F1 11 Tf 130 485 Td (Office) Tj ET
-            BT /F1 11 Tf 410 485 Td (Open Area) Tj ET
-            BT /F1 11 Tf 130 285 Td (Storage) Tj ET
-            BT /F1 11 Tf 410 285 Td (Shop) Tj ET
-            BT /F1 10 Tf 120 110 Td (Scale in app: 1/8 in = 1 ft. Sample takeoffs are preloaded.) Tj ET
-            Q
-            """;
-
-        byte[] contentBytes = Encoding.ASCII.GetBytes(contents.Replace("\r\n", "\n"));
-        var objects = new[]
-        {
-            "<< /Type /Catalog /Pages 2 0 R >>",
-            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-            $"<< /Length {contentBytes.Length.ToString(CultureInfo.InvariantCulture)} >>\nstream\n{contents.Replace("\r\n", "\n")}\nendstream",
-        };
-
-        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-        WriteAscii(stream, "%PDF-1.4\n");
-        var offsets = new long[objects.Length + 1];
-        for (int i = 0; i < objects.Length; i++)
-        {
-            offsets[i + 1] = stream.Position;
-            WriteAscii(stream, $"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
-        }
-
-        long xrefOffset = stream.Position;
-        WriteAscii(stream, $"xref\n0 {objects.Length + 1}\n");
-        WriteAscii(stream, "0000000000 65535 f \n");
-        for (int i = 1; i < offsets.Length; i++)
-            WriteAscii(stream, $"{offsets[i].ToString("D10", CultureInfo.InvariantCulture)} 00000 n \n");
-        WriteAscii(stream, $"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xrefOffset}\n%%EOF\n");
-    }
-
-    private static void WriteAscii(Stream stream, string text)
-    {
-        byte[] bytes = Encoding.ASCII.GetBytes(text);
-        stream.Write(bytes, 0, bytes.Length);
     }
 }

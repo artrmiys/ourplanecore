@@ -1,0 +1,198 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<!-- OurCore ribbon icon set (16x16, single-stroke, no fill, inherits button color) -->
+<Geometry x:Key="IconFolderOpen">M2,4.8 L6,4.8 L7.4,6.3 L14,6.3 L14,12.6 L2,12.6 Z M2,12.6 L4,8.6 L15.4,8.6 L13.4,12.6</Geometry>
+<Geometry x:Key="IconImport">M8,2.5 L8,9.6 M5,6.6 L8,9.8 L11,6.6 M3,12.8 L13,12.8</Geometry>
+<Geometry x:Key="IconSheetMeasure">M4,2.5 L10,2.5 L12.5,5 L12.5,13.5 L4,13.5 Z M10,2.5 L10,5 L12.5,5 M6,8.6 L11,8.6 M6,10.8 L9.2,10.8</Geometry>
+<Geometry x:Key="IconExport">M8,9.8 L8,2.6 M5,5.8 L8,2.6 L11,5.8 M3,12.8 L13,12.8</Geometry>
+<Geometry x:Key="IconTag">M3,3.2 L8.6,3.2 L13.2,7.8 L8.6,12.4 L3,12.4 Z M5.6,5.8 A0.95,0.95 0 1 1 5.59,5.8 Z</Geometry>
+<Geometry x:Key="IconRuler">M2,6 L6,2 L14,10 L10,14 Z M4.4,5.6 L5.7,6.9 M6.2,3.8 L7.5,5.1 M8,5.6 L9.3,6.9 M9.8,3.8 L11.1,5.1</Geometry>
+<Geometry x:Key="IconPan">M8,2 L8,14 M2,8 L14,8 M6.2,3.8 L8,2 L9.8,3.8 M6.2,12.2 L8,14 L9.8,12.2 M3.8,6.2 L2,8 L3.8,9.8 M12.2,6.2 L14,8 L12.2,9.8</Geometry>
+<Geometry x:Key="IconSelect">M2.8,2.8 L7.2,13.2 L8.7,8.7 L13.2,7.2 Z M8.7,8.7 L13.2,13.2</Geometry>
+<Geometry x:Key="IconCount">M5,5 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0 M11,5 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0 M8,11 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0</Geometry>
+<Geometry x:Key="IconClipboard">M5.2,3.2 L4,3.2 L4,13.6 L12,13.6 L12,3.2 L10.8,3.2 M6.2,2.4 L9.8,2.4 L9.8,4.4 L6.2,4.4 Z M6,7.4 L10,7.4 M6,10 L10,10</Geometry>
+<Geometry x:Key="IconSparkle">M8,2 L9.2,6.8 L14,8 L9.2,9.2 L8,14 L6.8,9.2 L2,8 L6.8,6.8 Z</Geometry>
+<Geometry x:Key="IconCrop">M5,2 L5,11 L14,11 M2,5 L11,5 L11,14</Geometry>
+<Geometry x:Key="IconPlus">M8,2.5 L8,13.5 M2.5,8 L13.5,8</Geometry>
+<Geometry x:Key="IconMinus">M2.5,8 L13.5,8</Geometry>
+<Geometry x:Key="IconFitPage">M2.8,6 L2.8,2.8 L6,2.8 M10,2.8 L13.2,2.8 L13.2,6 M13.2,10 L13.2,13.2 L10,13.2 M6,13.2 L2.8,13.2 L2.8,10</Geometry>
+<Geometry x:Key="IconIsoView">M8,2.5 L13,5.4 L13,10.6 L8,13.5 L3,10.6 L3,5.4 Z M8,2.5 L8,7.8 M3,5.4 L8,7.8 L13,5.4 M8,7.8 L8,13.5</Geometry>
+<Geometry x:Key="IconTopView">M3,3 L13,3 L13,13 L3,13 Z M8,3 L8,13 M3,8 L13,8</Geometry>
+<Geometry x:Key="IconFrontView">M3,4 L13,4 L13,12 L3,12 Z M5,6 L11,6 M5,8 L11,8 M5,10 L11,10</Geometry>
+<Geometry x:Key="IconChevronDown">M4,6 L8,10 L12,6</Geometry>
+<Geometry x:Key="IconRefresh">M13.3,8 A5.3,5.3 0 1 1 11.9,4.4 L13.4,5.7 M13.4,2.5 L13.4,5.7 L10.2,5.7</Geometry>
+<Geometry x:Key="IconSimilar">M6.8,6.8 m-3.8,0 a3.8,3.8 0 1,0 7.6,0 a3.8,3.8 0 1,0 -7.6,0 M9.7,9.7 L13.5,13.5 M11.5,2.8 L12.2,4.8 M10.4,3.9 L13.1,3.9</Geometry>
+<Geometry x:Key="IconPointAlongLine">M3,12 L13,4 M4.4,10.6 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 M8,7.8 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 M11.6,5 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0</Geometry>
+<!-- Page tab icons -->
+<Geometry x:Key="IconAddPages">M4,2.5 L9,2.5 L11.5,5 L11.5,13.5 L4,13.5 Z M9,2.5 L9,5 L11.5,5 M7.7,8 L7.7,11.5 M6,9.7 L9.4,9.7</Geometry>
+<Geometry x:Key="IconBlankSheet">M4,2.5 L10,2.5 L12.5,5 L12.5,13.5 L4,13.5 Z M10,2.5 L10,5 L12.5,5</Geometry>
+<Geometry x:Key="IconRotateRight">M8,3 A5,5 0 1 1 3,8 M3,8 L1.62,9.97 M3,8 L4.38,9.97</Geometry>
+<Geometry x:Key="IconRotateLeft">M8,3 A5,5 0 1 0 13,8 M13,8 L14.38,9.97 M13,8 L11.62,9.97</Geometry>
+<Geometry x:Key="IconRotate180">M3,8 A5,5 0 0 1 13,8 M13,8 L14.38,6.03 M13,8 L11.62,6.03 M3,8 L1.62,9.97 M3,8 L4.38,9.97</Geometry>
+<Geometry x:Key="IconLevel">M8,2.2 L8,13.8 M2.2,8 L13.8,8 M8,8 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0</Geometry>
+<Geometry x:Key="IconFlipH">M8,2 L8,14 M3,5 L6,8 L3,11 Z M13,5 L10,8 L13,11 Z</Geometry>
+<Geometry x:Key="IconFlipV">M2,8 L14,8 M5,3 L8,6 L11,3 Z M5,13 L8,10 L11,13 Z</Geometry>
+<Geometry x:Key="IconInvert">M8,3 A5,5 0 1 1 7.99,3 Z M8,3 L8,13</Geometry>
+<Geometry x:Key="IconCopy">M5.5,5.5 L11.5,5.5 L11.5,13.5 L5.5,13.5 Z M3.5,3.5 L9.5,3.5 L9.5,5.5 M3.5,3.5 L3.5,11.5 L5.5,11.5</Geometry>
+<Geometry x:Key="IconRename">M3,13 L3,10.5 L10.5,3 L13,5.5 L5.5,13 Z M9,4.5 L11.5,7</Geometry>
+<Geometry x:Key="IconOrigin">M8,3 L8,13 M3,8 L13,8 M8,8 m-1.8,0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0</Geometry>
+<Geometry x:Key="IconOffset">M4,4 L4,9 M4,4 L9,4 M4,4 L10,10 M10,10 L10,6.5 M10,10 L6.5,10</Geometry>
+<Geometry x:Key="IconClose">M4,4 L12,12 M12,4 L4,12</Geometry>
+<!-- Tree folder (closed, single-stroke) -->
+<Geometry x:Key="IconFolderClosed">M2.5,12.5 L2.5,4.8 L6,4.8 L7.5,6.3 L13.5,6.3 L13.5,12.5 Z M2.5,6.3 L7.5,6.3</Geometry>
+<!-- Annotation / markup tool icons (16x16, single-stroke, no fill) -->
+<Geometry x:Key="IconHighlight">M4,11 L4,8.5 L10,2.5 L12,4.5 L6,10.5 Z M3,13.3 L9,13.3</Geometry>
+<Geometry x:Key="IconDrawLine">M3,11 C5,7 7,13 9,9 C10,7 11,6 13,5</Geometry>
+<Geometry x:Key="IconArrow">M3,13 L12.5,3.5 M12.5,3.5 L7.8,3.7 M12.5,3.5 L12.3,8.2</Geometry>
+<Geometry x:Key="IconBox">M3,4 L13,4 L13,12 L3,12 Z</Geometry>
+<Geometry x:Key="IconCloud">M4.5,11.5 A2.2,2.2 0 0 1 4.4,7.4 A2.6,2.6 0 0 1 8,5.4 A2.4,2.4 0 0 1 11.8,6.6 A2,2 0 0 1 11.6,11.5 Z</Geometry>
+<Geometry x:Key="IconAreaFill">M3,4 L13,4 L13,12 L3,12 Z M5,12 L13,5 M9,12 L13,8.3</Geometry>
+<Geometry x:Key="IconJoistArea">M3,4 L13,4 L13,12 L3,12 Z M5.2,4 L5.2,12 M8,4 L8,12 M10.8,4 L10.8,12</Geometry>
+<Geometry x:Key="IconBeam">M3.5,4.2 L12.5,4.2 M3.5,11.8 L12.5,11.8 M8,4.2 L8,11.8</Geometry>
+<Geometry x:Key="IconOpening">M2,12.5 L4.8,12.5 M12,12.5 L14,12.5 M4.8,12.5 L4.8,5.3 A7.2,7.2 0 0 1 12,12.5</Geometry>
+<Geometry x:Key="IconCut">M4.3,11.6 m-1.7,0 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0 M11.7,11.6 m-1.7,0 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0 M5.4,10.2 L12.6,2.8 M10.6,10.2 L3.4,2.8</Geometry>
+<Geometry x:Key="IconNote">M4,3 L12,3 L12,9.5 L8.5,13 L4,13 Z M12,9.5 L8.5,9.5 L8.5,13 M6,6.3 L10,6.3 M6,8.3 L8,8.3</Geometry>
+
+<!-- Side command strip mini icons (16x16 stroke grid, same style as ribbon icons) -->
+<Geometry x:Key="IconOpenTabs">M2.5,5.5 L9.5,5.5 L9.5,12.5 L2.5,12.5 Z M5.5,5.5 L5.5,3.2 L13.5,3.2 L13.5,10.5 L9.5,10.5</Geometry>
+<Geometry x:Key="IconDetachWin">M2.5,6 L8.5,6 L8.5,13 L2.5,13 Z M10.5,2.8 L13.5,2.8 L13.5,5.8 M13.5,2.8 L9.2,7.1</Geometry>
+<Geometry x:Key="IconTileGrid">M2.5,2.5 L7,2.5 L7,7 L2.5,7 Z M9,2.5 L13.5,2.5 L13.5,7 L9,7 Z M2.5,9 L7,9 L7,13.5 L2.5,13.5 Z M9,9 L13.5,9 L13.5,13.5 L9,13.5 Z</Geometry>
+<Geometry x:Key="IconFolderPlus">M2.5,12.5 L2.5,4.8 L6,4.8 L7.5,6.3 L13.5,6.3 L13.5,12.5 Z M8,7.7 L8,11.1 M6.3,9.4 L9.7,9.4</Geometry>
+<Geometry x:Key="IconFolderAuto">M2.5,12.5 L2.5,4.8 L6,4.8 L7.5,6.3 L13.5,6.3 L13.5,12.5 Z M8,7.2 L8.6,8.8 L10.2,9.4 L8.6,10 L8,11.6 L7.4,10 L5.8,9.4 L7.4,8.8 Z</Geometry>
+<Geometry x:Key="IconCollapseAll">M4,7 L8,3 L12,7 M4,13 L8,9 L12,13</Geometry>
+<Geometry x:Key="IconExpandAll">M4,3 L8,7 L12,3 M4,9 L8,13 L12,9</Geometry>
+<Geometry x:Key="IconBoxPlus">M3,3 L13,3 L13,13 L3,13 Z M8,5.8 L8,10.2 M5.8,8 L10.2,8</Geometry>
+<Geometry x:Key="IconRecordDot">M8,8 m-4.8,0 a4.8,4.8 0 1,0 9.6,0 a4.8,4.8 0 1,0 -9.6,0 M8,8 m-1.7,0 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0</Geometry>
+<Geometry x:Key="IconTarget">M8,8 m-4.6,0 a4.6,4.6 0 1,0 9.2,0 a4.6,4.6 0 1,0 -9.2,0 M8,1.6 L8,4.2 M8,11.8 L8,14.4 M1.6,8 L4.2,8 M11.8,8 L14.4,8</Geometry>
+<Geometry x:Key="IconSliders">M2.8,5 L8.6,5 M11.6,5 L13.2,5 M10.1,3.5 L10.1,6.5 M2.8,11 L4.4,11 M7.4,11 L13.2,11 M5.9,9.5 L5.9,12.5</Geometry>
+<Geometry x:Key="IconCombine">M2.6,2.6 L9.4,2.6 L9.4,9.4 L2.6,9.4 Z M6.6,6.6 L13.4,6.6 L13.4,13.4 L6.6,13.4 Z</Geometry>
+<Geometry x:Key="IconMerge">M3,3 L3,5.8 A3.4,3.4 0 0 0 6.4,9.2 L12,9.2 M3,13.2 L3,10.4 M9.8,6.8 L12.2,9.2 L9.8,11.6</Geometry>
+<Geometry x:Key="IconSplit">M2.6,8 L6.8,8 M6.8,8 L11.6,4 M6.8,8 L11.6,12 M9.5,3.8 L11.9,3.8 L11.9,6.2 M9.5,12.2 L11.9,12.2 L11.9,9.8</Geometry>
+<Geometry x:Key="IconTreeAuto">M4.2,2.6 L4.2,12.6 M4.2,5.4 L9.4,5.4 M4.2,9 L11,9 M4.2,12.6 L12.6,12.6</Geometry>
+<Geometry x:Key="IconPagesToTree">M2.8,2.8 L7.6,2.8 L7.6,10 L2.8,10 Z M9.4,6.4 L13.6,6.4 M11.9,4.6 L13.6,6.4 L11.9,8.2 M4,12.8 L10.6,12.8</Geometry>
+<Geometry x:Key="IconCalc">M4.4,2.5 L11.6,2.5 L11.6,13.5 L4.4,13.5 Z M6.1,4.4 L9.9,4.4 M6.2,7.5 L6.21,7.5 M8,7.5 L8.01,7.5 M9.8,7.5 L9.81,7.5 M6.2,9.7 L6.21,9.7 M8,9.7 L8.01,9.7 M9.8,9.7 L9.81,9.7 M6.2,11.9 L6.21,11.9 M8,11.9 L8.01,11.9 M9.8,11.9 L9.81,11.9</Geometry>
+<Geometry x:Key="IconGear">M8,8 m-2.1,0 a2.1,2.1 0 1,0 4.2,0 a2.1,2.1 0 1,0 -4.2,0 M8,2 L8,4 M8,12 L8,14 M2,8 L4,8 M12,8 L14,8 M3.8,3.8 L5.2,5.2 M10.8,10.8 L12.2,12.2 M12.2,3.8 L10.8,5.2 M5.2,10.8 L3.8,12.2</Geometry>
+
+<!-- Keyboard key chip for the F1 shortcuts overlay -->
+<Style x:Key="KbdKey" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="4"/>
+    <Setter Property="Padding" Value="6,1"/>
+    <Setter Property="MinWidth" Value="20"/>
+    <Setter Property="Margin" Value="0,0,9,0"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+</Style>
+<Style x:Key="KbdText" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="Consolas"/>
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+    <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+</Style>
+<Style x:Key="KbdAction" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+</Style>
+<Style x:Key="KbdRow" TargetType="DockPanel">
+    <Setter Property="Margin" Value="0,3"/>
+    <Setter Property="LastChildFill" Value="True"/>
+</Style>
+<Style x:Key="KbdColHeader" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="10.5"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
+    <Setter Property="Margin" Value="0,0,0,8"/>
+</Style>
+
+<Style x:Key="RibbonIcon" TargetType="Path">
+    <Setter Property="Width" Value="14"/>
+    <Setter Property="Height" Value="14"/>
+    <Setter Property="Stretch" Value="Uniform"/>
+    <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+    <Setter Property="StrokeThickness" Value="1.35"/>
+    <Setter Property="StrokeLineJoin" Value="Round"/>
+    <Setter Property="StrokeStartLineCap" Value="Round"/>
+    <Setter Property="StrokeEndLineCap" Value="Round"/>
+    <Setter Property="Fill" Value="Transparent"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Margin" Value="0,0,6,0"/>
+</Style>
+
+<Style x:Key="ToggleToolIcon" TargetType="Path" BasedOn="{StaticResource RibbonIcon}">
+    <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+</Style>
+
+<Style x:Key="MenuChevronIcon" TargetType="Path">
+    <Setter Property="Width" Value="10"/>
+    <Setter Property="Height" Value="10"/>
+    <Setter Property="Stretch" Value="Uniform"/>
+    <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+    <Setter Property="StrokeThickness" Value="1.45"/>
+    <Setter Property="StrokeLineJoin" Value="Round"/>
+    <Setter Property="StrokeStartLineCap" Value="Round"/>
+    <Setter Property="StrokeEndLineCap" Value="Round"/>
+    <Setter Property="Fill" Value="Transparent"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Margin" Value="4,0,0,0"/>
+</Style>
+
+<Style x:Key="PanelHeaderIcon" TargetType="Path">
+    <Setter Property="Width" Value="13"/>
+    <Setter Property="Height" Value="13"/>
+    <Setter Property="Stretch" Value="Uniform"/>
+    <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+    <Setter Property="StrokeThickness" Value="1.45"/>
+    <Setter Property="StrokeLineJoin" Value="Round"/>
+    <Setter Property="StrokeStartLineCap" Value="Round"/>
+    <Setter Property="StrokeEndLineCap" Value="Round"/>
+    <Setter Property="Fill" Value="Transparent"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+</Style>
+
+<Style x:Key="BookmarkDockToggleButton" TargetType="{x:Type ToggleButton}">
+    <Setter Property="Width" Value="14"/>
+    <Setter Property="Height" Value="14"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Template">
+        <Setter.Value>
+            <ControlTemplate TargetType="{x:Type ToggleButton}">
+                <Grid>
+                    <Ellipse Stroke="{DynamicResource ControlBorderBrush}"
+                             StrokeThickness="1"
+                             Fill="{DynamicResource ControlBackgroundBrush}"/>
+                    <Ellipse x:Name="BookmarksDockDot"
+                             Width="7"
+                             Height="7"
+                             Fill="{DynamicResource AccentBrush}"
+                             Visibility="Collapsed"/>
+                </Grid>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Fill" TargetName="BookmarksDockDot" Value="{DynamicResource AccentHoverBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsChecked" Value="True">
+                        <Setter Property="Visibility" TargetName="BookmarksDockDot" Value="Visible"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value>
+    </Setter>
+</Style>
+
+<!-- Thin vertical divider for the bottom command strip groups -->
+<Style x:Key="ToolDiv" TargetType="Border">
+    <Setter Property="Width" Value="1"/>
+    <Setter Property="Height" Value="18"/>
+    <Setter Property="Margin" Value="7,0"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Background" Value="{DynamicResource ControlBorderBrush}"/>
+</Style>
+</ResourceDictionary>

@@ -1,0 +1,427 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Windows.Controls;
+using System.Windows.Input;
+
+namespace OurPlanCore;
+
+public partial class MainWindow
+{
+    private void TakeoffsTree_KeyDown(object sender, KeyEventArgs e)
+    {
+        Key key = KeyboardShortcutKeys.EffectiveKey(e);
+        if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Z)
+        {
+            TryUndoLastTakeoffDelete();
+            e.Handled = true;
+            return;
+        }
+
+        if (Keyboard.Modifiers == ModifierKeys.None && key == Key.Delete)
+        {
+            if (TryDeleteTakeoffsKeyboardSelection())
+                e.Handled = true;
+            return;
+        }
+
+        if (TakeoffsTree.SelectedItem is not TreeViewItem item)
+            return;
+
+        if (item.Tag is TakeoffMeasurementNode sectionNode)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Up)
+            {
+                if (EnsureCurrentJobWritable("move takeoff sections"))
+                    MoveTakeoffSections(sectionNode, -1);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Down)
+            {
+                if (EnsureCurrentJobWritable("move takeoff sections"))
+                    MoveTakeoffSections(sectionNode, 1);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.F2 &&
+                     SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true).Count <= 1)
+            {
+                if (EnsureCurrentJobWritable("rename a takeoff section"))
+                    RenameSection(sectionNode.Item, sectionNode.Measurement);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Enter)
+            {
+                SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true), sectionNode);
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && key == Key.C)
+        {
+            CopyCutTakeoffNode(item, TakeoffsClipboardMode.Copy);
+            e.Handled = true;
+        }
+        else if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && key == Key.X)
+        {
+            CopyCutTakeoffNode(item, TakeoffsClipboardMode.Cut);
+            e.Handled = true;
+        }
+        else if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && key == Key.V)
+        {
+            PasteIntoSelectedTakeoffTarget(item);
+            e.Handled = true;
+        }
+        else if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && key == Key.D)
+        {
+            DuplicateTakeoffNode(item);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Up)
+        {
+            MoveTakeoffNodes(item, -1);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Down)
+        {
+            MoveTakeoffNodes(item, 1);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.F2 && TakeoffSelectionCount(item) <= 1)
+        {
+            if (item.Tag is TakeoffItem takeoff)
+                RenameItem(item, takeoff);
+            else if (item.Tag is TakeoffFolderNode folder && !folder.IsRoot)
+                RenameTakeoffFolder(item, folder);
+            e.Handled = true;
+        }
+    }
+
+    private bool TryDeleteTakeoffsKeyboardSelection()
+    {
+        if (!EnsureCurrentJobWritable("delete takeoffs"))
+            return true;
+
+        if (_takeoffSectionMultiSelection.Count > 0 &&
+            TryDeleteSelectedTakeoffSectionsFromKeyboard())
+        {
+            return true;
+        }
+
+        if (_takeoffsMultiSelection.Count > 0 &&
+            TryDeleteSelectedTakeoffNodesFromKeyboard())
+        {
+            return true;
+        }
+
+        if (TakeoffsTree.SelectedItem is not TreeViewItem selected)
+            return false;
+
+        if (selected.Tag is TakeoffMeasurementNode sectionNode)
+        {
+            DeleteTakeoffSections(sectionNode);
+            return true;
+        }
+
+        if (GetTakeoffNodePath(selected) != null)
+        {
+            DeleteTakeoffNodes(selected);
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryDeleteSelectedTakeoffNodesFromKeyboard()
+    {
+        if (TakeoffsTree.SelectedItem is TreeViewItem selected &&
+            GetTakeoffNodePath(selected) is { } selectedPath &&
+            _takeoffsMultiSelection.Contains(selectedPath))
+        {
+            DeleteTakeoffNodes(selected);
+            return true;
+        }
+
+        if (FirstSelectedTakeoffTreeItem() is { } fallback)
+        {
+            DeleteTakeoffNodes(fallback);
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryDeleteSelectedTakeoffSectionsFromKeyboard()
+    {
+        if (TakeoffsTree.SelectedItem is TreeViewItem selected &&
+            selected.Tag is TakeoffMeasurementNode selectedNode &&
+            _takeoffSectionMultiSelection.Contains(TakeoffSectionSelectionKey(selectedNode)))
+        {
+            DeleteTakeoffSections(selectedNode);
+            return true;
+        }
+
+        if (FirstSelectedTakeoffSectionNode() is { } fallback)
+        {
+            DeleteTakeoffSections(fallback);
+            return true;
+        }
+
+        return false;
+    }
+
+    private TreeViewItem? FirstSelectedTakeoffTreeItem()
+    {
+        foreach (string path in _takeoffsMultiSelection)
+        {
+            if (FindTakeoffTreeItemByFolder(path) is { } item)
+                return item;
+        }
+
+        return null;
+    }
+
+    private TakeoffMeasurementNode? FirstSelectedTakeoffSectionNode()
+    {
+        foreach (string key in _takeoffSectionMultiSelection)
+        {
+            if (FindTakeoffSectionTreeItemByKey(key)?.Tag is TakeoffMeasurementNode node)
+                return node;
+        }
+
+        return null;
+    }
+
+    private void CopyCutTakeoffNode(TreeViewItem item, TakeoffsClipboardMode mode)
+    {
+        if (mode == TakeoffsClipboardMode.Cut && !EnsureCurrentJobWritable("cut takeoff nodes"))
+            return;
+
+        var entries = GetSelectedTakeoffEntries(item);
+        if (entries.Count == 0) return;
+
+        _takeoffsClipboard = new TakeoffsClipboard(entries, mode);
+        string verb = mode == TakeoffsClipboardMode.Copy ? "Copied" : "Cut";
+        TxtStatus.Text = entries.Count == 1
+            ? $"{verb}: {OurPlanCoreJobStore.DisplayName(entries[0].SourcePath)}"
+            : $"{verb} {entries.Count} takeoff nodes.";
+    }
+
+    private void PasteIntoSelectedTakeoffTarget(TreeViewItem item)
+    {
+        if (!EnsureCurrentJobWritable("paste takeoff nodes"))
+            return;
+
+        string? targetFolder = GetTakeoffPasteTargetFolder(item);
+        if (targetFolder != null)
+            PasteTakeoffsIntoFolder(targetFolder);
+    }
+
+    private void PasteTakeoffsIntoFolder(string targetFolder)
+    {
+        if (!EnsureCurrentJobWritable("paste takeoff nodes"))
+            return;
+
+        if (_takeoffsClipboard == null || !CanDropTakeoffsInto(_takeoffsClipboard, targetFolder, _takeoffsClipboard.Mode))
+            return;
+
+        RunTakeoffDrop(_takeoffsClipboard, targetFolder, _takeoffsClipboard.Mode);
+    }
+
+    private void DuplicateTakeoffNode(TreeViewItem item)
+    {
+        if (!EnsureCurrentJobWritable("duplicate takeoff nodes"))
+            return;
+
+        var entries = GetSelectedTakeoffEntries(item);
+        if (entries.Count == 0) return;
+
+        try
+        {
+            FlushTakeoffAutosaves();
+            var changed = new List<string>();
+            foreach (var entry in entries)
+            {
+                string? parent = Path.GetDirectoryName(entry.SourcePath);
+                if (string.IsNullOrWhiteSpace(parent) ||
+                    !CanDropTakeoffsInto(new TakeoffsClipboard([entry], TakeoffsClipboardMode.Copy), parent, TakeoffsClipboardMode.Copy))
+                {
+                    continue;
+                }
+
+                changed.Add(OurPlanCoreJobStore.CopyNodePreserveDisplayName(entry.SourcePath, parent));
+            }
+
+            if (changed.Count == 0)
+                return;
+
+            if (!TryApplyTakeoffStructureCopyFast(changed))
+            {
+                LoadTakeoffsForJob();
+                SetTakeoffMultiSelection(changed);
+                SelectFirstTakeoffPath(changed);
+            }
+            TxtStatus.Text = changed.Count == 1
+                ? $"Duplicated: {OurPlanCoreJobStore.DisplayName(changed[0])}"
+                : $"Duplicated {changed.Count} takeoff nodes.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Duplicate Takeoffs", ex);
+        }
+    }
+
+    private void RunTakeoffDrop(
+        TakeoffsClipboard payload,
+        string targetFolder,
+        TakeoffsClipboardMode mode,
+        TakeoffDropTimings? timings = null)
+    {
+        if (!EnsureCurrentJobWritable(mode == TakeoffsClipboardMode.Cut
+                ? "move takeoff nodes"
+                : "paste takeoff nodes"))
+        {
+            return;
+        }
+
+        bool wasCut = mode == TakeoffsClipboardMode.Cut;
+        try
+        {
+            string? previousActivePath = _activeItem?.FolderPath;
+            var flushWatch = Stopwatch.StartNew();
+            FlushTakeoffAutosaves();
+            flushWatch.Stop();
+            if (timings != null)
+                timings.FlushMilliseconds = flushWatch.ElapsedMilliseconds;
+
+            var changed = new List<string>();
+            var rebasedLegendPaths = new List<(string OldPath, string NewPath)>();
+            var fileWatch = Stopwatch.StartNew();
+            if (wasCut)
+            {
+                var moveEntries = payload.Entries
+                    .Where(entry => CanDropTakeoffsInto(new TakeoffsClipboard([entry], mode), targetFolder, mode))
+                    .ToList();
+                foreach (var moved in OurPlanCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetFolder))
+                {
+                    changed.Add(moved.MovedPath);
+                    rebasedLegendPaths.Add((moved.SourcePath, moved.MovedPath));
+                }
+            }
+            else
+            {
+                var copyEntries = payload.Entries
+                    .Where(entry => CanDropTakeoffsInto(new TakeoffsClipboard([entry], mode), targetFolder, mode))
+                    .Select(entry => entry.SourcePath)
+                    .ToList();
+                changed.AddRange(OurPlanCoreJobStore.CopyNodesPreserveDisplayName(copyEntries, targetFolder));
+            }
+            fileWatch.Stop();
+            if (timings != null)
+                timings.FileOperationMilliseconds = fileWatch.ElapsedMilliseconds;
+
+            if (changed.Count == 0)
+                return;
+
+            if (wasCut)
+                _takeoffsClipboard = null;
+
+            RebasePageLegendTakeoffOrderReferences(rebasedLegendPaths);
+
+            var refreshWatch = Stopwatch.StartNew();
+            if (wasCut)
+            {
+                if (!TryApplyTakeoffStructureMoveFast(rebasedLegendPaths, targetFolder, changed))
+                {
+                    ReloadTakeoffsForMoveSelection(changed, previousActivePath);
+                }
+            }
+            else
+            {
+                if (!TryApplyTakeoffStructureCopyFast(changed, timings))
+                {
+                    LoadTakeoffsForJob();
+                    SetTakeoffMultiSelection(changed);
+                    SelectFirstTakeoffPath(changed);
+                }
+            }
+            refreshWatch.Stop();
+            if (timings != null)
+                timings.UiRefreshMilliseconds = refreshWatch.ElapsedMilliseconds;
+
+            TxtStatus.Text = changed.Count == 1
+                ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlanCoreJobStore.DisplayName(changed[0])}"
+                : $"{(wasCut ? "Moved" : "Pasted")} {changed.Count} takeoff nodes.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Takeoff Paste", ex);
+        }
+    }
+
+    private bool CanPasteTakeoffsInto(string? targetFolder) =>
+        _takeoffsClipboard != null && CanDropTakeoffsInto(_takeoffsClipboard, targetFolder, _takeoffsClipboard.Mode);
+
+    private bool CanDropTakeoffsInto(TakeoffsClipboard payload, string? targetFolder, TakeoffsClipboardMode mode)
+    {
+        if (!IsCurrentJobWritable || _currentJob == null || string.IsNullOrWhiteSpace(targetFolder) || payload.Entries.Count == 0)
+            return false;
+        if (!Directory.Exists(targetFolder))
+            return false;
+
+        if (!OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetFolder) ||
+            OurPlanCoreJobStore.IsTakeoffItemFolder(targetFolder))
+            return false;
+
+        bool hasMovableEntry = false;
+        foreach (var entry in payload.Entries)
+        {
+            if (!Directory.Exists(entry.SourcePath))
+                return false;
+            if (!OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) ||
+                string.Equals(entry.SourcePath, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (OurPlanCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
+                return false;
+
+            if (mode == TakeoffsClipboardMode.Cut)
+            {
+                string parent = Path.GetDirectoryName(entry.SourcePath) ?? "";
+                if (string.Equals(parent, targetFolder, StringComparison.OrdinalIgnoreCase))
+                    continue;
+            }
+
+            hasMovableEntry = true;
+        }
+
+        return mode == TakeoffsClipboardMode.Copy || hasMovableEntry;
+    }
+
+    private string? GetTakeoffPasteTargetFolder(TreeViewItem item)
+    {
+        return item.Tag switch
+        {
+            TakeoffFolderNode folder => folder.FolderPath,
+            TakeoffItem takeoff => Path.GetDirectoryName(takeoff.FolderPath),
+            TakeoffMeasurementNode node => Path.GetDirectoryName(node.Item.FolderPath),
+            _ => _currentJob?.TakeoffsRoot,
+        };
+    }
+
+    private sealed class TakeoffDropTimings
+    {
+        public long FlushMilliseconds { get; set; }
+        public long FileOperationMilliseconds { get; set; }
+        public long UiRefreshMilliseconds { get; set; }
+        public long CopyLoadMilliseconds { get; set; }
+        public long CopyAppendMilliseconds { get; set; }
+        public long CopyViewportMilliseconds { get; set; }
+        public long CopySelectionMilliseconds { get; set; }
+        public long CopyPageIndicatorsMilliseconds { get; set; }
+        public long CopyLegendMilliseconds { get; set; }
+        public long CopyEstimateMilliseconds { get; set; }
+        public long CopyTotalMilliseconds { get; set; }
+    }
+}

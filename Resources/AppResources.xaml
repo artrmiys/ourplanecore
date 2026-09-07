@@ -1,0 +1,10 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="AppControlResources.xaml"/>
+        <ResourceDictionary Source="RibbonNumericResources.xaml"/>
+        <ResourceDictionary Source="PageHeaderResources.xaml"/>
+        <ResourceDictionary Source="AppNavigationResources.xaml"/>
+        <ResourceDictionary Source="MainWindowResources.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

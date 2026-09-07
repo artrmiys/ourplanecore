@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class AppSettings
 {
@@ -12,14 +12,18 @@ public sealed class AppSettings
     public List<string> JobsRootPaths { get; set; } = [];
     public string LastJobPath { get; set; } = "";
     public string LastPageFolder { get; set; } = "";
+    public string LastPageRelativePath { get; set; } = "";
+    public string NewProjectStorageFormat { get; set; } = "OurPlan";
     public string UnitMode { get; set; } = "Imperial";
-    public string Theme { get; set; } = "Light";
-    public string ViewportBackground { get; set; } = "#FFFFFF";
+    public string Theme { get; set; } = "Dark";
+    public string ViewportBackground { get; set; } = "#2B2B2B";
+    public string PageBackground { get; set; } = "#FFFFFF";
     public bool ShowMeasurementLabels { get; set; } = true;
-    public bool ShowLineLabels { get; set; } = true;
-    public bool ShowAreaLabels { get; set; } = true;
+    public bool ShowLineLabels { get; set; }
+    public bool ShowAreaLabels { get; set; }
+    public bool ShowJoistLabels { get; set; } = true;
     public bool ShowCountLabels { get; set; }
-    public double MeasurementLabelScale { get; set; } = 1.0;
+    public double MeasurementLabelScale { get; set; } = 0.9619565217391305;
     public bool ShowSheetLegend { get; set; } = true;
     public string SheetLegendAnchor { get; set; } = "BottomLeft";
     public double SheetLegendScale { get; set; } = 1.0;
@@ -27,12 +31,80 @@ public sealed class AppSettings
     public bool ScaleSheetOverlaysWithPage { get; set; } = false;
     public bool ScaleMeasurementLabelsWithPage { get; set; } = false;
     public bool ScaleSheetHeaderWithPage { get; set; } = false;
+    public bool SimplifyViewportNavigation { get; set; } = false;
+    public string ViewportRenderQuality { get; set; } = ViewportRenderPolicy.HighQualityMode;
+    public bool PdfLayersEnabled { get; set; } = false;
+    // PlanSwift-style default: show each page as one static 150 DPI raster image
+    // rendered once to disk, with none of the live zoom/pan re-render machinery.
+    // Turning on PdfLayers (the live PyMuPDF pipeline) overrides this per page.
+    public bool StaticPageRenderEnabled { get; set; } = true;
+    // Optional crisp black vector linework drawn on top of the static raster
+    // (uses the already-built page snap index; resolution-independent, no re-renders).
+    public bool BlackVectorOverlayEnabled { get; set; } = false;
+    // Resolution the static page image is rendered at. 150 by default; higher
+    // stays sharper when zoomed in at the cost of memory/disk. Editable up to 300.
+    public int StaticPageRenderDpi { get; set; } = AppSettingsStore.StaticPageRenderDpiDefault;
+    public bool BuildRasterCacheOnPdfImport { get; set; } = true;
+    public int PdfImportRasterDefaultsVersion { get; set; }
+    public bool AutoCleanRasterCacheOnClose { get; set; } = true;
+    public bool TakeoffSortDescending { get; set; } = false;
+    public bool TakeoffAutoRouteOnImport { get; set; } = true;
+    public bool ShowTakeoffSectionsInTree { get; set; } = false;
+    public string DefaultCountSymbol { get; set; } = CountDisplaySymbol.Circle;
+    public double ViewportMeasurementStrokeScale { get; set; } = 3.0;
+    public double ViewportRulerStrokeWidth { get; set; } = 1.0;
+    public double ViewportLiveInputLabelSizePx { get; set; } = AppSettingsStore.LiveInputLabelSizeDefaultPx;
+    public double ViewportLiveInputLabelOpacity { get; set; } = AppSettingsStore.LiveInputLabelOpacityDefault;
+    public double ViewportPdfSnapBridgeTolerancePx { get; set; } = AppSettingsStore.ViewportPdfSnapBridgeToleranceDefaultPx;
+    public double ViewportPointSizeScale { get; set; } = 2.0;
+    public double ViewportZoomWheelFactor { get; set; } = AppSettingsStore.ViewportZoomWheelFactorDefault;
+    public double ViewportAreaEdgeScale { get; set; } = 0.25;
+    public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
+    public double ExtraJoistGlowIntensity { get; set; } = AppSettingsStore.ExtraJoistGlowIntensityDefault;
+    public int SimilarCountSettingsVersion { get; set; }
+    public double SimilarCountThreshold { get; set; } = AppSettingsStore.SimilarCountThresholdDefault;
+    public bool SimilarCountRotations { get; set; }
+    public bool SimilarCountMirrored { get; set; }
+    public bool SimilarCountAllSheets { get; set; }
+    // Whole-job background warmup (previews + raster bitmaps for every page).
+    // Off by default: on big jobs the sweep competes with interactive
+    // sharpening for CPU/disk and the open sheet feels blurry longer.
+    public bool BackgroundJobWarmupEnabled { get; set; }
+    public bool PdfExportIncludeMeasurements { get; set; } = true;
+    public bool PdfExportIncludeAnnotations { get; set; }
+    public bool PdfExportShowSheetLegend { get; set; } = true;
+    public bool PdfExportShowMeasurementLabels { get; set; } = true;
+    public bool PdfExportShowLineLabels { get; set; }
+    public bool PdfExportShowAreaLabels { get; set; }
+    public bool PdfExportShowJoistLabels { get; set; } = true;
+    public bool PdfExportShowCountLabels { get; set; }
+    public bool PdfExportShowExtraJoistGlow { get; set; } = true;
+    public double PdfExportMeasurementStrokeScale { get; set; } = 3.5;
+    public double PdfExportPointSizeScale { get; set; } = 3.5;
+    public double PdfExportAreaEdgeScale { get; set; } = 0.25;
+    public double PdfExportAreaFillOpacity { get; set; } = 0.1826;
+    public double PdfExportMeasurementLabelScale { get; set; } = 1.2;
+    public double PdfExportSheetLegendScale { get; set; } = 2.0;
+    public double PdfExportSheetHeaderScale { get; set; } = 1.2;
     public double MassingFloorAssemblyFeet { get; set; } = SmartMassingDraftService.DefaultFloorAssemblyFeet;
     public double MassingLevelSpacingFeet { get; set; } = SmartMassingDraftService.DefaultLevelSpacingFeet;
-    public double LeftPanelWidth { get; set; } = 200.0;
-    public double RightPanelWidth { get; set; } = 220.0;
+    public double LeftPanelWidth { get; set; } = 248.0;
+    public double RightPanelWidth { get; set; } = 269.0;
+    public double ExcelMacroStripTopFraction { get; set; } = 0.5;
+    // Main window placement. Width/Height == 0 means "never saved" (fresh install)
+    // so startup keeps the XAML defaults untouched. Restored on next launch,
+    // clamped to the visible desktop so the window can't open off-screen.
+    public double WindowLeft { get; set; }
+    public double WindowTop { get; set; }
+    public double WindowWidth { get; set; }
+    public double WindowHeight { get; set; }
+    public bool WindowMaximized { get; set; }
     public string OpenAiModel { get; set; } = OpenAiRequestRunner.DefaultModel;
     public string FolderTemplateMode { get; set; } = "AUTO";
+    // Viewport side command strips: ordered command ids ("-" = separator).
+    // Empty list = use built-in defaults (so default updates reach users who never customized).
+    public List<string> LeftStripCommands { get; set; } = [];
+    public List<string> RightStripCommands { get; set; } = [];
     public List<RecentJobInfo> RecentJobs { get; set; } = [];
 }
 
@@ -60,6 +132,31 @@ public sealed class OpenAiModelStatus
 
 public static class AppSettingsStore
 {
+    public const string SettingsPathEnvironmentVariable = AppIdentity.EnvironmentPrefix + "_SETTINGS_PATH";
+    public const string OpenAiModelEnvironmentVariable = AppIdentity.EnvironmentPrefix + "_OPENAI_MODEL";
+    public const double PdfExportScaleMax = 10.0;
+    public const double ViewportPdfSnapBridgeToleranceDefaultPx = 36.0;
+    public const double ViewportPdfSnapBridgeToleranceMinPx = 4.0;
+    public const double ViewportPdfSnapBridgeToleranceMaxPx = 96.0;
+    // Mouse-wheel zoom step (multiplier per notch). Default 2x doubles per notch,
+    // PlanSwift-fast; tunable in the Display ribbon.
+    public const double ViewportZoomWheelFactorDefault = 2.0;
+    public const double ViewportZoomWheelFactorMin = 1.05;
+    public const double ViewportZoomWheelFactorMax = 2.5;
+    public const double ExtraJoistGlowIntensityDefault = 145.0 / 255.0;
+    public const double LiveInputLabelSizeDefaultPx = 12.0;
+    public const double LiveInputLabelSizeMinPx = 8.0;
+    public const double LiveInputLabelSizeMaxPx = 24.0;
+    public const double LiveInputLabelOpacityDefault = 0.75;
+    public const double LiveInputLabelOpacityMin = 0.15;
+    public const int StaticPageRenderDpiDefault = 150;
+    public const int StaticPageRenderDpiMin = 72;
+    public const int StaticPageRenderDpiMax = 300;
+    public const int SimilarCountSettingsCurrentVersion = 3;
+    public const double SimilarCountThresholdDefault = 0.94;
+    public const double SimilarCountThresholdMin = 0.55;
+    public const double SimilarCountThresholdMax = 0.98;
+
     public static readonly string[] SuggestedOpenAiModels =
     [
         OpenAiRequestRunner.DefaultModel,
@@ -81,38 +178,96 @@ public static class AppSettingsStore
     {
         get
         {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            return Path.Combine(appData, "OurPlaneCore", "settings.json");
+            string? overridePath = AppIdentity.GetEnvironmentVariable("SETTINGS_PATH");
+            if (!string.IsNullOrWhiteSpace(overridePath))
+                return Path.GetFullPath(overridePath.Trim());
+
+            return Path.Combine(AppIdentity.RoamingRoot, "settings.json");
         }
     }
 
     public static AppSettings Load()
     {
-        try
-        {
-            if (!File.Exists(SettingsPath))
-                return new AppSettings();
-
-            var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath))
-                ?? new AppSettings();
-            NormalizeJobsRoots(settings);
-            NormalizeRecentJobs(settings);
+        string settingsPath = SettingsPath;
+        if (TryLoad(settingsPath, out AppSettings settings))
             return settings;
-        }
-        catch
+
+        string currentDefaultPath = Path.Combine(AppIdentity.RoamingRoot, "settings.json");
+        if (PathsEqual(settingsPath, currentDefaultPath) && !File.Exists(settingsPath))
         {
-            return new AppSettings();
+            string legacyPath = Path.Combine(AppIdentity.LegacyRoamingRoot, "settings.json");
+            if (TryLoad(legacyPath, out settings))
+            {
+                AppLog.Info($"Loaded legacy app settings fallback from {legacyPath}.");
+                return settings;
+            }
         }
+
+        return new AppSettings();
     }
 
     public static void Save(AppSettings settings)
     {
+        string settingsPath = SettingsPath;
+        if (AppDataMigration.ShouldProtectLegacySettingsSave(settingsPath))
+        {
+            AppLog.Warn($"Skipped settings save because legacy settings migration is still pending: {settingsPath}");
+            return;
+        }
+
         NormalizeJobsRoots(settings);
-        string? dir = Path.GetDirectoryName(SettingsPath);
+        NormalizeOutputSettings(settings);
+        NormalizeTakeoffDefaults(settings);
+        NormalizeSimilarCountSettings(settings);
+        NormalizePdfImportRasterSettings(settings);
+        NormalizeStaticRenderSettings(settings);
+        string? dir = Path.GetDirectoryName(settingsPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
 
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+        IoUtil.WriteAllTextAtomic(settingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+    }
+
+    private static bool TryLoad(string path, out AppSettings settings)
+    {
+        settings = new AppSettings();
+        if (!File.Exists(path))
+            return false;
+
+        try
+        {
+            settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path))
+                ?? new AppSettings();
+            NormalizeJobsRoots(settings);
+            NormalizeRecentJobs(settings);
+            NormalizeOutputSettings(settings);
+            NormalizeTakeoffDefaults(settings);
+            NormalizeSimilarCountSettings(settings);
+            NormalizePdfImportRasterSettings(settings);
+            NormalizeStaticRenderSettings(settings);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Load app settings failed for {path}");
+            settings = new AppSettings();
+            return false;
+        }
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(left),
+                Path.GetFullPath(right),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static IReadOnlyList<string> CurrentJobsRootPaths(AppSettings settings)
@@ -144,6 +299,27 @@ public static class AppSettingsStore
         roots.Insert(0, fullPath);
         settings.JobsRootPaths = roots;
         settings.JobsRootPath = fullPath;
+        NormalizeJobsRoots(settings);
+    }
+
+    public static void RemoveJobsRoot(AppSettings settings, string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            return;
+
+        string key = NormalizePath(rootPath);
+        var roots = (settings.JobsRootPaths ?? [])
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Where(path => !string.Equals(NormalizePath(path), key, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(settings.JobsRootPath) &&
+            string.Equals(NormalizePath(settings.JobsRootPath), key, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.JobsRootPath = roots.FirstOrDefault() ?? "";
+        }
+
+        settings.JobsRootPaths = roots;
         NormalizeJobsRoots(settings);
     }
 
@@ -281,6 +457,160 @@ public static class AppSettingsStore
         settings.RecentJobs = TrimRecentJobsPreservingPinned(unique);
     }
 
+    public static void NormalizeOutputSettings(AppSettings settings)
+    {
+        settings.ViewportRenderQuality = ViewportRenderPolicy.NormalizeQualityMode(settings.ViewportRenderQuality);
+        settings.ViewportMeasurementStrokeScale = NormalizeScale(
+            settings.ViewportMeasurementStrokeScale,
+            fallback: 3.0,
+            min: 0.25,
+            max: 4.0);
+        settings.ViewportRulerStrokeWidth = NormalizeScale(
+            settings.ViewportRulerStrokeWidth,
+            fallback: 1.0,
+            min: 0.5,
+            max: 6.0);
+        settings.ViewportLiveInputLabelSizePx = NormalizeLiveInputLabelSize(
+            settings.ViewportLiveInputLabelSizePx);
+        settings.ViewportLiveInputLabelOpacity = NormalizeLiveInputLabelOpacity(
+            settings.ViewportLiveInputLabelOpacity);
+        settings.ViewportPdfSnapBridgeTolerancePx = NormalizePdfSnapBridgeTolerancePx(
+            settings.ViewportPdfSnapBridgeTolerancePx);
+        settings.ViewportPointSizeScale = NormalizeScale(
+            settings.ViewportPointSizeScale,
+            fallback: 2.0,
+            min: 0.25,
+            max: 4.0);
+        settings.ViewportZoomWheelFactor = NormalizeScale(
+            settings.ViewportZoomWheelFactor,
+            fallback: ViewportZoomWheelFactorDefault,
+            min: ViewportZoomWheelFactorMin,
+            max: ViewportZoomWheelFactorMax);
+        settings.ViewportAreaEdgeScale = NormalizeScale(
+            settings.ViewportAreaEdgeScale,
+            fallback: 0.25,
+            min: 0.25,
+            max: 4.0);
+        settings.ViewportAreaFillOpacity =
+            double.IsNaN(settings.ViewportAreaFillOpacity) || double.IsInfinity(settings.ViewportAreaFillOpacity)
+                ? 0.2826086956521738
+                : Math.Clamp(settings.ViewportAreaFillOpacity, 0.0, 1.0);
+        settings.ExtraJoistGlowIntensity = NormalizeExtraJoistGlowIntensity(
+            settings.ExtraJoistGlowIntensity);
+        settings.PdfExportMeasurementStrokeScale = NormalizeScale(
+            settings.PdfExportMeasurementStrokeScale,
+            fallback: 3.5,
+            min: 0.25,
+            max: PdfExportScaleMax);
+        settings.PdfExportPointSizeScale = NormalizeScale(
+            settings.PdfExportPointSizeScale,
+            fallback: 3.5,
+            min: 0.25,
+            max: PdfExportScaleMax);
+        settings.PdfExportAreaEdgeScale = NormalizeScale(
+            settings.PdfExportAreaEdgeScale,
+            fallback: 0.25,
+            min: 0.25,
+            max: 4.0);
+        settings.PdfExportAreaFillOpacity =
+            double.IsNaN(settings.PdfExportAreaFillOpacity) || double.IsInfinity(settings.PdfExportAreaFillOpacity)
+                ? 0.1826
+                : Math.Clamp(settings.PdfExportAreaFillOpacity, 0.0, 1.0);
+        settings.PdfExportMeasurementLabelScale = NormalizeScale(
+            settings.PdfExportMeasurementLabelScale,
+            fallback: 1.2,
+            min: 0.50,
+            max: PdfExportScaleMax);
+        settings.PdfExportSheetLegendScale = NormalizeScale(
+            settings.PdfExportSheetLegendScale,
+            fallback: 2.0,
+            min: 0.25,
+            max: PdfExportScaleMax);
+        settings.PdfExportSheetHeaderScale = NormalizeScale(
+            settings.PdfExportSheetHeaderScale,
+            fallback: 1.2,
+            min: 0.25,
+            max: PdfExportScaleMax);
+    }
+
+    public static double NormalizeExtraJoistGlowIntensity(double intensity)
+    {
+        if (double.IsNaN(intensity) || double.IsInfinity(intensity))
+            return ExtraJoistGlowIntensityDefault;
+
+        return Math.Clamp(intensity, 0.0, 1.0);
+    }
+
+    public static void NormalizeTakeoffDefaults(AppSettings settings)
+    {
+        settings.DefaultCountSymbol = CountDisplaySymbol.Normalize(settings.DefaultCountSymbol);
+    }
+
+    public static void NormalizeSimilarCountSettings(AppSettings settings)
+    {
+        double threshold = NormalizeScale(
+            settings.SimilarCountThreshold,
+            fallback: SimilarCountThresholdDefault,
+            min: SimilarCountThresholdMin,
+            max: SimilarCountThresholdMax);
+
+        if (settings.SimilarCountSettingsVersion < SimilarCountSettingsCurrentVersion)
+        {
+            bool oldLowPrecisionThreshold = threshold <= 0.6001;
+            bool oldPrecisionDefault = threshold <= 0.8801;
+            if (oldLowPrecisionThreshold || oldPrecisionDefault)
+                threshold = SimilarCountThresholdDefault;
+
+            if ((oldLowPrecisionThreshold || oldPrecisionDefault) &&
+                settings.SimilarCountRotations &&
+                !settings.SimilarCountMirrored)
+                settings.SimilarCountRotations = false;
+
+            settings.SimilarCountMirrored = false;
+            settings.SimilarCountSettingsVersion = SimilarCountSettingsCurrentVersion;
+        }
+
+        // Keep expensive or loose Similar options as explicit per-dialog actions.
+        settings.SimilarCountThreshold = SimilarCountThresholdDefault;
+        settings.SimilarCountRotations = false;
+        settings.SimilarCountMirrored = false;
+        settings.SimilarCountAllSheets = false;
+    }
+
+    public static void NormalizePdfImportRasterSettings(AppSettings settings)
+    {
+        if (settings.PdfImportRasterDefaultsVersion < 1)
+        {
+            settings.BuildRasterCacheOnPdfImport = true;
+            settings.PdfImportRasterDefaultsVersion = 1;
+        }
+    }
+
+    public static void NormalizeStaticRenderSettings(AppSettings settings)
+    {
+        settings.StaticPageRenderDpi = NormalizeStaticPageRenderDpi(settings.StaticPageRenderDpi);
+    }
+
+    public static int NormalizeStaticPageRenderDpi(int dpi)
+    {
+        if (dpi <= 0)
+            return StaticPageRenderDpiDefault;
+
+        return Math.Clamp(dpi, StaticPageRenderDpiMin, StaticPageRenderDpiMax);
+    }
+
+    public static double NormalizeLiveInputLabelSize(double value) =>
+        NormalizeScale(
+            value,
+            LiveInputLabelSizeDefaultPx,
+            LiveInputLabelSizeMinPx,
+            LiveInputLabelSizeMaxPx);
+
+    public static double NormalizeLiveInputLabelOpacity(double value) =>
+        double.IsNaN(value) || double.IsInfinity(value)
+            ? LiveInputLabelOpacityDefault
+            : Math.Clamp(value, LiveInputLabelOpacityMin, 1.0);
+
     public static void NormalizeJobsRoots(AppSettings settings)
     {
         var roots = new List<string>();
@@ -334,6 +664,25 @@ public static class AppSettingsStore
         }
     }
 
+    private static double NormalizeScale(double value, double fallback, double min, double max)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+            return fallback;
+
+        return Math.Clamp(value, min, max);
+    }
+
+    public static double NormalizePdfSnapBridgeTolerancePx(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+            return ViewportPdfSnapBridgeToleranceDefaultPx;
+
+        return Math.Clamp(
+            value,
+            ViewportPdfSnapBridgeToleranceMinPx,
+            ViewportPdfSnapBridgeToleranceMaxPx);
+    }
+
     public static OpenAiKeyStatus GetOpenAiKeyStatus()
     {
         string? processKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.Process);
@@ -362,6 +711,7 @@ public static class AppSettingsStore
         }
         catch (Exception ex)
         {
+            AppLog.Warn(ex, "GetOpenAiKeyStatus user environment lookup failed");
             return new OpenAiKeyStatus
             {
                 Found = false,
@@ -389,8 +739,9 @@ public static class AppSettingsStore
             string? userKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
             return string.IsNullOrWhiteSpace(userKey) ? "" : userKey.Trim();
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn(ex, "ReadOpenAiApiKey user environment lookup failed");
             return "";
         }
     }
@@ -412,13 +763,13 @@ public static class AppSettingsStore
 
     public static OpenAiModelStatus GetOpenAiModelStatus(AppSettings settings)
     {
-        string? envModel = Environment.GetEnvironmentVariable("OURPLANECORE_OPENAI_MODEL", EnvironmentVariableTarget.Process);
+        string? envModel = AppIdentity.GetEnvironmentVariable("OPENAI_MODEL", EnvironmentVariableTarget.Process);
         if (!string.IsNullOrWhiteSpace(envModel))
         {
             return new OpenAiModelStatus
             {
                 Model = NormalizeOpenAiModel(envModel),
-                Source = "OURPLANECORE_OPENAI_MODEL process environment",
+                Source = $"{OpenAiModelEnvironmentVariable} process environment",
             };
         }
 

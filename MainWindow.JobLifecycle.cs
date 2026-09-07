@@ -4,18 +4,18 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
+    private Task? _aiContextMaintenanceTask;
+
     // ── Toolbar ───────────────────────────────────────────────────────────────
 
     private void SetupToolButtonContent()
@@ -27,12 +27,20 @@ public partial class MainWindow
         BtnSelect.Content = "Select";
         BtnScale.Content = "Scale";
         BtnRuler.Content = "Ruler";
-        BtnDrawLine.Content = "Draw";
-        BtnDrawArrow.Content = "Arrow";
-        BtnDrawRect.Content = "Box";
+        BtnHighlight.Content = CreateStrokeIconLabel("IconHighlight", "Highlight", glyphBrush);
+        BtnDrawLine.Content = CreateStrokeIconLabel("IconDrawLine", "Draw", glyphBrush);
+        BtnDrawArrow.Content = CreateStrokeIconLabel("IconArrow", "Arrow", glyphBrush);
+        BtnDrawRect.Content = CreateStrokeIconLabel("IconBox", "Box", glyphBrush);
+        BtnDrawCloud.Content = CreateStrokeIconLabel("IconCloud", "Cloud", glyphBrush);
+        BtnDrawAreaAnnot.Content = CreateStrokeIconLabel("IconAreaFill", "Area", glyphBrush);
+        BtnNote.Content = CreateStrokeIconLabel("IconNote", "Note", glyphBrush);
         BtnPoint.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Count, "Count", glyphBrush);
         BtnLine.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Line, "Line", glyphBrush);
         BtnArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Area, "Area", glyphBrush);
+        BtnJoistArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Joist, "J Area", glyphBrush);
+        BtnBeam.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Count, "Beam", glyphBrush);
+        BtnOpenings.Content = CreateToolGlyphLabel(MeasurementGlyphKind.CountSquare, "Openings", glyphBrush);
+        BuildAnnotationStyleControls();
     }
 
     private static FrameworkElement CreateToolGlyphLabel(
@@ -50,6 +58,44 @@ public partial class MainWindow
             glyphBrush,
             14,
             new Thickness(0, 0, 4, 0)));
+        row.Children.Add(new TextBlock
+        {
+            Text = label,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return row;
+    }
+
+    // Icon + label for the Annotation markup tools, using a single-stroke folder
+    // /tool geometry from MainWindowResources.xaml (matches the ribbon icon set).
+    private FrameworkElement CreateStrokeIconLabel(string geometryKey, string label, Brush glyphBrush)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        // Geometries live in MainWindowResources.xaml (merged into the Window,
+        // not the Application), so look them up via the Window's resource chain.
+        if (TryFindResource(geometryKey) is Geometry geometry)
+        {
+            row.Children.Add(new System.Windows.Shapes.Path
+            {
+                Data = geometry,
+                Width = 14,
+                Height = 14,
+                Stretch = Stretch.Uniform,
+                Stroke = glyphBrush,
+                StrokeThickness = 1.35,
+                StrokeLineJoin = PenLineJoin.Round,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                Fill = Brushes.Transparent,
+                SnapsToDevicePixels = true,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 5, 0),
+            });
+        }
         row.Children.Add(new TextBlock
         {
             Text = label,
@@ -113,10 +159,111 @@ public partial class MainWindow
         CreateJobFromDialog();
     }
 
-    private void OpenJob(string rootPath, string? initialPageFolder = null)
+    private void BtnBlankJob_Click(object sender, RoutedEventArgs e)
     {
-        SaveCurrentPageScale();
-        _currentJob = OurPlaneCoreJobStore.LoadJob(rootPath);
+        CreateBlankJobFromDialog();
+    }
+
+    private bool OpenJob(
+        string rootPath,
+        string? initialPageFolder = null,
+        bool currentJobPrepared = false)
+    {
+        using JobFileWriteActivity.PackageCheckpointScope openCheckpoint =
+            JobFileWriteActivity.BeginPackageCheckpoint();
+        if (openCheckpoint.HadActiveWriters)
+        {
+            ShowJobOpenError(
+                "A background project writer is still finishing.",
+                "Wait a moment and open the project again.");
+            return false;
+        }
+
+        string normalizedRoot;
+        try
+        {
+            normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        }
+        catch (Exception ex)
+        {
+            ShowJobOpenError("The selected job path is invalid.", ex.Message);
+            return false;
+        }
+
+        bool reloadCurrent = _currentJob != null && SameJobPath(_currentJob.RootPath, normalizedRoot);
+        PendingJobAccess? pending = null;
+        JobAccessSessionToken previousToken = default;
+        JobLeaseService? previousLease = null;
+        OurPlanCoreJob nextJob;
+
+        if (reloadCurrent)
+        {
+            if (!PrepareCurrentJobForSwitch())
+                return false;
+            try
+            {
+                JobAccessMode reloadMode = IsCurrentJobWritable
+                    ? JobAccessMode.Writable
+                    : JobAccessMode.ReadOnly;
+                nextJob = OurPlanCoreJobStore.LoadJob(normalizedRoot, reloadMode);
+            }
+            catch (Exception ex)
+            {
+                ShowJobOpenError("The current job could not be reloaded.", ex.Message);
+                return false;
+            }
+        }
+        else
+        {
+            if (!TryPrepareJobAccess(normalizedRoot, out pending) || pending == null)
+                return false;
+            try
+            {
+                nextJob = OurPlanCoreJobStore.LoadJob(normalizedRoot, pending.Mode);
+            }
+            catch (Exception ex)
+            {
+                pending.Dispose();
+                ShowJobOpenError("The selected job could not be loaded.", ex.Message);
+                return false;
+            }
+
+            if (!ConfirmPendingJobAccess(pending))
+                return false;
+
+            if (!currentJobPrepared && !PrepareCurrentJobForSwitch())
+            {
+                pending.Dispose();
+                return false;
+            }
+            if (!ConfirmPendingJobAccess(pending))
+                return false;
+
+            previousToken = _currentJobAccessToken;
+            previousLease = _currentJobLeaseService;
+        }
+
+        if (pending != null && !TryAdoptJobAccess(pending))
+        {
+            pending.Dispose();
+            ShowJobOpenError(
+                "Write ownership was lost before the job switch completed.",
+                "The previous job remains open. Retry, or open the target read-only.");
+            return false;
+        }
+
+        OurPlanCoreJob? previousJob = _currentJob;
+        _pdfOutputPreview?.Close();
+        _currentJob = nextJob;
+        JobFileWriteActivity.SetCurrentJobRoot(nextJob.RootPath);
+        if (previousJob != null && !SameJobPath(previousJob.RootPath, nextJob.RootPath))
+            FinalizeLastPageDeleteUndo();
+        AdoptPackageSessionForOpenedJob(normalizedRoot, reloadCurrent);
+        ApplyCurrentJobAccessToUi();
+        try
+        {
+        ApplyFolderTemplateProviders();
+        OnSheetOverlayPageCleared();
         _currentPage = null;
         _currentPdfPath = "";
         _pagesClipboard = null;
@@ -133,6 +280,7 @@ public partial class MainWindow
         _expandedPageTreePaths.Clear();
         _expandedTakeoffTreePaths.Clear();
         _hiddenAiMarkerTypes.Clear();
+        _pagesWithHiddenRulers.Clear();
         _pageTabs.Clear();
         _activePageTab = null;
         RefreshPageTabs(null);
@@ -140,30 +288,69 @@ public partial class MainWindow
         _activeItem = null;
         _activeTakeoffParentFolder = "";
         TakeoffsTree.Items.Clear();
+        ResetTakeoffTreeItemIndex();
         _viewport.SetMeasurements([]);
         _viewport.ClearPage();
-        Title = $"OurPlaneCore — {_currentJob.Name}";
+        ApplyRulerVisibilityToViewport();
+        RefreshJobHeaderLabels();
+        Title = CurrentJobWindowTitle();
         ReloadPagesTree(_currentJob.PagesRoot);
+        LoadPageBookmarksForJob();
         LoadTakeoffsForJob();
-        _settings.LastJobPath = _currentJob.RootPath;
-        _settings.JobsRootPath = Path.GetDirectoryName(_currentJob.RootPath) ?? _settings.JobsRootPath;
+        LoadThreeDModelForCurrentJob();
+        string documentPath = CurrentDocumentPath();
+        if (HasCurrentPackageSession && !SameDocumentPath(_settings.LastJobPath, documentPath))
+            _settings.LastPageRelativePath = "";
+        _settings.LastJobPath = documentPath;
+        _settings.JobsRootPath = Path.GetDirectoryName(documentPath) ?? _settings.JobsRootPath;
         AppSettingsStore.AddJobsRoot(_settings, _settings.JobsRootPath);
-        AppSettingsStore.AddRecentJob(_settings, _currentJob.RootPath, _currentJob.Name);
+        AppSettingsStore.AddRecentJob(_settings, documentPath, _currentJob.Name);
         SaveAppSettings();
-        QueueRecentJobThumbnailGeneration(_currentJob);
-        LoadPersistedMarkerVisibility();
-        if (ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
+        QueueRecentJobThumbnailGeneration(_currentJob, documentPath);
+        if (IsModuleEnabled(ModuleId.Ai))
+            LoadPersistedMarkerVisibility();
+        if (!IsTruthyEnvironment(TakeoffsMoveSmokeEnv) &&
+            ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
             SelectPageByFolder(pageToOpen);
+        QueueSheetLegendAutoSortSweep();
+        ReportCorruptJsonFiles();
         ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
-        TxtStatusJob.Text  = _currentJob.Name;
-        TxtJobName.Text    = _currentJob.Name;
-        TxtStatusPage.Text = _currentPage?.Name ?? "—";
+        RefreshJobHeaderLabels();
+        UpdateNoJobOverlay();   // a job is now open — hide the empty-state Start card
         TxtStatus.Text = BuildMeasurementRepairStatus($"Loaded job: {_currentJob.Name}");
-        LoadObservationsInbox();
-        RefreshMassingDraftPanel();
+        if (IsCurrentJobWritable && IsModuleEnabled(ModuleId.Ai))
+            LoadObservationsInbox();
+        if (IsModuleEnabled(ModuleId.ThreeD))
+            RefreshMassingDraftPanel();
+        if (IsCurrentJobWritable && IsModuleEnabled(ModuleId.Ai))
+            QueueAiContextMaintenance(_currentJob);
         Dispatcher.BeginInvoke(
             new Action(CollapseProjectTreeDisplays),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
+        }
+        finally
+        {
+            if (!reloadCurrent)
+                ReleaseJobAccess(previousToken, previousLease, "switch jobs");
+        }
+        return true;
+    }
+
+    private void ReportCorruptJsonFiles()
+    {
+        IReadOnlyList<string> corruptFiles = OurPlanCoreJobStore.DrainCorruptJsonFiles();
+        if (corruptFiles.Count == 0)
+            return;
+
+        string details = string.Join(Environment.NewLine, corruptFiles.Take(8));
+        if (corruptFiles.Count > 8)
+            details += $"{Environment.NewLine}...and {corruptFiles.Count - 8} more.";
+
+        MessageBox.Show(
+            $"Some project JSON files could not be read and were moved aside for manual recovery.{Environment.NewLine}{Environment.NewLine}{details}",
+            "Project Data Warning",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private string BuildMeasurementRepairStatus(string prefix)
@@ -180,17 +367,32 @@ public partial class MainWindow
         return $"{prefix}; {string.Join("; ", parts)}.";
     }
 
+    private void RefreshJobHeaderLabels()
+    {
+        if (_currentJob == null)
+            return;
+
+        string displayName = CurrentJobDisplayName();
+        TxtStatusJob.Text = displayName;
+        TxtJobName.Text = displayName;
+        Title = CurrentJobWindowTitle();
+        UpdateStatusBarSegments();
+        TxtStatusPage.Text = _currentPage?.Name ?? "—";
+    }
+
     private string? ResolveInitialPageToOpen(string? initialPageFolder)
     {
         if (_currentJob == null)
             return null;
 
-        if (!string.IsNullOrWhiteSpace(initialPageFolder) && Directory.Exists(initialPageFolder))
+        if (!string.IsNullOrWhiteSpace(initialPageFolder) &&
+            Directory.Exists(initialPageFolder) &&
+            OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.PagesRoot, initialPageFolder))
             return initialPageFolder;
 
         if (!string.IsNullOrWhiteSpace(_settings.LastPageFolder) &&
             Directory.Exists(_settings.LastPageFolder) &&
-            OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.PagesRoot, _settings.LastPageFolder))
+            OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.PagesRoot, _settings.LastPageFolder))
         {
             return _settings.LastPageFolder;
         }
@@ -219,14 +421,18 @@ public partial class MainWindow
         SmartContextStore.SaveHiddenMarkerTypes(_currentJob, _hiddenAiMarkerTypes);
     }
 
-    private void TryAutoLoad()
+    private bool TryAutoLoad()
     {
+        if (_currentJob != null || string.IsNullOrWhiteSpace(_currentPdfPath))
+            return false;
+
         var (scale, _, items) = ProjectFile.Restore(_currentPdfPath);
-        if (items.Count == 0) return;
+        if (items.Count == 0) return false;
 
         // Clear any stale in-session state first
         _takeoffItems.Clear();
         TakeoffsTree.Items.Clear();
+        ResetTakeoffTreeItemIndex();
         _activeItem = null;
 
         _takeoffItems.AddRange(items);
@@ -243,10 +449,8 @@ public partial class MainWindow
                 _currentPage.ScaleMetersPerPt = scale;
                 SaveCurrentPageScale();
             }
-            const double PT_M = 25.4 / 72.0 / 1000.0;
-            double ratio = scale / PT_M;
+            double ratio = scale / ViewportConstants.PdfPointMeters;
             TxtScaleRatio.Text = PdfSheetMetadataService.FormatImperialScale(scale);
-            ratio = 0;
             TxtScaleInfo.Text  = $"≈1:{ratio:F0}";
         }
 
@@ -256,20 +460,30 @@ public partial class MainWindow
 
         RefreshAllTotals();
         TxtStatus.Text = $"Loaded {items.Count} item(s) from saved project.";
+        return true;
     }
 
     private void LoadTakeoffsForJob()
     {
-        _takeoffItems.Clear();
-        TakeoffsTree.Items.Clear();
-        _takeoffsRangeAnchorPath = null;
-        _takeoffSectionMultiSelection.Clear();
-        _takeoffSectionRangeAnchorKey = null;
-        _activeItem = null;
-        _activeTakeoffParentFolder = _currentJob?.TakeoffsRoot ?? "";
+        if (_takeoffSaveService.HasPending &&
+            !TryFlushTakeoffAutosaves("reload the Takeoffs tree"))
+        {
+            return;
+        }
+
+        TakeoffsTreeSelectionSnapshot selectionSnapshot = CaptureTakeoffsTreeSelectionState();
 
         if (_currentJob == null)
         {
+            _takeoffItems.Clear();
+            TakeoffsTree.Items.Clear();
+            ResetTakeoffTreeItemIndex();
+            _takeoffsRangeAnchorPath = null;
+            _takeoffsMultiSelection.Clear();
+            _takeoffSectionMultiSelection.Clear();
+            _takeoffSectionRangeAnchorKey = null;
+            _activeItem = null;
+            _activeTakeoffParentFolder = "";
             _lastMeasurementPageFolderRepairCount = 0;
             _lastMeasurementPageFolderUnresolvedCount = 0;
             _expandedTakeoffTreePaths.Clear();
@@ -278,26 +492,71 @@ public partial class MainWindow
             return;
         }
 
-        LoadTakeoffChildren(_currentJob.TakeoffsRoot, TakeoffsTree);
-        _lastMeasurementPageFolderRepairCount = RepairMeasurementPageFolderReferences();
-        RestoreExpandedTreeState(TakeoffsTree, _expandedTakeoffTreePaths, GetTakeoffNodePath);
-
-        _viewport.SetMeasurements(_takeoffItems.SelectMany(i => i.Measurements));
-
-        if (FindFirstTakeoffTreeItem(TakeoffsTree) is { } firstItem)
+        var loadedItems = new List<TakeoffItem>();
+        List<TreeViewItem> rootNodes;
+        try
         {
-            firstItem.IsSelected = true;
+            rootNodes = BuildTakeoffChildren(_currentJob.TakeoffsRoot, loadedItems);
         }
-        else
+        catch (Exception ex)
         {
-            _viewport.ActiveColor = "#FF4444";
-            _viewport.ActiveTakeoffFolder = "";
+            AppLog.Error(ex, $"Load takeoffs tree failed for {_currentJob.TakeoffsRoot}; keeping existing tree.");
+            TxtStatus.Text = "Takeoffs tree reload failed; existing tree was kept. See app log.";
+            return;
         }
 
-        PruneTakeoffsMultiSelection();
-        PruneTakeoffSectionMultiSelection();
-        ApplyTakeoffPageHighlights();
-        RefreshAllTotals();
+        _takeoffItems.Clear();
+        _takeoffItems.AddRange(loadedItems);
+        TakeoffsTree.Items.Clear();
+        ResetTakeoffTreeItemIndex();
+        foreach (TreeViewItem node in rootNodes)
+            TakeoffsTree.Items.Add(node);
+        RebuildTakeoffTreeItemIndex();
+
+        _takeoffsRangeAnchorPath = null;
+        _takeoffsMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Clear();
+        _takeoffSectionRangeAnchorKey = null;
+        _activeItem = null;
+        _activeTakeoffParentFolder = _currentJob.TakeoffsRoot;
+
+        try
+        {
+            _lastMeasurementPageFolderRepairCount = IsCurrentJobWritable
+                ? RepairMeasurementPageFolderReferences()
+                : 0;
+            if (!IsCurrentJobWritable)
+                _lastMeasurementPageFolderUnresolvedCount = 0;
+            RestoreExpandedTreeState(TakeoffsTree, _expandedTakeoffTreePaths, GetTakeoffNodePath);
+
+            _viewport.SetMeasurements(_takeoffItems.SelectMany(i => i.Measurements));
+
+            bool restoredSelection = RestoreTakeoffsTreeSelectionState(selectionSnapshot);
+            if (!restoredSelection)
+            {
+                if (FindFirstTakeoffTreeItem(TakeoffsTree) is { } firstItem)
+                {
+                    firstItem.IsSelected = true;
+                }
+                else
+                {
+                    _viewport.ActiveColor = "#FF4444";
+                    _viewport.ActiveTakeoffFolder = "";
+                }
+            }
+
+            PruneTakeoffsMultiSelection();
+            PruneTakeoffSectionMultiSelection();
+            ApplyTakeoffPageHighlights();
+            ApplyTakeoffsTreeSearchFilter();
+            RefreshAllTotals();
+            AppLog.Info($"Loaded takeoffs tree with {_takeoffItems.Count} item(s) from {_currentJob.TakeoffsRoot}.");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error(ex, $"Takeoffs tree post-load refresh failed for {_currentJob.TakeoffsRoot}.");
+            TxtStatus.Text = "Takeoffs loaded, but a refresh step failed. See app log.";
+        }
     }
 
     private int RepairMeasurementPageFolderReferences()
@@ -316,38 +575,55 @@ public partial class MainWindow
         var pagesByPdfPage = pages
             .GroupBy(page => page.PdfPage)
             .ToDictionary(group => group.Key, group => group.ToList());
+        PageInfo? firstPage = pages
+            .OrderBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
 
         int repaired = 0;
         int unresolved = 0;
         foreach (TakeoffItem item in _takeoffItems)
         {
             bool itemChanged = false;
-            foreach (Measurement measurement in item.Measurements)
+            PageInfo? emptyItemFallback = item.Measurements.Count > 0 &&
+                                          item.Measurements.All(measurement => string.IsNullOrWhiteSpace(measurement.PageFolder))
+                ? firstPage
+                : null;
+            for (int index = 0; index < item.Measurements.Count; index++)
             {
+                Measurement measurement = item.Measurements[index];
+                PageInfo? matchedPage;
                 if (string.IsNullOrWhiteSpace(measurement.PageFolder))
+                {
+                    matchedPage = emptyItemFallback ??
+                                  InferNeighborMeasurementPage(
+                                      item.Measurements,
+                                      index,
+                                      _currentJob.PagesRoot,
+                                      pagesByPath,
+                                      pagesByLeaf,
+                                      pagesByPdfPage);
+                    if (matchedPage != null)
+                    {
+                        measurement.PageFolder = matchedPage.FolderPath;
+                        if (measurement.ScaleMetersPerPt <= 0)
+                            measurement.ScaleMetersPerPt = matchedPage.ScaleMetersPerPt;
+                        repaired++;
+                        itemChanged = true;
+                        AppLog.Info($"Repaired empty measurement PageFolder for {item.Name} -> {matchedPage.FolderPath}");
+                        continue;
+                    }
+
+                    unresolved++;
                     continue;
+                }
 
                 string oldPath = NormalizePageReferencePath(measurement.PageFolder);
-                PageInfo? matchedPage = null;
-                if (pagesByPath.TryGetValue(oldPath, out PageInfo? exactPage))
-                {
-                    matchedPage = exactPage;
-                }
-                else
-                {
-                    string leaf = Path.GetFileName(oldPath);
-                    if (!string.IsNullOrWhiteSpace(leaf) &&
-                        pagesByLeaf.TryGetValue(leaf, out List<PageInfo>? leafMatches) &&
-                        leafMatches.Count == 1)
-                    {
-                        matchedPage = leafMatches[0];
-                    }
-                    else if (TryResolveLegacyImportedPage(leaf, pagesByPdfPage, out PageInfo legacyPage))
-                    {
-                        matchedPage = legacyPage;
-                    }
-                }
-
+                matchedPage = ResolveMeasurementPage(
+                    oldPath,
+                    _currentJob.PagesRoot,
+                    pagesByPath,
+                    pagesByLeaf,
+                    pagesByPdfPage);
                 if (matchedPage == null)
                 {
                     if (!Directory.Exists(oldPath))
@@ -362,15 +638,129 @@ public partial class MainWindow
                         measurement.ScaleMetersPerPt = matchedPage.ScaleMetersPerPt;
                     repaired++;
                     itemChanged = true;
+                    AppLog.Info($"Repaired measurement PageFolder for {item.Name}: {oldPath} -> {matchedPage.FolderPath}");
                 }
             }
 
             if (itemChanged)
-                OurPlaneCoreJobStore.SaveTakeoffItem(item);
+                OurPlanCoreJobStore.SaveTakeoffItem(item);
         }
 
         _lastMeasurementPageFolderUnresolvedCount = unresolved;
         return repaired;
+    }
+
+    private PageInfo? InferNeighborMeasurementPage(
+        IReadOnlyList<Measurement> measurements,
+        int index,
+        string pagesRoot,
+        Dictionary<string, PageInfo> pagesByPath,
+        Dictionary<string, List<PageInfo>> pagesByLeaf,
+        Dictionary<int, List<PageInfo>> pagesByPdfPage)
+    {
+        for (int i = index - 1; i >= 0; i--)
+        {
+            if (TryResolveMeasurementPage(measurements[i].PageFolder, pagesRoot, pagesByPath, pagesByLeaf, pagesByPdfPage, out PageInfo page))
+                return page;
+        }
+
+        for (int i = index + 1; i < measurements.Count; i++)
+        {
+            if (TryResolveMeasurementPage(measurements[i].PageFolder, pagesRoot, pagesByPath, pagesByLeaf, pagesByPdfPage, out PageInfo page))
+                return page;
+        }
+
+        return null;
+    }
+
+    private bool TryResolveMeasurementPage(
+        string? pageFolder,
+        string pagesRoot,
+        Dictionary<string, PageInfo> pagesByPath,
+        Dictionary<string, List<PageInfo>> pagesByLeaf,
+        Dictionary<int, List<PageInfo>> pagesByPdfPage,
+        out PageInfo page)
+    {
+        page = null!;
+        if (string.IsNullOrWhiteSpace(pageFolder))
+            return false;
+
+        PageInfo? resolved = ResolveMeasurementPage(
+            NormalizePageReferencePath(pageFolder),
+            pagesRoot,
+            pagesByPath,
+            pagesByLeaf,
+            pagesByPdfPage);
+        if (resolved == null)
+            return false;
+
+        page = resolved;
+        return true;
+    }
+
+    private static PageInfo? ResolveMeasurementPage(
+        string oldPath,
+        string pagesRoot,
+        Dictionary<string, PageInfo> pagesByPath,
+        Dictionary<string, List<PageInfo>> pagesByLeaf,
+        Dictionary<int, List<PageInfo>> pagesByPdfPage)
+    {
+        if (pagesByPath.TryGetValue(oldPath, out PageInfo? exactPage))
+            return exactPage;
+
+        if (ResolveMovedJobPage(oldPath, pagesRoot, pagesByPath) is { } movedPage)
+            return movedPage;
+
+        string leaf = Path.GetFileName(oldPath);
+        if (!string.IsNullOrWhiteSpace(leaf) &&
+            pagesByLeaf.TryGetValue(leaf, out List<PageInfo>? leafMatches) &&
+            leafMatches.Count == 1)
+        {
+            return leafMatches[0];
+        }
+
+        return TryResolveLegacyImportedPage(leaf, pagesByPdfPage, out PageInfo legacyPage)
+            ? legacyPage
+            : null;
+    }
+
+    private static PageInfo? ResolveMovedJobPage(
+        string oldPath,
+        string pagesRoot,
+        Dictionary<string, PageInfo> pagesByPath)
+    {
+        if (string.IsNullOrWhiteSpace(oldPath) || string.IsNullOrWhiteSpace(pagesRoot))
+            return null;
+
+        if (!TryGetSuffixAfterPathSegment(oldPath, "Pages", out string[] suffixSegments) || suffixSegments.Length == 0)
+            return null;
+
+        string normalizedPagesRoot = NormalizePath(pagesRoot);
+        string candidate = NormalizePath(Path.Combine([normalizedPagesRoot, .. suffixSegments]));
+        return pagesByPath.TryGetValue(candidate, out PageInfo? page)
+            ? page
+            : null;
+    }
+
+    private static bool TryGetSuffixAfterPathSegment(string path, string segment, out string[] suffixSegments)
+    {
+        suffixSegments = [];
+        string[] parts = path
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Trim())
+            .Where(part => part.Length > 0)
+            .ToArray();
+
+        for (int i = parts.Length - 2; i >= 0; i--)
+        {
+            if (!string.Equals(parts[i], segment, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            suffixSegments = parts[(i + 1)..];
+            return suffixSegments.Length > 0;
+        }
+
+        return false;
     }
 
     private static bool TryResolveLegacyImportedPage(
@@ -405,26 +795,31 @@ public partial class MainWindow
         return true;
     }
 
-    private void LoadTakeoffChildren(string parentFolder, ItemsControl parent)
+    private List<TreeViewItem> BuildTakeoffChildren(string parentFolder, List<TakeoffItem> loadedItems)
     {
-        foreach (string folder in OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder))
+        var nodes = new List<TreeViewItem>();
+        foreach (string folder in OurPlanCoreJobStore.GetOrderedChildDirectories(parentFolder))
         {
-            if (OurPlaneCoreJobStore.TryReadTakeoffItem(folder) is { } item)
+            if (OurPlanCoreJobStore.TryReadTakeoffItem(folder) is { } item)
             {
-                _takeoffItems.Add(item);
-                AddTakeoffTreeItem(item, parent);
+                loadedItems.Add(item);
+                nodes.Add(CreateTakeoffTreeItem(item));
             }
             else
             {
                 var node = new TakeoffFolderNode
                 {
-                    Name = OurPlaneCoreJobStore.DisplayName(folder),
+                    Name = OurPlanCoreJobStore.DisplayName(folder),
                     FolderPath = folder,
                 };
-                var tvi = AddTakeoffFolderTreeItem(node, parent);
-                LoadTakeoffChildren(folder, tvi);
+                var tvi = CreateTakeoffFolderTreeItem(node);
+                foreach (TreeViewItem child in BuildTakeoffChildren(folder, loadedItems))
+                    tvi.Items.Add(child);
+                nodes.Add(tvi);
             }
         }
+
+        return nodes;
     }
 
     private TreeViewItem AddTakeoffTreeItem(TakeoffItem item) =>
@@ -432,113 +827,35 @@ public partial class MainWindow
 
     private TreeViewItem AddTakeoffTreeItem(TakeoffItem item, ItemsControl parent)
     {
+        var tvi = CreateTakeoffTreeItem(item);
+        parent.Items.Add(tvi);
+        RegisterTakeoffTreeItemSubtree(tvi);
+        return tvi;
+    }
+
+    private TreeViewItem CreateTakeoffTreeItem(TakeoffItem item)
+    {
         var tvi = new TreeViewItem { Tag = item };
         SetTreeItemHeader(tvi, item);
         AttachContextMenu(tvi, item);
         RefreshTakeoffSectionNodes(tvi, item);
-        parent.Items.Add(tvi);
         return tvi;
     }
 
     private TreeViewItem AddTakeoffFolderTreeItem(TakeoffFolderNode node, ItemsControl parent)
     {
-        var tvi = new TreeViewItem { Tag = node };
-        SetFolderTreeItemHeader(tvi, node);
-        AttachFolderContextMenu(tvi, node);
+        var tvi = CreateTakeoffFolderTreeItem(node);
         parent.Items.Add(tvi);
+        RegisterTakeoffTreeItemSubtree(tvi);
         return tvi;
     }
 
-    private async void BtnImport_Click(object sender, RoutedEventArgs e)
+    private TreeViewItem CreateTakeoffFolderTreeItem(TakeoffFolderNode node)
     {
-        if (_currentJob == null)
-        {
-            MessageBox.Show("Open or create a job first.", "Import PDF",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        var dlg = new OpenFileDialog
-        {
-            Title = "Import PDF",
-            Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",
-        };
-        if (dlg.ShowDialog() != true) return;
-
-        int pageCount = _viewport.GetPageCount(dlg.FileName);
-        if (pageCount <= 0)
-        {
-            MessageBox.Show("Could not read any pages from this PDF.", "Import PDF",
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        string defaultNames = string.Join(Environment.NewLine, Enumerable.Range(1, pageCount).Select(i => $"Page {i}"));
-        string? rawNames = ShowMultilineInputDialog(
-            $"PDF has {pageCount} page(s). Edit page names, one per line:",
-            defaultNames,
-            "Page Names");
-        if (rawNames == null) return;
-
-        string[] names = rawNames
-            .Split(["\r\n", "\n"], StringSplitOptions.None)
-            .Select(s => s.Trim())
-            .Where(s => s.Length > 0)
-            .ToArray();
-
-        if (names.Length != pageCount)
-        {
-            MessageBox.Show($"Expected {pageCount} page name(s), got {names.Length}.",
-                            "Import PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        string destFolder = GetSelectedImportFolder();
-        Button? importButton = sender as Button;
-        try
-        {
-            if (importButton != null) importButton.IsEnabled = false;
-            TxtStatus.Text = "Scanning PDF layer cache...";
-            var progress = new Progress<string>(msg => TxtStatus.Text = msg);
-            Dictionary<int, IReadOnlyList<PdfLayerInfo>> pdfLayerCache = await Task.Run(
-                () => BuildPdfLayerCache(dlg.FileName, pageCount, progress));
-
-            bool hadUserPageExpansion = _expandedPageTreePaths.Count > 0;
-            var created = OurPlaneCoreJobStore.ImportPdf(_currentJob, dlg.FileName, names, destFolder, pdfLayerCache);
-            ReloadPagesTree();
-            if (created.Count > 0)
-                SelectPageByFolder(created[0].FolderPath);
-            if (!hadUserPageExpansion)
-                CollapseTreeAndExpansionState(PagesTree, _expandedPageTreePaths);
-            int cachedCount = pdfLayerCache.Count;
-            TxtStatus.Text = $"Imported {created.Count} page(s), cached PDF layers for {cachedCount} page(s).";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Import failed:\n{ex.Message}", "Import PDF",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            if (importButton != null) importButton.IsEnabled = true;
-        }
+        var tvi = new TreeViewItem { Tag = node };
+        SetFolderTreeItemHeader(tvi, node);
+        AttachFolderContextMenu(tvi, node);
+        return tvi;
     }
 
-    private static Dictionary<int, IReadOnlyList<PdfLayerInfo>> BuildPdfLayerCache(
-        string pdfPath,
-        int pageCount,
-        IProgress<string>? progress)
-    {
-        var cache = new Dictionary<int, IReadOnlyList<PdfLayerInfo>>();
-        for (int pageIndex = 0; pageIndex < pageCount; pageIndex++)
-        {
-            progress?.Report($"Scanning PDF layers {pageIndex + 1}/{pageCount}...");
-            if (PdfLayerRenderService.TryReadVisibleLayers(pdfPath, pageIndex, out var layers, out _) &&
-                layers.Count > 0)
-            {
-                cache[pageIndex] = layers;
-            }
-        }
-        return cache;
-    }
 }

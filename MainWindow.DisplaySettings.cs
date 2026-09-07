@@ -4,359 +4,239 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Input;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
-    private void AddSheetOverlayMenuItems(ContextMenu menu)
+    private void ComboDisplayViewportBackground_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        menu.Items.Add(BuildLegendMenuItem());
-        menu.Items.Add(BuildLegendPositionMenu());
-        menu.Items.Add(BuildOverlaySizeMenu("Legend Size", _settings.SheetLegendScale, SetSheetLegendScale));
-        menu.Items.Add(BuildOverlaySizeMenu("Scale / Sheet Size Label Size", _settings.SheetHeaderScale, SetSheetHeaderScale));
-
-        var scaleLegendWithSheet = new MenuItem
-        {
-            Header = "Scale Legend With Sheet",
-            IsCheckable = true,
-            IsChecked = _settings.ScaleSheetOverlaysWithPage,
-            ToolTip = "When enabled, the sheet legend grows and shrinks with page zoom.",
-        };
-        scaleLegendWithSheet.Click += (_, _) => SetSheetOverlaysScaleWithPage(scaleLegendWithSheet.IsChecked);
-        menu.Items.Add(scaleLegendWithSheet);
-
-        var scaleLabelsWithSheet = new MenuItem
-        {
-            Header = "Scale Measurement Labels With Sheet",
-            IsCheckable = true,
-            IsChecked = _settings.ScaleMeasurementLabelsWithPage,
-            ToolTip = "When enabled, measurement value labels grow and shrink with page zoom. Off by default - labels stay screen-sized.",
-        };
-        scaleLabelsWithSheet.Click += (_, _) => SetMeasurementLabelsScaleWithPage(scaleLabelsWithSheet.IsChecked);
-        menu.Items.Add(scaleLabelsWithSheet);
-
-        var scaleHeaderWithSheet = new MenuItem
-        {
-            Header = "Scale Sheet Header With Sheet",
-            IsCheckable = true,
-            IsChecked = _settings.ScaleSheetHeaderWithPage,
-            ToolTip = "When enabled, the top sheet scale/size header grows and shrinks with page zoom. Off by default - header stays screen-sized.",
-        };
-        scaleHeaderWithSheet.Click += (_, _) => SetSheetHeaderScaleWithPage(scaleHeaderWithSheet.IsChecked);
-        menu.Items.Add(scaleHeaderWithSheet);
-    }
-
-    private MenuItem BuildLegendMenuItem()
-    {
-        var item = new MenuItem
-        {
-            Header = "Legend",
-            IsCheckable = true,
-            IsChecked = _settings.ShowSheetLegend,
-            ToolTip = "Show or hide the active sheet legend overlay",
-        };
-        item.Click += (_, _) => SetSheetLegendVisible(item.IsChecked);
-        return item;
-    }
-
-    private MenuItem BuildLegendPositionMenu()
-    {
-        var menu = new MenuItem
-        {
-            Header = "Legend Position",
-            IsEnabled = _settings.ShowSheetLegend,
-        };
-
-        foreach (var (label, anchor) in LegendAnchorOptions())
-        {
-            var item = new MenuItem
-            {
-                Header = label,
-                IsCheckable = true,
-                IsChecked = string.Equals(NormalizeSheetLegendAnchor(_settings.SheetLegendAnchor), anchor, StringComparison.OrdinalIgnoreCase),
-            };
-            item.Click += (_, _) => SetSheetLegendAnchor(anchor);
-            menu.Items.Add(item);
-        }
-
-        return menu;
-    }
-
-    private static IReadOnlyList<(string Label, string Anchor)> LegendAnchorOptions() =>
-    [
-        ("Top Left", "TopLeft"),
-        ("Top Center", "TopCenter"),
-        ("Top Right", "TopRight"),
-        ("Middle Left", "MiddleLeft"),
-        ("Middle Right", "MiddleRight"),
-        ("Bottom Left", "BottomLeft"),
-        ("Bottom Center", "BottomCenter"),
-        ("Bottom Right", "BottomRight"),
-    ];
-
-    private MenuItem BuildOverlaySizeMenu(string header, double currentScale, Action<double> apply)
-    {
-        var menu = new MenuItem { Header = header };
-        foreach (var (label, scale) in OverlaySizeOptions())
-        {
-            var item = new MenuItem
-            {
-                Header = label,
-                IsCheckable = true,
-                IsChecked = Math.Abs(NormalizeOverlayScale(currentScale) - scale) < 0.001,
-            };
-            item.Click += (_, _) => apply(scale);
-            menu.Items.Add(item);
-        }
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Custom...", true, () =>
-            PromptOverlaySize(header, currentScale, apply)));
-
-        return menu;
-    }
-
-    private void PromptOverlaySize(string title, double currentScale, Action<double> apply)
-    {
-        string? raw = ShowInputDialog(
-            "Scale multiplier (0.5 - 3.0):",
-            NormalizeOverlayScale(currentScale).ToString("0.##", CultureInfo.InvariantCulture),
-            title);
-        if (raw == null)
+        if (_isApplyingSettings)
             return;
 
-        if (!double.TryParse(raw.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
-            scale < 0.5 ||
-            scale > 3.0)
-        {
-            MessageBox.Show("Enter a value from 0.5 to 3.0.", title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        if (ComboDisplayViewportBackground.SelectedItem is not ComboBoxItem { Tag: string color })
             return;
-        }
 
-        apply(scale);
+        ApplyViewportBackground(color, persist: true);
+        SyncDisplaySettingsControls();
+        TxtStatus.Text = $"Viewport edge background: {ViewportBackgroundLabel(_settings.ViewportBackground)}.";
     }
 
-    private static IReadOnlyList<(string Label, double Scale)> OverlaySizeOptions() =>
-    [
-        ("Small", 0.75),
-        ("Normal", 1.00),
-        ("Large", 1.35),
-        ("XL", 1.75),
-        ("XXL", 2.25),
-    ];
+    private void ComboFolderTemplateMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        string mode = ComboFolderTemplateMode.SelectedIndex switch
+        {
+            1 => "COM",
+            2 => "EWP",
+            _ => "AUTO",
+        };
+        _settings.FolderTemplateMode = mode;
+        SaveAppSettings();
+        TxtStatus.Text = $"Folder template mode: {mode}.";
+    }
+
+    private void ComboDisplayPageBackground_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        if (ComboDisplayPageBackground.SelectedItem is not ComboBoxItem { Tag: string color })
+            return;
+
+        ApplyPageBackground(color, persist: true);
+        SyncDisplaySettingsControls();
+        TxtStatus.Text = $"Page paper background: {PageBackgroundLabel(_settings.PageBackground)}.";
+    }
+
+    private void ComboViewportRenderQuality_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        string mode = ComboViewportRenderQuality.SelectedIndex switch
+        {
+            0 => ViewportRenderPolicy.BalancedQualityMode,
+            2 => ViewportRenderPolicy.MaxQualityMode,
+            _ => ViewportRenderPolicy.HighQualityMode,
+        };
+
+        _settings.ViewportRenderQuality = mode;
+        ViewportRenderPolicy.ApplyQualityMode(mode);
+        _viewport.RefreshRenderQuality();
+        RefreshDetachedSheetRenderQuality();
+        SaveAppSettings();
+        SyncDisplaySettingsControls();
+        TxtStatus.Text = $"Viewport render quality: {mode}.";
+    }
+
+    private void BtnDarkTheme_Checked(object sender, RoutedEventArgs e) =>
+        ApplyThemeFromToggle(dark: true);
+
+    private void BtnDarkTheme_Unchecked(object sender, RoutedEventArgs e) =>
+        ApplyThemeFromToggle(dark: false);
+
+    private void ApplyThemeFromToggle(bool dark)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        ApplyTheme(dark, persist: true);
+    }
 
     private void DisplaySetting_Click(object sender, RoutedEventArgs e)
     {
         if (_isApplyingSettings)
             return;
 
+        SyncDisplayLabelGroupToggle(sender);
         _settings.ShowMeasurementLabels = ChkDisplayMeasurementLabels.IsChecked == true;
         _settings.ShowLineLabels = ChkDisplayLineLabels.IsChecked == true;
         _settings.ShowAreaLabels = ChkDisplayAreaLabels.IsChecked == true;
+        _settings.ShowJoistLabels = ChkDisplayJoistLabels.IsChecked == true;
         _settings.ShowCountLabels = ChkDisplayCountLabels.IsChecked == true;
+        NormalizeDisplayLabelGroupSettings();
         _settings.ShowSheetLegend = ChkDisplayLegend.IsChecked == true;
         _settings.ScaleSheetOverlaysWithPage = ChkDisplayLegendScaleWithPage.IsChecked == true;
         _settings.ScaleMeasurementLabelsWithPage = ChkDisplayLabelsScaleWithPage.IsChecked == true;
         _settings.ScaleSheetHeaderWithPage = ChkDisplayHeaderScaleWithPage.IsChecked == true;
+        _settings.SimplifyViewportNavigation = ChkDisplaySimplifyNavigation.IsChecked == true;
+        _settings.PdfLayersEnabled = ChkDisplayPdfLayers.IsChecked == true;
+        bool staticRenderModeChanged =
+            _settings.StaticPageRenderEnabled != (ChkDisplayStaticRaster.IsChecked == true);
+        _settings.StaticPageRenderEnabled = ChkDisplayStaticRaster.IsChecked == true;
+        _settings.BlackVectorOverlayEnabled = ChkDisplayBlackVector.IsChecked == true;
         _settings.UnitMode = ChkDisplayImperial.IsChecked == true
             ? UnitMode.Imperial.ToString()
             : UnitMode.Metric.ToString();
 
         ApplyDisplaySettingsToViewport();
+        // Switching the render mode must re-arm (or tear down) the live sharpening
+        // machinery for the page already on screen; a repaint alone won't do it.
+        if (staticRenderModeChanged)
+        {
+            _viewport.RefreshRenderQuality();
+            _viewport.RefreshStaticRasterDpi();
+            RefreshDetachedSheetRenderQuality();
+            RefreshDetachedSheetStaticRasterDpi();
+        }
         ApplySheetOverlaySettings();
+        RefreshDetachedSheetDisplaySettings();
         SaveAppSettings();
         RefreshAllTotals();
         TxtStatus.Text = "Display settings saved.";
     }
 
-    private void BtnMeasurementLabelSmall_Click(object sender, RoutedEventArgs e) =>
-        SetMeasurementLabelScale(0.75);
-
-    private void BtnMeasurementLabelNormal_Click(object sender, RoutedEventArgs e) =>
-        SetMeasurementLabelScale(1.00);
-
-    private void BtnMeasurementLabelLarge_Click(object sender, RoutedEventArgs e) =>
-        SetMeasurementLabelScale(1.35);
-
-    private void BtnMeasurementLabelApply_Click(object sender, RoutedEventArgs e) =>
-        ApplyMeasurementLabelScaleFromText();
-
-    private void TxtMeasurementLabelScale_KeyDown(object sender, KeyEventArgs e)
+    private void SyncDisplayLabelGroupToggle(object sender)
     {
-        if (e.Key is not (Key.Enter or Key.Return))
+        if (!ReferenceEquals(sender, ChkDisplayMeasurementLabels) && !IsDisplayLabelTypeToggle(sender))
             return;
 
-        ApplyMeasurementLabelScaleFromText();
-        e.Handled = true;
-    }
-
-    private void TxtMeasurementLabelScale_LostFocus(object sender, RoutedEventArgs e) =>
-        ApplyMeasurementLabelScaleFromText();
-
-    private void ApplyMeasurementLabelScaleFromText()
-    {
-        string raw = TxtMeasurementLabelScale.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
-        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
-            scale < 0.50 ||
-            scale > 3.00)
+        bool wasApplying = _isApplyingSettings;
+        _isApplyingSettings = true;
+        try
         {
-            TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
-            TxtStatus.Text = "Value label size must be 0.5 - 3.0.";
-            return;
-        }
-
-        SetMeasurementLabelScale(scale);
-    }
-
-    private void SetMeasurementLabelScale(double scale)
-    {
-        _settings.MeasurementLabelScale = NormalizeOverlayScale(scale);
-        ApplyDisplaySettingsToViewport();
-        SaveAppSettings();
-        _viewport.InvalidateVisual();
-        TxtStatus.Text = $"Viewport value label size: {_settings.MeasurementLabelScale:0.##}x.";
-    }
-
-    private void BtnLegendSizeMenu_Click(object sender, RoutedEventArgs e)
-    {
-        ShowOverlaySizePopup(sender, "Legend Size", _settings.SheetLegendScale, SetSheetLegendScale);
-    }
-
-    private void BtnScaleHeaderSizeMenu_Click(object sender, RoutedEventArgs e) =>
-        ShowOverlaySizePopup(sender, "Header Size", _settings.SheetHeaderScale, SetSheetHeaderScale);
-
-    private void BtnLabelSizePresets_Click(object sender, RoutedEventArgs e) =>
-        ShowOverlaySizePopup(sender, "Label Size", _settings.MeasurementLabelScale, SetMeasurementLabelScale);
-
-    private void ShowOverlaySizePopup(object sender, string title, double currentScale, Action<double> apply)
-    {
-        if (sender is not UIElement target)
-            return;
-
-        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
-        foreach (var (label, scale) in OverlaySizeOptions())
-        {
-            var item = new MenuItem
+            if (ReferenceEquals(sender, ChkDisplayMeasurementLabels))
             {
-                Header = label,
-                IsCheckable = true,
-                IsChecked = Math.Abs(NormalizeOverlayScale(currentScale) - scale) < 0.001,
-            };
-            item.Click += (_, _) => apply(scale);
-            menu.Items.Add(item);
+                bool showAll = ChkDisplayMeasurementLabels.IsChecked == true;
+                ChkDisplayLineLabels.IsChecked = showAll;
+                ChkDisplayAreaLabels.IsChecked = showAll;
+                ChkDisplayJoistLabels.IsChecked = showAll;
+                ChkDisplayCountLabels.IsChecked = showAll;
+                return;
+            }
+
+            ChkDisplayMeasurementLabels.IsChecked =
+                ChkDisplayLineLabels.IsChecked == true &&
+                ChkDisplayAreaLabels.IsChecked == true &&
+                ChkDisplayJoistLabels.IsChecked == true &&
+                ChkDisplayCountLabels.IsChecked == true;
         }
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Custom...", true, () =>
-            PromptOverlaySize(title, currentScale, apply)));
-        menu.IsOpen = true;
+        finally
+        {
+            _isApplyingSettings = wasApplying;
+        }
     }
 
-    private void BtnLegendPositionMenu_Click(object sender, RoutedEventArgs e)
+    private bool IsDisplayLabelTypeToggle(object sender) =>
+        ReferenceEquals(sender, ChkDisplayLineLabels) ||
+        ReferenceEquals(sender, ChkDisplayAreaLabels) ||
+        ReferenceEquals(sender, ChkDisplayJoistLabels) ||
+        ReferenceEquals(sender, ChkDisplayCountLabels);
+
+    private void NormalizeDisplayLabelGroupSettings()
     {
-        if (sender is not UIElement target)
+        if (_settings.ShowMeasurementLabels)
+        {
+            _settings.ShowLineLabels = true;
+            _settings.ShowAreaLabels = true;
+            _settings.ShowJoistLabels = true;
+            _settings.ShowCountLabels = true;
+            return;
+        }
+
+        _settings.ShowMeasurementLabels =
+            _settings.ShowLineLabels &&
+            _settings.ShowAreaLabels &&
+            _settings.ShowJoistLabels &&
+            _settings.ShowCountLabels;
+    }
+
+    private void RefreshDetachedSheetDisplaySettings()
+    {
+        if (_currentJob == null || _detachedSheetWindows.Count == 0)
             return;
 
-        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
-        foreach (var (label, anchor) in LegendAnchorOptions())
-        {
-            var item = new MenuItem
-            {
-                Header = label,
-                IsCheckable = true,
-                IsChecked = string.Equals(NormalizeSheetLegendAnchor(_settings.SheetLegendAnchor), anchor, StringComparison.OrdinalIgnoreCase),
-            };
-            item.Click += (_, _) => SetSheetLegendAnchor(anchor);
-            menu.Items.Add(item);
-        }
-        menu.IsOpen = true;
-    }
-
-    private void SetSheetLegendVisible(bool visible)
-    {
-        _settings.ShowSheetLegend = visible;
-        ApplySheetOverlaySettings();
-        SyncDisplaySettingsControls();
-        SaveAppSettings();
-        TxtStatus.Text = visible ? "Sheet legend shown." : "Sheet legend hidden.";
-    }
-
-    private void SetSheetLegendAnchor(string anchor)
-    {
-        _settings.SheetLegendAnchor = NormalizeSheetLegendAnchor(anchor);
-        ApplySheetOverlaySettings();
-        SyncDisplaySettingsControls();
-        SaveAppSettings();
-        TxtStatus.Text = $"Sheet legend position: {LegendAnchorLabel(_settings.SheetLegendAnchor)}.";
-    }
-
-    private void SetSheetLegendScale(double scale)
-    {
-        _settings.SheetLegendScale = NormalizeOverlayScale(scale);
-        ApplySheetOverlaySettings();
-        SyncDisplaySettingsControls();
-        SaveAppSettings();
-        TxtStatus.Text = $"Sheet legend size: {_settings.SheetLegendScale:0.##}x.";
-    }
-
-    private void SetSheetHeaderScale(double scale)
-    {
-        _settings.SheetHeaderScale = NormalizeOverlayScale(scale);
-        ApplySheetOverlaySettings();
-        SyncDisplaySettingsControls();
-        SaveAppSettings();
-        TxtStatus.Text = $"Scale label size: {_settings.SheetHeaderScale:0.##}x.";
-    }
-
-    private void SetSheetOverlaysScaleWithPage(bool enabled)
-    {
-        _settings.ScaleSheetOverlaysWithPage = enabled;
-        ApplySheetOverlaySettings();
-        SyncDisplaySettingsControls();
-        SaveAppSettings();
-        TxtStatus.Text = enabled
-            ? "Sheet legend now scales with page zoom."
-            : "Sheet legend now stays screen-sized.";
-    }
-
-    private void SetMeasurementLabelsScaleWithPage(bool enabled)
-    {
-        _settings.ScaleMeasurementLabelsWithPage = enabled;
-        ApplySheetOverlaySettings();
-        SyncDisplaySettingsControls();
-        SaveAppSettings();
-        TxtStatus.Text = enabled
-            ? "Measurement value labels now scale with page zoom."
-            : "Measurement value labels now stay screen-sized.";
-    }
-
-    private void SetSheetHeaderScaleWithPage(bool enabled)
-    {
-        _settings.ScaleSheetHeaderWithPage = enabled;
-        ApplySheetOverlaySettings();
-        SyncDisplaySettingsControls();
-        SaveAppSettings();
-        TxtStatus.Text = enabled
-            ? "Sheet scale/size header now scales with page zoom."
-            : "Sheet scale/size header now stays screen-sized.";
+        UnitMode unitMode = _settings.UnitMode == UnitMode.Metric.ToString()
+            ? UnitMode.Metric
+            : UnitMode.Imperial;
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            RefreshDetachedTakeoffDisplay(window, unitMode);
     }
 
     private void ApplyDisplaySettingsToViewport()
     {
+        AppSettingsStore.NormalizeOutputSettings(_settings);
+        NormalizeDisplayLabelGroupSettings();
+        ViewportRenderPolicy.ApplyQualityMode(_settings.ViewportRenderQuality);
+        PdfLayerRenderService.PdfLayersEnabled =
+            IsModuleEnabled(ModuleId.PdfLayers) && _settings.PdfLayersEnabled;
+        ViewportRenderPolicy.StaticRasterModeEnabled = _settings.StaticPageRenderEnabled;
+        ViewportRenderPolicy.StaticRasterTargetDpi = _settings.StaticPageRenderDpi;
+        _viewport.ShowBlackVectorOverlay = _settings.BlackVectorOverlayEnabled;
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
+        _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(_settings.ViewportMeasurementStrokeScale);
+        _settings.ViewportRulerStrokeWidth = NormalizeRulerStrokeWidth(_settings.ViewportRulerStrokeWidth);
+        _settings.ViewportPdfSnapBridgeTolerancePx = NormalizePdfSnapBridgeTolerance(_settings.ViewportPdfSnapBridgeTolerancePx);
+        _settings.ViewportPointSizeScale = NormalizePointScale(_settings.ViewportPointSizeScale);
+        _settings.ViewportZoomWheelFactor = NormalizeZoomWheelFactor(_settings.ViewportZoomWheelFactor);
         _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
         _viewport.ShowLineLabels = _settings.ShowLineLabels;
         _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
+        _viewport.ShowJoistLabels = _settings.ShowJoistLabels;
         _viewport.ShowCountLabels = _settings.ShowCountLabels;
         _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
+        _viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
+        _viewport.RulerStrokeWidth = _settings.ViewportRulerStrokeWidth;
+        _viewport.LiveInputLabelSizePx = _settings.ViewportLiveInputLabelSizePx;
+        _viewport.LiveInputLabelOpacity = _settings.ViewportLiveInputLabelOpacity;
+        _viewport.PdfSnapBridgeToleranceScreenPx = _settings.ViewportPdfSnapBridgeTolerancePx;
+        _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
+        _viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
+        _viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
+        _viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
+        _viewport.ExtraJoistGlowIntensity = _settings.ExtraJoistGlowIntensity;
         _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
         _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
+        _viewport.SimplifyNavigationRendering = _settings.SimplifyViewportNavigation;
         _viewport.UnitMode = _settings.UnitMode == UnitMode.Metric.ToString()
             ? UnitMode.Metric
             : UnitMode.Imperial;
         SyncDisplaySettingsControls();
         _viewport.InvalidateVisual();
+        RefreshDetachedSheetDisplaySettings();
     }
 
     private void SyncDisplaySettingsControls()
@@ -365,16 +245,48 @@ public partial class MainWindow
         _isApplyingSettings = true;
         try
         {
+            NormalizeDisplayLabelGroupSettings();
             ChkDisplayMeasurementLabels.IsChecked = _settings.ShowMeasurementLabels;
             ChkDisplayLineLabels.IsChecked = _settings.ShowLineLabels;
             ChkDisplayAreaLabels.IsChecked = _settings.ShowAreaLabels;
+            ChkDisplayJoistLabels.IsChecked = _settings.ShowJoistLabels;
             ChkDisplayCountLabels.IsChecked = _settings.ShowCountLabels;
             ChkDisplayLegend.IsChecked = _settings.ShowSheetLegend;
             ChkDisplayLegendScaleWithPage.IsChecked = _settings.ScaleSheetOverlaysWithPage;
             ChkDisplayLabelsScaleWithPage.IsChecked = _settings.ScaleMeasurementLabelsWithPage;
             ChkDisplayHeaderScaleWithPage.IsChecked = _settings.ScaleSheetHeaderWithPage;
             ChkDisplayImperial.IsChecked = _viewport.UnitMode == UnitMode.Imperial;
+            ChkDisplaySimplifyNavigation.IsChecked = _settings.SimplifyViewportNavigation;
+            ChkDisplayPdfLayers.IsChecked = _settings.PdfLayersEnabled;
+            ChkDisplayStaticRaster.IsChecked = _settings.StaticPageRenderEnabled;
+            ChkDisplayBlackVector.IsChecked = _settings.BlackVectorOverlayEnabled;
+            TxtStaticRasterDpi.Text = _settings.StaticPageRenderDpi.ToString(CultureInfo.InvariantCulture);
+            ComboViewportRenderQuality.SelectedIndex = ViewportRenderQualitySelectedIndex(_settings.ViewportRenderQuality);
+            ComboDisplayViewportBackground.SelectedIndex = ViewportBackgroundSelectedIndex(_settings.ViewportBackground);
+            ComboDisplayPageBackground.SelectedIndex = PageBackgroundSelectedIndex(_settings.PageBackground);
             TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtMeasurementStrokeScale.Text = _settings.ViewportMeasurementStrokeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtRulerStrokeWidth.Text = _settings.ViewportRulerStrokeWidth.ToString("0.##", CultureInfo.InvariantCulture);
+            ViewportLiveInputSettings.SizeText = _settings.ViewportLiveInputLabelSizePx.ToString("0.#", CultureInfo.InvariantCulture);
+            ViewportLiveInputSettings.OpacityText = (_settings.ViewportLiveInputLabelOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
+            TxtPdfSnapBridgeTolerance.Text = _settings.ViewportPdfSnapBridgeTolerancePx.ToString("0.#", CultureInfo.InvariantCulture);
+            TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtZoomWheelFactor.Text = _settings.ViewportZoomWheelFactor.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtAreaEdgeScale.Text = _settings.ViewportAreaEdgeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtAreaFillOpacity.Text = Math.Round(_settings.ViewportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
+            SyncExtraJoistGlowControls();
+            SldLabelScale.Value = _settings.MeasurementLabelScale;
+            SldLineThickness.Value = _settings.ViewportMeasurementStrokeScale;
+            SldRulerThickness.Value = _settings.ViewportRulerStrokeWidth;
+            ViewportLiveInputSettings.SizeValue = _settings.ViewportLiveInputLabelSizePx;
+            ViewportLiveInputSettings.OpacityValue = _settings.ViewportLiveInputLabelOpacity * 100.0;
+            SldPdfSnapBridgeTolerance.Value = _settings.ViewportPdfSnapBridgeTolerancePx;
+            SldPointSize.Value = _settings.ViewportPointSizeScale;
+            SldZoomWheelFactor.Value = _settings.ViewportZoomWheelFactor;
+            SldAreaEdge.Value = _settings.ViewportAreaEdgeScale;
+            SldAreaFill.Value = Math.Round(_settings.ViewportAreaFillOpacity * 100.0);
+            SyncOutputSettingsControls();
+            SyncDefaultsZoomControl();
         }
         finally
         {
@@ -382,44 +294,69 @@ public partial class MainWindow
         }
     }
 
-    private void ApplySheetOverlaySettings()
+    private static int ViewportBackgroundSelectedIndex(string color)
     {
-        _settings.SheetLegendAnchor = NormalizeSheetLegendAnchor(_settings.SheetLegendAnchor);
-        _settings.SheetLegendScale = NormalizeOverlayScale(_settings.SheetLegendScale);
-        _settings.SheetHeaderScale = NormalizeOverlayScale(_settings.SheetHeaderScale);
-        _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
-        _viewport.SheetLegendAnchor = _settings.SheetLegendAnchor;
-        _viewport.SheetLegendScale = _settings.SheetLegendScale;
-        _viewport.SheetHeaderScale = _settings.SheetHeaderScale;
-        _viewport.ScaleSheetOverlaysWithPage = _settings.ScaleSheetOverlaysWithPage;
-        _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
-        _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
-        _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
-        _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
-        _viewport.ShowLineLabels = _settings.ShowLineLabels;
-        _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
-        _viewport.ShowCountLabels = _settings.ShowCountLabels;
-        SyncDisplaySettingsControls();
-        RefreshSheetLegend();
-        _viewport.InvalidateVisual();
+        string clean = ViewportBackgroundPolicy.NormalizeColor(color);
+        for (int i = 0; i < ViewportBackgroundOptions().Count; i++)
+        {
+            if (string.Equals(ViewportBackgroundOptions()[i].Color, clean, StringComparison.Ordinal))
+                return i;
+        }
+
+        return 0;
     }
 
-    private static double NormalizeOverlayScale(double scale)
+    private static string ViewportBackgroundLabel(string color)
     {
-        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
-            return 1.0;
-
-        return Math.Clamp(scale, 0.50, 3.00);
+        string clean = ViewportBackgroundPolicy.NormalizeColor(color);
+        return ViewportBackgroundOptions()
+            .FirstOrDefault(option => string.Equals(option.Color, clean, StringComparison.Ordinal))
+            .Label ?? "White";
     }
 
-    private static string NormalizeSheetLegendAnchor(string? anchor)
+    private static IReadOnlyList<(string Label, string Color)> ViewportBackgroundOptions() =>
+    [
+        ("White", "#FFFFFF"),
+        ("Gray", "#F2F2F2"),
+        ("Dark", "#2B2B2B"),
+    ];
+
+    private static int ViewportRenderQualitySelectedIndex(string mode) =>
+        ViewportRenderPolicy.NormalizeQualityMode(mode) switch
+        {
+            ViewportRenderPolicy.BalancedQualityMode => 0,
+            ViewportRenderPolicy.MaxQualityMode => 2,
+            _ => 1,
+        };
+
+    private static int PageBackgroundSelectedIndex(string color)
     {
-        string clean = (anchor ?? "").Trim();
-        return LegendAnchorOptions().Any(option => string.Equals(option.Anchor, clean, StringComparison.OrdinalIgnoreCase))
-            ? LegendAnchorOptions().First(option => string.Equals(option.Anchor, clean, StringComparison.OrdinalIgnoreCase)).Anchor
-            : "BottomLeft";
+        string clean = ViewportBackgroundPolicy.NormalizeColor(color);
+        for (int i = 0; i < PageBackgroundOptions().Count; i++)
+        {
+            if (string.Equals(PageBackgroundOptions()[i].Color, clean, StringComparison.Ordinal))
+                return i;
+        }
+
+        return 0;
     }
 
-    private static string LegendAnchorLabel(string anchor) =>
-        LegendAnchorOptions().FirstOrDefault(option => string.Equals(option.Anchor, anchor, StringComparison.OrdinalIgnoreCase)).Label ?? "Bottom Left";
+    private static string PageBackgroundLabel(string color)
+    {
+        string clean = ViewportBackgroundPolicy.NormalizeColor(color);
+        return PageBackgroundOptions()
+            .FirstOrDefault(option => string.Equals(option.Color, clean, StringComparison.Ordinal))
+            .Label ?? "White";
+    }
+
+    private static IReadOnlyList<(string Label, string Color)> PageBackgroundOptions() =>
+    [
+        ("White", "#FFFFFF"),
+        ("Soft gray", "#F2F2F2"),
+        ("Medium gray", "#D8D8D8"),
+        ("Dark gray", "#B8B8B8"),
+        ("Warm", "#FFF8E8"),
+        ("Soft green", "#EFF7ED"),
+        ("Black", "#000000"),
+    ];
 }

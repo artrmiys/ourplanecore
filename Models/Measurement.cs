@@ -3,16 +3,21 @@ using System.Collections.Generic;
 using System.Linq;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class Measurement
 {
+    private static readonly object HoleWarningLock = new();
+    private static readonly HashSet<string> HoleContainmentWarnings = [];
+
     public string         Id         { get; set; } = Guid.NewGuid().ToString();
     public string         Name       { get; set; } = "";
     public string         Notes      { get; set; } = "";
     public string         MType      { get; set; }  = "line";   // point | line | area
     public List<SKPoint>  Points     { get; set; }  = [];
+    public List<List<SKPoint>> Holes { get; set; } = [];
     public string         Color      { get; set; }  = "#FF4444";
+    public string         CountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public string         PageFolder { get; set; }  = "";
     public string         TakeoffFolder { get; set; } = "";
     public double         ScaleMetersPerPt { get; set; }
@@ -21,8 +26,36 @@ public sealed class Measurement
     public double         JoistSpacingInches { get; set; } = 16;
     public double         JoistDirectionDegrees { get; set; }
     public bool           JoistDirectionLocked { get; set; }
+    public bool           JoistDirectionFollowsAreaRotation { get; set; } = true;
+    public bool           JoistAddEndJoist { get; set; } = true;
+    public bool           JoistStartEdgeEnabled { get; set; } = true;
+    public bool           JoistEndEdgeEnabled { get; set; }
+    public bool           JoistEdgeOverridesSet { get; set; }
+    public string         JoistPitch { get; set; } = "";
     public string         JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
     public bool           JoistShowLabels { get; set; }
+    public bool           JoistDetailedLabels { get; set; } = true;
+    public bool           JoistMoveNote { get; set; }
+    public float          JoistNoteOffsetX { get; set; }
+    public float          JoistNoteOffsetY { get; set; }
+    public bool           JoistNotePositionSet { get; set; }
+    public bool HasJoistNotePosition => JoistNotePositionSet || JoistNoteOffsetX != 0 || JoistNoteOffsetY != 0;
+
+    public SKPoint JoistNoteAnchor() => MeasurementGeometry.Centroid(Points) +
+        new SKPoint(JoistNoteOffsetX, JoistNoteOffsetY);
+
+    internal Measurement Snapshot()
+    {
+        var copy = (Measurement)MemberwiseClone();
+        copy.Points = Points.ToList();
+        copy.Holes = Holes.Select(hole => hole.ToList()).ToList();
+        copy.ExtraJoists = ExtraJoists.Select(extra => new JoistExtraSegment
+        {
+            Id = extra.Id, Start = extra.Start, End = extra.End,
+        }).ToList();
+        return copy;
+    }
+    public List<JoistExtraSegment> ExtraJoists { get; set; } = [];
 
     public double Value(double scaleMetersPerPt)
     {
@@ -59,7 +92,8 @@ public sealed class Measurement
             return JoistTakeoffCalculator.FormatMeasurementLabel(
                 JoistTakeoffCalculator.Calculate(this, effectiveScale),
                 unit,
-                JoistType);
+                JoistType,
+                JoistDetailedLabels);
 
         if (effectiveScale <= 0)
             return MType switch
@@ -85,24 +119,62 @@ public sealed class Measurement
         double total = 0;
         for (int i = 1; i < Points.Count; i++)
         {
-            float dx = Points[i].X - Points[i - 1].X;
-            float dy = Points[i].Y - Points[i - 1].Y;
-            total += Math.Sqrt(dx * dx + dy * dy);
+            total += MeasurementGeometry.Distance(Points[i], Points[i - 1]);
         }
         return total;
     }
 
     private double PolygonAreaPt()
     {
-        int n = Points.Count;
+        double area = PolygonAreaPt(Points);
+        for (int i = 0; i < Holes.Count; i++)
+        {
+            var hole = Holes[i];
+            WarnIfHoleAppearsOutsidePolygon(hole, i);
+            area -= PolygonAreaPt(hole);
+        }
+
+        return Math.Max(0, area);
+    }
+
+    private void WarnIfHoleAppearsOutsidePolygon(IReadOnlyList<SKPoint> hole, int holeIndex)
+    {
+        if (Points.Count < 3 || hole.Count < 3)
+            return;
+
+        SKPoint centroid = MeasurementGeometry.Centroid(hole);
+        if (MeasurementGeometry.PointInPolygon(centroid, Points))
+            return;
+
+        string key = $"{Id}:{holeIndex}";
+        lock (HoleWarningLock)
+        {
+            if (!HoleContainmentWarnings.Add(key))
+                return;
+        }
+
+        AppLog.Warn($"Area hole centroid is outside parent polygon for measurement {Id} ({Name}), hole {holeIndex}.");
+    }
+
+    private static double PolygonAreaPt(IReadOnlyList<SKPoint> points)
+    {
+        int n = points.Count;
         if (n < 3) return 0;
         double area = 0;
         for (int i = 0; i < n; i++)
         {
             int j = (i + 1) % n;
-            area += Points[i].X * Points[j].Y;
-            area -= Points[j].X * Points[i].Y;
+            area += points[i].X * points[j].Y;
+            area -= points[j].X * points[i].Y;
         }
         return Math.Abs(area) / 2.0;
     }
+
+}
+
+public sealed class JoistExtraSegment
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public SKPoint Start { get; set; }
+    public SKPoint End { get; set; }
 }

@@ -1,0 +1,1048 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using OurPlanCore.Controls;
+using SkiaSharp;
+
+namespace OurPlanCore;
+
+public partial class MainWindow
+{
+    private const string DefaultSheetOverlayColor = "#E53935";
+    private const double DefaultSheetOverlayOpacity = 1.0;
+    private const double SheetOverlayAlphaBoost = 1.85;
+    private const string SheetOverlayTintStyleVersion = "bright-v3-opacity";
+    private readonly SheetOverlayBitmapCache _sheetOverlayBitmapCache = new(
+        maxEntries: 8,
+        maxBytes: ResolveSheetOverlayBitmapCacheBudgetBytes());
+    private int _sheetOverlayLoadVersion;
+
+    private void SetCurrentSheetOverlay(PageInfo overlayPage)
+    {
+        if (!RequireModule(ModuleId.SheetOverlay, "Set Sheet Overlay"))
+            return;
+
+        if (_currentPage == null)
+        {
+            TxtStatus.Text = "Open a sheet before setting an overlay.";
+            return;
+        }
+
+        if (SameFolder(_currentPage.FolderPath, overlayPage.FolderPath))
+        {
+            TxtStatus.Text = "A sheet cannot overlay itself.";
+            return;
+        }
+
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
+        OurPlanCoreJobStore.SavePageOverlay(
+            _currentPage.FolderPath,
+            overlayPage.FolderPath,
+            CurrentSheetOverlayColor(),
+            CurrentSheetOverlayOpacity());
+        OurPlanCoreJobStore.SavePageOverlayVisibility(_currentPage.FolderPath, true);
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
+
+        ReloadCurrentSheetOverlay($"Overlay set: {overlayPage.Name}");
+    }
+
+    private void ClearCurrentSheetOverlay()
+    {
+        if (!RequireModule(ModuleId.SheetOverlay, "Clear Sheet Overlay"))
+            return;
+
+        if (_currentPage == null)
+            return;
+
+        ClearPageOverlay(_currentPage);
+    }
+
+    private void SetCurrentSheetOverlayColor(string color)
+    {
+        if (_currentPage == null || string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder))
+        {
+            TxtStatus.Text = "Set a sheet overlay before choosing overlay color.";
+            return;
+        }
+
+        OurPlanCoreJobStore.SavePageOverlayColor(
+            _currentPage.FolderPath,
+            _currentPage.ActiveOverlayId,
+            color);
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
+
+        ReloadCurrentSheetOverlay($"Overlay color: {color}");
+    }
+
+    private void SetPageSheetOverlayColor(PageInfo page, string color)
+    {
+        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+            return;
+
+        OurPlanCoreJobStore.SavePageOverlayColor(
+            page.FolderPath,
+            page.ActiveOverlayId,
+            color);
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(page));
+        RefreshPageOverlayState(page.FolderPath, $"Overlay color: {color}");
+    }
+
+    private void NudgeSheetOverlay(PageInfo page, double dxPt, double dyPt)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        double nextX = latest.OverlayOffsetXPt + dxPt;
+        double nextY = latest.OverlayOffsetYPt + dyPt;
+        SetSheetOverlayTransform(
+            latest,
+            nextX,
+            nextY,
+            latest.OverlayScale,
+            latest.OverlayRotationDegrees,
+            $"Overlay moved: X {FormatOverlayNumber(nextX)}, Y {FormatOverlayNumber(nextY)}.");
+    }
+
+    private void ScaleSheetOverlay(PageInfo page, double factor)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        double nextScale = latest.OverlayScale * factor;
+        SetSheetOverlayTransform(
+            latest,
+            latest.OverlayOffsetXPt,
+            latest.OverlayOffsetYPt,
+            nextScale,
+            latest.OverlayRotationDegrees,
+            $"Overlay scale: {FormatOverlayNumber(nextScale)}x.");
+    }
+
+    private void RotateSheetOverlay(PageInfo page, double deltaDegrees)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        double nextRotation = NormalizeOverlayRotationDegrees(latest.OverlayRotationDegrees + deltaDegrees);
+        SetSheetOverlayTransform(
+            latest,
+            latest.OverlayOffsetXPt,
+            latest.OverlayOffsetYPt,
+            latest.OverlayScale,
+            nextRotation,
+            $"Overlay rotation: {FormatOverlayNumber(nextRotation)} deg.");
+    }
+
+    private void EditSheetOverlayTransform(PageInfo page)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (!ShowSheetOverlayTransformDialog(latest, out double xPt, out double yPt, out double scale, out double rotation))
+            return;
+
+        SetSheetOverlayTransform(latest, xPt, yPt, scale, rotation, "Overlay transform updated.");
+    }
+
+    private void SetSheetOverlayTransform(
+        PageInfo page,
+        double offsetXPt,
+        double offsetYPt,
+        double overlayScale,
+        double overlayRotationDegrees,
+        string status)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
+            return;
+
+        if (_currentPage != null &&
+            SameFolder(_currentPage.FolderPath, latest.FolderPath) &&
+            _viewport.TryCommitSheetOverlayTransform(
+                latest.FolderPath,
+                latest.OverlayPageFolder,
+                (float)offsetXPt,
+                (float)offsetYPt,
+                (float)overlayScale,
+                (float)overlayRotationDegrees,
+                status,
+                latest.ActiveOverlayId))
+        {
+            return;
+        }
+
+        OurPlanCoreJobStore.SavePageOverlayTransform(
+            latest.FolderPath,
+            latest.ActiveOverlayId,
+            offsetXPt,
+            offsetYPt,
+            overlayScale,
+            overlayRotationDegrees);
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(latest));
+        RefreshPageOverlayState(latest.FolderPath, status);
+    }
+
+    private static PageInfo ReadLatestSheetOverlayPage(PageInfo page) =>
+        OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+
+    private void BeginSheetOverlayPointEdit(PageInfo page)
+        => BeginSheetOverlayPointEditWhenReady(page);
+
+    private async void BeginSheetOverlayPointEditWhenReady(PageInfo page)
+    {
+        if (!RequireModule(ModuleId.SheetOverlay, "Edit Sheet Overlay"))
+            return;
+
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
+        {
+            TxtStatus.Text = "Set a sheet overlay before editing it.";
+            return;
+        }
+
+        if (_currentPage == null || !SameFolder(_currentPage.FolderPath, latest.FolderPath))
+            OpenPageInActiveTab(latest);
+
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            if (!IsModuleEnabled(ModuleId.SheetOverlay))
+                return;
+
+            PageInfo? current = _currentPage;
+            if (current != null &&
+                SameFolder(current.FolderPath, latest.FolderPath) &&
+                _viewport.HasSheetOverlayBinding(
+                    latest.FolderPath,
+                    latest.OverlayPageFolder,
+                    latest.ActiveOverlayId))
+            {
+                _viewport.BeginSheetOverlayPointEdit();
+                return;
+            }
+
+            await Task.Delay(150);
+        }
+
+        TxtStatus.Text = "Overlay edit: overlay is still loading. Use Edit by Points once it appears.";
+    }
+
+    private void ClearPageOverlay(PageInfo page)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (!string.IsNullOrWhiteSpace(latest.ActiveOverlayId))
+            OurPlanCoreJobStore.RemovePageOverlay(page.FolderPath, latest.ActiveOverlayId);
+
+        if (OurPlanCoreJobStore.TryReadPage(page.FolderPath) is { } refreshed)
+        {
+            if (_currentPage != null && SameFolder(_currentPage.FolderPath, page.FolderPath))
+            {
+                _currentPage = refreshed;
+                LoadSheetOverlay(refreshed);
+            }
+            FinishSheetOverlayStateRefresh(refreshed, "Overlay layer removed.");
+        }
+        else
+        {
+            RefreshPagesTakeoffIndicators();
+            TxtStatus.Text = "Overlay layer removed.";
+        }
+    }
+
+    private void ClearReciprocalSheetOverlay(PageInfo page)
+    {
+        if (!SheetOverlayReciprocalService.TryClear(page, out string reciprocalPageFolder))
+            return;
+
+        if (OurPlanCoreJobStore.TryReadPage(reciprocalPageFolder) is { } reciprocalPage)
+            RefreshPageOverlayTreeNode(reciprocalPage);
+    }
+
+    private void RefreshPageOverlayState(string pageFolder, string status)
+    {
+        PageInfo? updated = OurPlanCoreJobStore.TryReadPage(pageFolder);
+        if (updated == null)
+            return;
+
+        if (_currentPage != null && SameFolder(_currentPage.FolderPath, pageFolder))
+        {
+            _currentPage = updated;
+            LoadSheetOverlay(updated);
+        }
+
+        FinishSheetOverlayStateRefresh(updated, status);
+    }
+
+    private void OpenSheetOverlaySource(PageInfo page)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
+        {
+            TxtStatus.Text = "Set a sheet overlay before opening the overlay sheet.";
+            return;
+        }
+
+        PageInfo? overlayPage = OurPlanCoreJobStore.TryReadPage(latest.OverlayPageFolder);
+        if (overlayPage == null)
+        {
+            TxtStatus.Text = "Overlay sheet source is missing.";
+            return;
+        }
+
+        OpenPageInActiveTab(overlayPage);
+        TxtStatus.Text = $"Opened overlay sheet: {overlayPage.Name}.";
+    }
+
+    private void ChooseCurrentSheetOverlayCandidate()
+    {
+        if (_currentPage == null)
+        {
+            TxtStatus.Text = "Open a sheet before choosing an overlay.";
+            return;
+        }
+
+        ChooseSheetOverlayAutoSelectCandidate(_currentPage);
+    }
+
+    private void BeginCurrentSheetOverlayPointEdit()
+    {
+        if (!RequireModule(ModuleId.SheetOverlay, "Edit Sheet Overlay"))
+            return;
+
+        if (_currentPage == null)
+        {
+            TxtStatus.Text = "Open a sheet before moving an overlay.";
+            return;
+        }
+
+        BeginSheetOverlayPointEdit(_currentPage);
+    }
+
+    private void RefreshPageOverlayTreeNode(PageInfo page)
+    {
+        if (FindPageTreeItemByFolder(page.FolderPath) is not { } item)
+        {
+            RefreshPagesTakeoffIndicators();
+            return;
+        }
+
+        bool wasExpanded = item.IsExpanded;
+        item.Tag = page;
+        item.Header = BuildPageHeader(page);
+        RebuildPageTakeoffNodes(item, page);
+        item.IsExpanded = wasExpanded;
+        ApplyPagesMultiSelectionVisuals();
+        ApplyPagesTreeSearchFilter();
+    }
+
+    private void ReloadCurrentSheetOverlay(string status)
+    {
+        if (_currentPage == null)
+            return;
+
+        if (OurPlanCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
+            _currentPage = updated;
+
+        LoadSheetOverlay(_currentPage);
+        FinishSheetOverlayStateRefresh(_currentPage, status);
+    }
+
+    private void LoadSheetOverlay(
+        PageInfo page,
+        PdfViewport.ViewState? restoreView = null,
+        float? requestedRenderScale = null,
+        bool keepExistingUntilReady = false)
+    {
+        if (!IsModuleEnabled(ModuleId.SheetOverlay))
+        {
+            _viewport.SetSheetOverlaySelectionActive(false);
+            _viewport.ClearSheetOverlay();
+            return;
+        }
+
+        int version = ++_sheetOverlayLoadVersion;
+        if (page.OverlayLayers.Count == 0 || !page.OverlayLayers.Any(layer => layer.IsVisible))
+        {
+            _viewport.SetSheetOverlaySelectionActive(false);
+            _viewport.ClearSheetOverlay();
+            return;
+        }
+        if (!keepExistingUntilReady)
+        {
+            _viewport.PrepareSheetOverlayReload(
+                page.FolderPath,
+                page.OverlayPageFolder,
+                page.ActiveOverlayId);
+        }
+
+        float renderScale = SelectSheetOverlayViewportRenderScale(page, restoreView, requestedRenderScale);
+        if (!TryBuildSheetOverlayLayers(
+                page,
+                renderScale,
+                allowRender: false,
+                out IReadOnlyList<SheetOverlayBitmapLayer> layers,
+                out _))
+        {
+            _ = LoadSheetOverlayAsync(
+                page,
+                version,
+                renderScale,
+                keepExistingUntilReady);
+            return;
+        }
+
+        ApplySheetOverlayBitmapToViewport(page, layers);
+    }
+
+    private void QueueSheetOverlayLoadForPageOpen(PageInfo page, PdfViewport.ViewState? restoreView = null)
+    {
+        if (!IsModuleEnabled(ModuleId.SheetOverlay))
+        {
+            _viewport.SetSheetOverlaySelectionActive(false);
+            _viewport.ClearSheetOverlay();
+            return;
+        }
+
+        int version = ++_sheetOverlayLoadVersion;
+        if (page.OverlayLayers.Count == 0 || !page.OverlayLayers.Any(layer => layer.IsVisible))
+        {
+            _viewport.SetSheetOverlaySelectionActive(false);
+            _viewport.ClearSheetOverlay();
+            return;
+        }
+
+        float renderScale = SelectSheetOverlayPageOpenFirstFrameRenderScale(page, restoreView);
+        if (!TryApplyCachedSheetOverlay(page, restoreView, renderScale))
+        {
+            _viewport.PrepareSheetOverlayReload(
+                page.FolderPath,
+                page.OverlayPageFolder,
+                page.ActiveOverlayId);
+            TxtStatus.Text = "Sheet overlay loading...";
+            _ = LoadSheetOverlayAsync(
+                page,
+                version,
+                renderScale,
+                keepExistingUntilReady: false);
+        }
+    }
+
+    private bool TryApplyCachedSheetOverlay(
+        PageInfo page,
+        PdfViewport.ViewState? restoreView = null,
+        float? requestedRenderScale = null)
+    {
+        if (page.OverlayLayers.Count == 0 || !page.OverlayLayers.Any(layer => layer.IsVisible))
+            return false;
+
+        float renderScale = requestedRenderScale is > 0
+            ? requestedRenderScale.Value
+            : SelectSheetOverlayViewportRenderScale(page, restoreView);
+        if (!TryBuildSheetOverlayLayers(
+                page,
+                renderScale,
+                allowRender: false,
+                out IReadOnlyList<SheetOverlayBitmapLayer> layers,
+                out _))
+        {
+            return false;
+        }
+
+        ApplySheetOverlayBitmapToViewport(page, layers);
+        return true;
+    }
+
+    private async Task LoadSheetOverlayAsync(
+        PageInfo page,
+        int version,
+        float renderScale,
+        bool keepExistingUntilReady)
+    {
+        SheetOverlayLayersBuildResult result = await Task.Run(() =>
+        {
+            bool ok = TryBuildSheetOverlayLayers(
+                page,
+                renderScale,
+                allowRender: true,
+                out IReadOnlyList<SheetOverlayBitmapLayer> layers,
+                out string error);
+            return new SheetOverlayLayersBuildResult(ok, layers, error);
+        });
+
+        if (!IsModuleEnabled(ModuleId.SheetOverlay) ||
+            version != _sheetOverlayLoadVersion ||
+            _currentPage == null ||
+            !SameFolder(_currentPage.FolderPath, page.FolderPath))
+        {
+            DisposeSheetOverlayBitmapLayers(result.Layers);
+            return;
+        }
+
+        PageInfo? latest = OurPlanCoreJobStore.TryReadPage(page.FolderPath);
+        if (latest == null ||
+            latest.OverlayLayers.Count == 0 ||
+            !latest.OverlayLayers.Any(layer => layer.IsVisible))
+        {
+            DisposeSheetOverlayBitmapLayers(result.Layers);
+            _viewport.SetSheetOverlaySelectionActive(false);
+            _viewport.ClearSheetOverlay();
+            return;
+        }
+
+        if (!string.Equals(
+                SheetOverlayRevisionKey(latest),
+                SheetOverlayRevisionKey(page),
+                StringComparison.Ordinal))
+        {
+            DisposeSheetOverlayBitmapLayers(result.Layers);
+            LoadSheetOverlay(latest);
+            return;
+        }
+
+        if (!result.Ok || result.Layers.Count == 0)
+        {
+            DisposeSheetOverlayBitmapLayers(result.Layers);
+            bool retainedExistingOverlay =
+                keepExistingUntilReady &&
+                _viewport.HasSheetOverlayBinding(
+                    latest.FolderPath,
+                    latest.OverlayPageFolder,
+                    latest.ActiveOverlayId);
+            if (!retainedExistingOverlay)
+                _viewport.ClearSheetOverlay();
+            TxtStatus.Text = retainedExistingOverlay
+                ? $"Sheet overlay quality refresh unavailable; existing overlay retained: {result.Error}"
+                : $"Sheet overlay unavailable: {result.Error}";
+            return;
+        }
+
+        ApplySheetOverlayBitmapToViewport(latest, result.Layers);
+    }
+
+    private void ApplySheetOverlayBitmapToViewport(
+        PageInfo page,
+        IReadOnlyList<SheetOverlayBitmapLayer> layers)
+    {
+        _viewport.SetSheetOverlayLayers(layers, page.ActiveOverlayId, page.FolderPath);
+        ActivateCurrentSheetOverlayFrameAfterBitmapLoad(page);
+    }
+
+    private static IReadOnlyList<PdfLayerInfo>? OverlaySnapLayers(PageInfo? overlayPage) =>
+        overlayPage is { PdfLayersCached: true, PdfLayers.Count: > 0 }
+            ? overlayPage.PdfLayers
+            : null;
+
+    private void OnSheetOverlayRenderScaleRefreshRequested(float requestedRenderScale)
+    {
+        if (_currentPage == null ||
+            string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder) ||
+            !_currentPage.OverlayVisible)
+        {
+            return;
+        }
+
+        LoadSheetOverlay(_currentPage, requestedRenderScale: requestedRenderScale, keepExistingUntilReady: true);
+    }
+
+    private float SelectSheetOverlayViewportRenderScale(
+        PageInfo page,
+        PdfViewport.ViewState? restoreView = null,
+        float? requestedRenderScale = null,
+        bool fitAfter = false)
+    {
+        float zoom = requestedRenderScale is > 0
+            ? requestedRenderScale.Value
+            : restoreView?.Zoom ?? (fitAfter
+                ? ViewportRenderPolicy.SheetOverlayLowZoomRenderScale
+                : CurrentViewportZoomForSheetOverlay(page));
+        (float widthPt, float heightPt) = ReadSheetOverlaySourceSize(page);
+        return ViewportRenderPolicy.SelectSheetOverlayRenderScale(zoom, widthPt, heightPt);
+    }
+
+    private float SelectSheetOverlayPageOpenFirstFrameRenderScale(
+        PageInfo page,
+        PdfViewport.ViewState? restoreView)
+    {
+        float selected = SelectSheetOverlayViewportRenderScale(page, restoreView, fitAfter: !restoreView.HasValue);
+        return Math.Min(selected, ViewportRenderPolicy.SheetOverlayLowZoomRenderScale);
+    }
+
+    private float CurrentViewportZoomForSheetOverlay(PageInfo page)
+    {
+        PdfViewport.ViewState view = _viewport.CaptureViewState();
+        if (_viewport.IsPageRenderReady(page.FolderPath))
+            return view.Zoom;
+
+        return Math.Max(1.0f, view.Zoom);
+    }
+
+    private static long ResolveSheetOverlayBitmapCacheBudgetBytes()
+    {
+        const long fallbackBytes = 192_000_000L;
+        long availableBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        if (availableBytes <= 0)
+            return fallbackBytes;
+
+        double desiredBytes = availableBytes * 0.01;
+        if (double.IsNaN(desiredBytes) || desiredBytes <= 0)
+            return fallbackBytes;
+
+        return Math.Clamp((long)desiredBytes, 96_000_000L, 384_000_000L);
+    }
+
+    private static (float WidthPt, float HeightPt) ReadSheetOverlaySourceSize(PageInfo page)
+    {
+        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+            return (0, 0);
+
+        PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.OverlayPageFolder);
+        if (metadata is not { WidthPt: > 0, HeightPt: > 0 })
+            return (0, 0);
+
+        return ((float)metadata.WidthPt, (float)metadata.HeightPt);
+    }
+
+    private (bool Ok, string Error) DrawPdfExportSheetOverlay(
+        SKCanvas canvas,
+        PageInfo page,
+        float pageWidthPt,
+        float pageHeightPt)
+    {
+        if (!IsModuleEnabled(ModuleId.SheetOverlay))
+            return (true, "");
+
+        if (page.OverlayLayers.Count == 0)
+            return (true, "");
+
+        foreach (SheetOverlayLayerInfo layer in page.OverlayLayers.Where(item => item.IsVisible))
+        {
+            PageInfo layerPage = BuildSheetOverlayLayerPage(page, layer);
+            SKBitmap? bitmap = null;
+            try
+            {
+                if (!TryBuildSheetOverlayBitmap(
+                        layerPage,
+                        ViewportRenderPolicy.SheetOverlayExportRenderScale,
+                        allowRender: true,
+                        out bitmap,
+                        out float overlayWidthPt,
+                        out float overlayHeightPt,
+                        out string overlayName,
+                        out string error) ||
+                    bitmap == null)
+                {
+                    return (
+                        false,
+                        $"Could not render overlay '{OverlayPageName(layer.SourcePageFolder)}' " +
+                        $"for sheet '{page.Name}': {error}");
+                }
+
+                using var paint = new SKPaint
+                {
+                    IsAntialias = true,
+                    FilterQuality = SKFilterQuality.Medium,
+                    Color = SKColors.White.WithAlpha(
+                        (byte)Math.Clamp(
+                            (int)Math.Round(layer.Opacity * 255),
+                            13,
+                            255)),
+                };
+                canvas.Save();
+                canvas.ClipRect(new SKRect(0, 0, pageWidthPt, pageHeightPt));
+                canvas.Translate((float)layer.OffsetXPt, (float)layer.OffsetYPt);
+                canvas.RotateDegrees((float)layer.RotationDegrees);
+                canvas.Scale((float)layer.Scale);
+                canvas.DrawBitmap(bitmap, new SKRect(0, 0, overlayWidthPt, overlayHeightPt), paint);
+                canvas.Restore();
+            }
+            finally
+            {
+                bitmap?.Dispose();
+            }
+        }
+
+        return (true, "");
+    }
+
+    private bool TryBuildSheetOverlayBitmap(
+        PageInfo page,
+        float renderScale,
+        bool allowRender,
+        out SKBitmap? overlayBitmap,
+        out float widthPt,
+        out float heightPt,
+        out string overlayName,
+        out string error)
+    {
+        overlayBitmap = null;
+        widthPt = 0;
+        heightPt = 0;
+        overlayName = "";
+        error = "";
+
+        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+            return false;
+
+        if (!Directory.Exists(page.OverlayPageFolder))
+        {
+            error = "overlay sheet folder is missing.";
+            return false;
+        }
+
+        PageInfo? overlayPage = OurPlanCoreJobStore.TryReadPage(page.OverlayPageFolder);
+        if (overlayPage == null)
+        {
+            error = "overlay sheet source is missing.";
+            return false;
+        }
+
+        string cacheKey = BuildSheetOverlayCacheKey(page, overlayPage, renderScale);
+        if (_sheetOverlayBitmapCache.TryGet(cacheKey, out SheetOverlayBitmapCache.Entry? cached) &&
+            cached != null)
+        {
+            overlayBitmap = cached.Bitmap;
+            widthPt = cached.WidthPt;
+            heightPt = cached.HeightPt;
+            overlayName = cached.OverlayName;
+            return true;
+        }
+
+        if (SheetOverlayRenderCache.TryRead(
+                page,
+                overlayPage,
+                renderScale,
+                out SKBitmap? persisted,
+                out widthPt,
+                out heightPt) &&
+            persisted != null)
+        {
+            overlayBitmap = persisted;
+            overlayName = overlayPage.Name;
+            _sheetOverlayBitmapCache.Put(cacheKey, overlayBitmap, widthPt, heightPt, overlayName);
+            AppLog.Info(
+                $"Sheet overlay cache hit; base='{page.FolderPath}'; overlay='{overlayPage.FolderPath}'; scale={renderScale:0.###}");
+            return true;
+        }
+
+        if (!allowRender)
+        {
+            error = "overlay is not cached yet.";
+            return false;
+        }
+
+        if (TryBuildSheetOverlayBitmapFromRasterSheet(
+                page,
+                overlayPage,
+                renderScale,
+                out overlayBitmap,
+                out widthPt,
+                out heightPt,
+                out overlayName,
+                out _) &&
+            overlayBitmap != null)
+        {
+            _sheetOverlayBitmapCache.Put(cacheKey, overlayBitmap, widthPt, heightPt, overlayName);
+            return true;
+        }
+
+        var layerStates = overlayPage.PdfLayers
+            .GroupBy(layer => layer.Number)
+            .ToDictionary(group => group.Key, group => group.First().IsOn);
+
+        Stopwatch renderWatch = Stopwatch.StartNew();
+        // Raw-file payload skips the ~1-1.5s PNG encode/decode round-trip a
+        // full-sheet scale-2 render would otherwise pay.
+        if (!PdfLayerRenderService.TryRender(
+                overlayPage.PdfPath,
+                overlayPage.PdfPage,
+                renderScale: renderScale,
+                layerStates,
+                highlightedLayers: [],
+                overlayPage.PdfLayersCached ? overlayPage.PdfLayers : null,
+                clipRect: null,
+                allowRawFullPage: false,
+                preferRawFilePayload: true,
+                out PdfLayerRenderResult render,
+                out error))
+        {
+            return false;
+        }
+        renderWatch.Stop();
+        if (renderWatch.ElapsedMilliseconds >= ViewportRenderPolicy.SlowRenderLogMs)
+        {
+            AppLog.Info(
+                $"Sheet overlay render {renderWatch.ElapsedMilliseconds}ms; base='{page.FolderPath}'; " +
+                $"overlay='{overlayPage.FolderPath}'; scale={renderScale:0.###}");
+        }
+
+        using SKBitmap? sourceBitmap = render.HasRawImage
+            ? PdfLayerRenderService.CreateBitmapFromRawRender(render)
+            : SKBitmap.Decode(render.ImageBytes);
+        if (sourceBitmap == null)
+        {
+            error = "overlay raster could not be decoded.";
+            return false;
+        }
+
+        overlayBitmap = BuildTintedSheetOverlayBitmap(sourceBitmap, page.OverlayColor);
+        widthPt = render.WidthPt;
+        heightPt = render.HeightPt;
+        overlayName = overlayPage.Name;
+        _sheetOverlayBitmapCache.Put(cacheKey, overlayBitmap, widthPt, heightPt, overlayName);
+        SheetOverlayRenderCache.TryWrite(page, overlayPage, renderScale, overlayBitmap, widthPt, heightPt);
+        return true;
+    }
+
+    private bool TryBuildSheetOverlayBitmapFromRasterSheet(
+        PageInfo page,
+        PageInfo overlayPage,
+        float renderScale,
+        out SKBitmap? overlayBitmap,
+        out float widthPt,
+        out float heightPt,
+        out string overlayName,
+        out string error)
+    {
+        overlayBitmap = null;
+        widthPt = 0;
+        heightPt = 0;
+        overlayName = "";
+        error = "";
+
+        RasterSheetSource? rasterSheet = overlayPage.RasterSheet;
+        if (rasterSheet is not { Enabled: true } ||
+            string.IsNullOrWhiteSpace(rasterSheet.Image) ||
+            rasterSheet.RenderScale + 0.01 < renderScale)
+        {
+            error = "overlay raster sheet is not ready at the requested scale.";
+            return false;
+        }
+
+        if (!RasterSheetCacheService.TryReadReady(
+                overlayPage.FolderPath,
+                overlayPage.PdfPath,
+                rasterSheet,
+                out RasterSheetBitmapResult result,
+                out error))
+        {
+            return false;
+        }
+
+        using SKBitmap sourceBitmap = result.Bitmap;
+        if (result.BitmapScale + 0.01f < renderScale)
+        {
+            error = "overlay raster sheet bitmap scale is below the requested scale.";
+            return false;
+        }
+
+        using SKBitmap? scaledSourceBitmap = result.BitmapScale > renderScale * 1.05f
+            ? ResizeSheetOverlaySourceBitmap(sourceBitmap, result.WidthPt, result.HeightPt, renderScale)
+            : null;
+        if (result.BitmapScale > renderScale * 1.05f && scaledSourceBitmap == null)
+        {
+            error = "overlay raster sheet could not be resized to the requested scale.";
+            return false;
+        }
+
+        SKBitmap tintSource = scaledSourceBitmap ?? sourceBitmap;
+        overlayBitmap = BuildTintedSheetOverlayBitmap(tintSource, page.OverlayColor);
+        widthPt = result.WidthPt;
+        heightPt = result.HeightPt;
+        overlayName = overlayPage.Name;
+        QueueSheetOverlayRenderCacheWrite(page, overlayPage, renderScale, overlayBitmap, widthPt, heightPt);
+        AppLog.Info(
+            $"Sheet overlay raster cache hit; base='{page.FolderPath}'; overlay='{overlayPage.FolderPath}'; " +
+            $"scale={renderScale:0.###}; sourceScale={result.BitmapScale:0.###}; bitmapScale={renderScale:0.###}");
+        return true;
+    }
+
+    private static SKBitmap? ResizeSheetOverlaySourceBitmap(
+        SKBitmap source,
+        float widthPt,
+        float heightPt,
+        float renderScale)
+    {
+        if (source.Width <= 0 || source.Height <= 0 || widthPt <= 0 || heightPt <= 0 || renderScale <= 0)
+            return null;
+
+        int targetWidth = Math.Max(1, (int)Math.Round(widthPt * renderScale));
+        int targetHeight = Math.Max(1, (int)Math.Round(heightPt * renderScale));
+        if (targetWidth >= source.Width && targetHeight >= source.Height)
+            return source.Copy();
+
+        return source.Resize(
+            new SKImageInfo(targetWidth, targetHeight, SKColorType.Bgra8888, SKAlphaType.Premul),
+            SKFilterQuality.High);
+    }
+
+    private static void QueueSheetOverlayRenderCacheWrite(
+        PageInfo page,
+        PageInfo overlayPage,
+        float renderScale,
+        SKBitmap bitmap,
+        float widthPt,
+        float heightPt)
+    {
+        SKBitmap? snapshot = bitmap.Copy();
+        if (snapshot == null)
+            return;
+
+        _ = Task.Run(() =>
+        {
+            using (snapshot)
+                SheetOverlayRenderCache.TryWrite(page, overlayPage, renderScale, snapshot, widthPt, heightPt);
+        });
+    }
+
+    private static string BuildSheetOverlayCacheKey(PageInfo page, PageInfo overlayPage, float renderScale)
+    {
+        var info = new FileInfo(overlayPage.PdfPath);
+        return string.Join(
+            '|',
+            Path.GetFileName(info.FullName).ToLowerInvariant(),
+            info.Exists ? info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) : "0",
+            info.Exists ? info.Length.ToString(CultureInfo.InvariantCulture) : "0",
+            overlayPage.PdfPage.ToString(CultureInfo.InvariantCulture),
+            Math.Round(renderScale, 3).ToString(CultureInfo.InvariantCulture),
+            SheetOverlayTintStyleVersion,
+            page.OverlayColor,
+            string.Join(';', overlayPage.PdfLayers
+                .OrderBy(layer => layer.Number)
+                .Select(layer => $"{layer.Number}:{layer.IsOn}:{layer.Name}")));
+    }
+
+    private void TogglePageOverlayVisibility(PageInfo page) =>
+        TogglePageOverlayVisibility(page, page.ActiveOverlayId);
+
+    private void TogglePageOverlayVisibility(PageInfo page, string overlayId)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        SheetOverlayLayerInfo? layer = latest.OverlayLayers.FirstOrDefault(item =>
+            string.Equals(item.Id, overlayId, StringComparison.OrdinalIgnoreCase));
+        if (layer == null)
+            return;
+        bool visible = !layer.IsVisible;
+        OurPlanCoreJobStore.SavePageOverlayVisibility(page.FolderPath, overlayId, visible);
+        PageInfo updated = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        if (_currentPage != null && SameFolder(_currentPage.FolderPath, page.FolderPath))
+        {
+            _currentPage = updated;
+            LoadSheetOverlay(updated);
+        }
+
+        FinishSheetOverlayStateRefresh(
+            updated,
+            visible
+                ? $"Overlay layer shown on {updated.Name}."
+                : $"Overlay layer hidden on {updated.Name}.");
+    }
+
+    private static SKBitmap BuildTintedSheetOverlayBitmap(SKBitmap source, string colorHex)
+    {
+        SKColor color = BuildBrightSheetOverlayColor(ParseOverlayColor(colorHex));
+        double alphaScale = 1.0;
+        var tinted = new SKBitmap(new SKImageInfo(source.Width, source.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        if (source.ColorType == SKColorType.Bgra8888)
+        {
+            // Byte path: the SKColor[] route materializes two pixel arrays plus
+            // per-element conversion, which costs hundreds of ms on full-sheet
+            // scale-2 bitmaps.
+            ReadOnlySpan<byte> src = source.GetPixelSpan();
+            byte[] dst = new byte[src.Length];
+            for (int i = 0; i + 3 < src.Length; i += 4)
+            {
+                byte b = src[i];
+                byte g = src[i + 1];
+                byte r = src[i + 2];
+                byte a = src[i + 3];
+                int whiteDistance = Math.Max(Math.Max(255 - r, 255 - g), 255 - b);
+                int alpha = (int)Math.Round(whiteDistance * alphaScale * (a / 255.0) * SheetOverlayAlphaBoost);
+                alpha = Math.Clamp(alpha, 0, 255);
+                if (alpha < 3)
+                    continue;
+
+                // Destination is premultiplied BGRA.
+                dst[i] = (byte)(color.Blue * alpha / 255);
+                dst[i + 1] = (byte)(color.Green * alpha / 255);
+                dst[i + 2] = (byte)(color.Red * alpha / 255);
+                dst[i + 3] = (byte)alpha;
+            }
+
+            System.Runtime.InteropServices.Marshal.Copy(dst, 0, tinted.GetPixels(), dst.Length);
+            return tinted;
+        }
+
+        SKColor[] sourcePixels = source.Pixels;
+        SKColor[] tintedPixels = new SKColor[sourcePixels.Length];
+
+        for (int i = 0; i < sourcePixels.Length; i++)
+        {
+            SKColor pixel = sourcePixels[i];
+            int whiteDistance = Math.Max(
+                Math.Max(255 - pixel.Red, 255 - pixel.Green),
+                255 - pixel.Blue);
+            int alpha = (int)Math.Round(whiteDistance * alphaScale * (pixel.Alpha / 255.0) * SheetOverlayAlphaBoost);
+            alpha = Math.Clamp(alpha, 0, 255);
+            if (alpha >= 3)
+                tintedPixels[i] = new SKColor(color.Red, color.Green, color.Blue, (byte)alpha);
+        }
+
+        tinted.Pixels = tintedPixels;
+        return tinted;
+    }
+
+    private string CurrentSheetOverlayColor() =>
+        string.IsNullOrWhiteSpace(_currentPage?.OverlayColor)
+            ? DefaultSheetOverlayColor
+            : _currentPage!.OverlayColor;
+
+    private double CurrentSheetOverlayOpacity()
+    {
+        double opacity = _currentPage?.OverlayOpacity ?? DefaultSheetOverlayOpacity;
+        return double.IsNaN(opacity) || double.IsInfinity(opacity) || opacity <= 0
+            ? DefaultSheetOverlayOpacity
+            : EffectiveSheetOverlayOpacity(opacity);
+    }
+
+    private static double EffectiveSheetOverlayOpacity(double opacity) =>
+        double.IsNaN(opacity) || double.IsInfinity(opacity)
+            ? DefaultSheetOverlayOpacity
+            : Math.Clamp(opacity, 0.05, 1.0);
+
+    private static SKColor BuildBrightSheetOverlayColor(SKColor color)
+    {
+        static byte Boost(byte value)
+        {
+            if (value < 8)
+                return 0;
+
+            return (byte)Math.Clamp((int)Math.Round(value * 1.28 + 34), 0, 255);
+        }
+
+        return new SKColor(Boost(color.Red), Boost(color.Green), Boost(color.Blue));
+    }
+
+    private static SKColor ParseOverlayColor(string colorHex)
+    {
+        try
+        {
+            return SKColor.Parse(string.IsNullOrWhiteSpace(colorHex) ? DefaultSheetOverlayColor : colorHex);
+        }
+        catch
+        {
+            return SKColor.Parse(DefaultSheetOverlayColor);
+        }
+    }
+
+    private static bool SameFolder(string left, string right)
+    {
+        try
+        {
+            string l = Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string r = Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(l, r, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+}

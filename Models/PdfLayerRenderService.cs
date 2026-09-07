@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -6,767 +7,188 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using OurPlaneCore.Controls;
+using System.Threading;
+using System.Threading.Tasks;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
-public sealed class PdfLayerRenderResult
+public static partial class PdfLayerRenderService
 {
-    public byte[] ImageBytes { get; init; } = [];
-    public float WidthPt { get; init; }
-    public float HeightPt { get; init; }
-    public IReadOnlyList<PdfLayer> Layers { get; init; } = [];
-}
-
-public sealed class PdfLayerTraceResult
-{
-    public int Layer { get; init; }
-    public string LayerName { get; init; } = "";
-    public string Mode { get; init; } = "";
-    public IReadOnlyList<PdfLayerTraceMeasurement> Measurements { get; init; } = [];
-}
-
-public sealed class PdfLayerTraceMeasurement
-{
-    public string MType { get; init; } = "";
-    public string Name { get; init; } = "";
-    public string Notes { get; init; } = "";
-    public IReadOnlyList<SKPoint> Points { get; init; } = [];
-}
-
-public sealed class PdfLayerProbeResult
-{
-    public IReadOnlyList<PdfLayerProbeCandidate> Candidates { get; init; } = [];
-}
-
-public sealed class PdfLayerProbeCandidate
-{
-    public int Layer { get; init; }
-    public string LayerName { get; init; } = "";
-    public float Distance { get; init; }
-    public SKRect Bounds { get; init; }
-}
-
-public static class PdfLayerRenderService
-{
-    private static readonly object WorkerLock = new();
+    private static readonly SemaphoreSlim WorkerSemaphore = new(1, 1);
     private static Process? WorkerProcess;
     private static StreamWriter? WorkerInput;
     private static StreamReader? WorkerOutput;
+    private static readonly SemaphoreSlim DetailWorkerSemaphore = new(1, 1);
+    private static Process? DetailWorkerProcess;
+    private static StreamWriter? DetailWorkerInput;
+    private static StreamReader? DetailWorkerOutput;
+    // Detail-prefetch fans out up to DetailRenderPrefetchTileCount clip tiles when a deep
+    // zoom settles. A single persistent prefetch worker forced those tiles to render one
+    // after another (measured ~2 s to fill a screen at 600%+); a small pool of persistent
+    // workers renders them in parallel on the otherwise-idle cores. Sized to the machine:
+    // 1 on small boxes (unchanged behaviour), up to 4 on a many-core workstation. Each slot
+    // is owned by exactly one in-flight call (popped from PrefetchFreeSlots under the
+    // PrefetchPoolSlots permit), so per-slot fields need no extra locking.
+    private static readonly int PrefetchWorkerPoolSize = ResolvePrefetchWorkerPoolSize();
+    private static readonly SemaphoreSlim PrefetchPoolSlots = new(PrefetchWorkerPoolSize, PrefetchWorkerPoolSize);
+    private static readonly ConcurrentStack<int> PrefetchFreeSlots = new(Enumerable.Range(0, PrefetchWorkerPoolSize));
+    private static readonly Process?[] PrefetchWorkerProcesses = new Process?[PrefetchWorkerPoolSize];
+    private static readonly StreamWriter?[] PrefetchWorkerInputs = new StreamWriter?[PrefetchWorkerPoolSize];
+    private static readonly StreamReader?[] PrefetchWorkerOutputs = new StreamReader?[PrefetchWorkerPoolSize];
+
+    private static int ResolvePrefetchWorkerPoolSize() => Math.Clamp(Environment.ProcessorCount / 3, 1, 4);
+
     private static readonly object RenderCacheLock = new();
     private static readonly Dictionary<string, PdfLayerRenderResult> RenderCache = [];
     private static readonly Queue<string> RenderCacheOrder = [];
-    private const int MaxRenderCacheEntries = 12;
+    private static long RenderCacheBytes;
+    private const int MaxRenderCacheEntries = 96;
+
+    // RAM-adaptive: budgets scale with installed memory and clamp to [min, max].
+    // Small machines (8-16 GB) keep the old conservative size; a big-RAM box keeps
+    // far more full-page renders hot. The per-entry cap is the important one here:
+    // at 96 MB a full-page large-sheet raster at high dpi (~150 MB raw) was rejected
+    // outright and re-rendered every view; raising it lets those renders actually cache.
+    private static readonly long MaxRenderCacheBytes =
+        ResolveRenderCacheRamBudget(768_000_000L, 2_560_000_000L, 0.025);
+    private static readonly long MaxRenderCacheEntryBytes =
+        ResolveRenderCacheRamBudget(96_000_000L, 384_000_000L, 0.006);
+
+    private static long ResolveRenderCacheRamBudget(long minimumBytes, long maximumBytes, double targetRatio)
+    {
+        long availableBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        if (availableBytes <= 0)
+            return minimumBytes;
+
+        double desiredBytes = availableBytes * targetRatio;
+        if (double.IsNaN(desiredBytes) || desiredBytes <= 0)
+            return minimumBytes;
+
+        long budgetBytes = desiredBytes >= long.MaxValue ? maximumBytes : (long)desiredBytes;
+        return Math.Clamp(budgetBytes, minimumBytes, maximumBytes);
+    }
+
+    private const int InlineRenderImageMaxPixels = 24_000_000;
+    private const int InlineRawRenderImageMaxPixels = 4_000_000;
+    private static readonly object InFlightRenderLock = new();
+    private static readonly Dictionary<string, Task<(bool Ok, PdfLayerRenderResult Result, string Error)>> InFlightRenderTasks = [];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = true,
     };
+    private static readonly JsonSerializerOptions WorkerJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        WriteIndented = false,
+    };
 
-    public static bool TryRender(
+    /// <summary>
+    /// PDF layers are opt-in: when disabled (default) renders send an empty
+    /// visible-layer list so the python helper skips per-render OCG discovery,
+    /// and the viewport never starts layer scans.
+    /// </summary>
+    public static bool PdfLayersEnabled { get; set; }
+
+    public static Task<(bool Ok, PdfLayerRenderResult Result, string Error)> TryRenderAsync(
         string pdfPath,
         int pageIndex,
         double renderScale,
         IReadOnlyDictionary<int, bool> layerStates,
         IReadOnlyCollection<int> highlightedLayers,
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
-        out PdfLayerRenderResult result,
-        out string error)
+        SKRect? clipRect = null,
+        bool allowRawFullPage = false)
     {
-        result = new PdfLayerRenderResult();
-        error = "";
-        string cacheKey = BuildRenderCacheKey(
+        string requestKey = BuildRenderCacheKey(
             pdfPath,
             pageIndex,
             renderScale,
             layerStates,
             highlightedLayers,
-            cachedLayers);
-        if (TryGetCachedRender(cacheKey, out result))
-            return true;
+            cachedLayers,
+            clipRect,
+            allowRawFullPage);
+        if (TryGetCachedRender(requestKey, out PdfLayerRenderResult cached))
+            return Task.FromResult((true, cached, ""));
 
-        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
-        string inputPath = Path.Combine(tempDir, "input.json");
-        string outputPath = Path.Combine(tempDir, "output.json");
-        string imagePath = Path.Combine(tempDir, "page.png");
-
-        try
+        lock (InFlightRenderLock)
         {
-            Directory.CreateDirectory(tempDir);
-            var request = new RenderRequest
-            {
-                Pdf = pdfPath,
-                Page = pageIndex,
-                Scale = renderScale,
-                Image = imagePath,
-                Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
-                Highlight = highlightedLayers.ToList(),
-                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
-            };
+            if (InFlightRenderTasks.TryGetValue(requestKey, out var inFlight))
+                return inFlight;
 
-            if (!TryInvokeWorker("render", request, out RenderResponse? response, out error) &&
-                !TryRunFileCommand("render", request, inputPath, outputPath, out response, out error))
-                return false;
-
-            if (response == null || !response.Ok)
+            var task = Task.Run(() =>
             {
-                error = response?.Error ?? "PyMuPDF did not return a render response.";
-                return false;
-            }
-
-            if (!File.Exists(response.Image))
-            {
-                error = "PyMuPDF did not produce a rendered image.";
-                return false;
-            }
-
-            result = new PdfLayerRenderResult
-            {
-                ImageBytes = File.ReadAllBytes(response.Image),
-                WidthPt = response.WidthPt,
-                HeightPt = response.HeightPt,
-                Layers = response.Layers
-                    .Select(l => new PdfLayer(l.Xref, l.Name, l.On, highlightedLayers.Contains(l.Xref)))
-                    .ToList(),
-            };
-            AddCachedRender(cacheKey, result);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            return false;
-        }
-        finally
-        {
-            try
-            {
-                if (Directory.Exists(tempDir))
-                    Directory.Delete(tempDir, recursive: true);
-            }
-            catch { }
+                bool ok = TryRender(
+                    pdfPath,
+                    pageIndex,
+                    renderScale,
+                    layerStates,
+                    highlightedLayers,
+                    cachedLayers,
+                    clipRect,
+                    allowRawFullPage,
+                    out PdfLayerRenderResult result,
+                    out string error);
+                return (ok, result, error);
+            });
+            InFlightRenderTasks[requestKey] = task;
+            _ = task.ContinueWith(
+                _ =>
+                {
+                    lock (InFlightRenderLock)
+                        InFlightRenderTasks.Remove(requestKey);
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return task;
         }
     }
 
-    private static bool TryGetCachedRender(string key, out PdfLayerRenderResult result)
-    {
-        lock (RenderCacheLock)
-        {
-            if (RenderCache.TryGetValue(key, out result!))
-                return true;
-        }
-
-        result = new PdfLayerRenderResult();
-        return false;
-    }
-
-    private static void AddCachedRender(string key, PdfLayerRenderResult result)
-    {
-        lock (RenderCacheLock)
-        {
-            if (RenderCache.ContainsKey(key))
-                return;
-
-            RenderCache[key] = result;
-            RenderCacheOrder.Enqueue(key);
-            while (RenderCache.Count > MaxRenderCacheEntries && RenderCacheOrder.Count > 0)
-            {
-                string oldKey = RenderCacheOrder.Dequeue();
-                RenderCache.Remove(oldKey);
-            }
-        }
-    }
-
-    private static string BuildRenderCacheKey(
+    public static Task<(bool Ok, IReadOnlyList<PdfLayerInfo> Layers, string Error)> TryReadVisibleLayersAsync(
         string pdfPath,
-        int pageIndex,
-        double renderScale,
-        IReadOnlyDictionary<int, bool> layerStates,
-        IReadOnlyCollection<int> highlightedLayers,
-        IReadOnlyList<PdfLayerInfo>? cachedLayers)
-    {
-        var info = new FileInfo(pdfPath);
-        var sb = new StringBuilder();
-        sb.Append(info.FullName.ToLowerInvariant())
-          .Append('|').Append(info.Exists ? info.LastWriteTimeUtc.Ticks : 0)
-          .Append('|').Append(info.Exists ? info.Length : 0)
-          .Append('|').Append(pageIndex)
-          .Append('|').Append(Math.Round(renderScale, 3));
-
-        sb.Append("|layers:");
-        foreach (var kvp in layerStates.OrderBy(kvp => kvp.Key))
-            sb.Append(kvp.Key).Append('=').Append(kvp.Value ? '1' : '0').Append(';');
-
-        sb.Append("|hi:");
-        foreach (int layer in highlightedLayers.OrderBy(v => v))
-            sb.Append(layer).Append(';');
-
-        sb.Append("|visible:");
-        if (cachedLayers != null)
+        int pageIndex) =>
+        Task.Run(() =>
         {
-            foreach (var layer in cachedLayers.OrderBy(l => l.Number))
-                sb.Append(layer.Number).Append('=').Append(layer.IsOn ? '1' : '0').Append(':').Append(layer.Name).Append(';');
-        }
+            bool ok = TryReadVisibleLayers(pdfPath, pageIndex, out IReadOnlyList<PdfLayerInfo> layers, out string error);
+            return (ok, layers, error);
+        });
 
-        return sb.ToString();
-    }
-
-    public static bool TryReadVisibleLayers(
-        string pdfPath,
-        int pageIndex,
-        out IReadOnlyList<PdfLayerInfo> layers,
-        out string error)
-    {
-        layers = [];
-        error = "";
-
-        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
-        string inputPath = Path.Combine(tempDir, "input.json");
-        string outputPath = Path.Combine(tempDir, "output.json");
-
-        try
-        {
-            Directory.CreateDirectory(tempDir);
-            var request = new LayerListRequest
-            {
-                Pdf = pdfPath,
-                Page = pageIndex,
-            };
-
-            if (!TryInvokeWorker("layers", request, out LayerListResponse? response, out error) &&
-                !TryRunFileCommand("layers", request, inputPath, outputPath, out response, out error))
-                return false;
-
-            if (response == null || !response.Ok)
-            {
-                error = response?.Error ?? "PyMuPDF did not return a layer response.";
-                return false;
-            }
-
-            layers = response.Layers
-                .Select(l => new PdfLayerInfo { Number = l.Xref, Name = l.Name, IsOn = l.On })
-                .ToList();
-            return true;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            return false;
-        }
-        finally
-        {
-            try
-            {
-                if (Directory.Exists(tempDir))
-                    Directory.Delete(tempDir, recursive: true);
-            }
-            catch { }
-        }
-    }
-
-    public static bool TryTraceLayer(
+    public static Task<(bool Ok, PdfLayerTraceResult Result, string Error)> TryTraceLayerAsync(
         string pdfPath,
         int pageIndex,
         int layerNumber,
         string layerName,
         PdfLayerTraceMode mode,
         SKPoint? pickPoint,
-        IReadOnlyList<PdfLayerInfo>? cachedLayers,
-        out PdfLayerTraceResult result,
-        out string error)
-    {
-        result = new PdfLayerTraceResult();
-        error = "";
-
-        try
+        IReadOnlyList<PdfLayerInfo>? cachedLayers) =>
+        Task.Run(() =>
         {
-            var request = new LayerTraceRequest
-            {
-                Pdf = pdfPath,
-                Page = pageIndex,
-                Layer = layerNumber,
-                LayerName = layerName,
-                Mode = LayerTraceModeKey(mode),
-                PointX = pickPoint?.X,
-                PointY = pickPoint?.Y,
-                MaxMeasurements = mode == PdfLayerTraceMode.AllEdges ? 48 : 1,
-                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
-            };
+            bool ok = TryTraceLayer(
+                pdfPath,
+                pageIndex,
+                layerNumber,
+                layerName,
+                mode,
+                pickPoint,
+                cachedLayers,
+                out PdfLayerTraceResult result,
+                out string error);
+            return (ok, result, error);
+        });
 
-            if (!TryInvokeHelper("layertrace", request, out LayerTraceResponse? response, out error))
-                return false;
-
-            if (response == null || !response.Ok)
-            {
-                error = response?.Error ?? "PyMuPDF did not return a layer trace response.";
-                return false;
-            }
-
-            result = new PdfLayerTraceResult
-            {
-                Layer = response.Layer,
-                LayerName = response.LayerName,
-                Mode = response.Mode,
-                Measurements = response.Measurements
-                    .Select(m => new PdfLayerTraceMeasurement
-                    {
-                        MType = m.MType,
-                        Name = m.Name,
-                        Notes = m.Notes,
-                        Points = m.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
-                    })
-                    .ToList(),
-            };
-            return true;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            return false;
-        }
-    }
-
-    public static bool TryProbeLayers(
+    public static Task<(bool Ok, PdfLayerProbeResult Result, string Error)> TryProbeLayersAsync(
         string pdfPath,
         int pageIndex,
         SKPoint point,
-        IReadOnlyList<PdfLayerInfo>? cachedLayers,
-        out PdfLayerProbeResult result,
-        out string error)
-    {
-        result = new PdfLayerProbeResult();
-        error = "";
-
-        try
+        IReadOnlyList<PdfLayerInfo>? cachedLayers) =>
+        Task.Run(() =>
         {
-            var request = new LayerProbeRequest
-            {
-                Pdf = pdfPath,
-                Page = pageIndex,
-                PointX = point.X,
-                PointY = point.Y,
-                Tolerance = 24,
-                MaxCandidates = 12,
-                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
-            };
-
-            if (!TryInvokeHelper("layerprobe", request, out LayerProbeResponse? response, out error))
-                return false;
-
-            if (response == null || !response.Ok)
-            {
-                error = response?.Error ?? "PyMuPDF did not return a layer probe response.";
-                return false;
-            }
-
-            result = new PdfLayerProbeResult
-            {
-                Candidates = response.Candidates
-                    .Where(candidate => !string.IsNullOrWhiteSpace(candidate.LayerName))
-                    .Select(candidate => new PdfLayerProbeCandidate
-                    {
-                        Layer = candidate.Layer,
-                        LayerName = candidate.LayerName,
-                        Distance = candidate.Distance,
-                        Bounds = new SKRect(
-                            candidate.Bounds.X0,
-                            candidate.Bounds.Y0,
-                            candidate.Bounds.X1,
-                            candidate.Bounds.Y1),
-                    })
-                    .ToList(),
-            };
-            return true;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            return false;
-        }
-    }
-
-    internal static bool TryInvokeHelper<TRequest, TResponse>(
-        string action,
-        TRequest request,
-        out TResponse? response,
-        out string error)
-    {
-        response = default;
-        error = "";
-
-        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
-        string inputPath = Path.Combine(tempDir, "input.json");
-        string outputPath = Path.Combine(tempDir, "output.json");
-
-        try
-        {
-            Directory.CreateDirectory(tempDir);
-            return TryInvokeWorker(action, request, out response, out error) ||
-                   TryRunFileCommand(action, request, inputPath, outputPath, out response, out error);
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            return false;
-        }
-        finally
-        {
-            try
-            {
-                if (Directory.Exists(tempDir))
-                    Directory.Delete(tempDir, recursive: true);
-            }
-            catch { }
-        }
-    }
-
-    private static bool TryInvokeWorker<TRequest, TResponse>(
-        string action,
-        TRequest request,
-        out TResponse? response,
-        out string error)
-    {
-        response = default;
-        error = "";
-
-        lock (WorkerLock)
-        {
-            try
-            {
-                if (!EnsureWorker(out error))
-                    return false;
-
-                string id = Guid.NewGuid().ToString("N");
-                var envelope = new WorkerRequest<TRequest>
-                {
-                    Id = id,
-                    Action = action,
-                    Request = request,
-                };
-
-                WorkerInput!.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
-                WorkerInput.Flush();
-
-                var readTask = WorkerOutput!.ReadLineAsync();
-                if (!readTask.Wait(30000))
-                {
-                    ResetWorker();
-                    error = $"PyMuPDF worker {action} timed out.";
-                    return false;
-                }
-
-                string? line = readTask.Result;
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    ResetWorker();
-                    error = "PyMuPDF worker stopped unexpectedly.";
-                    return false;
-                }
-
-                var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, JsonOptions);
-                if (workerResponse == null || workerResponse.Id != id)
-                {
-                    ResetWorker();
-                    error = "PyMuPDF worker returned an invalid response.";
-                    return false;
-                }
-
-                response = workerResponse.Response;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                ResetWorker();
-                error = ex.Message;
-                return false;
-            }
-        }
-    }
-
-    private static bool EnsureWorker(out string error)
-    {
-        error = "";
-        if (WorkerProcess is { HasExited: false } && WorkerInput != null && WorkerOutput != null)
-            return true;
-
-        ResetWorker();
-
-        string helperPath = ResolveHelperPath();
-        if (helperPath.Length == 0)
-        {
-            error = "PyMuPDF layer helper was not found.";
-            return false;
-        }
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = "python",
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = false,
-            CreateNoWindow = true,
-            StandardInputEncoding = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8,
-        };
-        psi.ArgumentList.Add("-u");
-        psi.ArgumentList.Add(helperPath);
-        psi.ArgumentList.Add("worker");
-
-        WorkerProcess = Process.Start(psi);
-        if (WorkerProcess == null)
-        {
-            error = "Could not start python.";
-            return false;
-        }
-
-        WorkerInput = WorkerProcess.StandardInput;
-        WorkerOutput = WorkerProcess.StandardOutput;
-        return true;
-    }
-
-    private static void ResetWorker()
-    {
-        try { WorkerInput?.Dispose(); } catch { }
-        try { WorkerOutput?.Dispose(); } catch { }
-        try
-        {
-            if (WorkerProcess is { HasExited: false })
-                WorkerProcess.Kill(entireProcessTree: true);
-        }
-        catch { }
-        try { WorkerProcess?.Dispose(); } catch { }
-
-        WorkerInput = null;
-        WorkerOutput = null;
-        WorkerProcess = null;
-    }
-
-    public static void StopWorker()
-    {
-        lock (WorkerLock)
-        {
-            ResetWorker();
-        }
-    }
-
-    private static bool TryRunFileCommand<TRequest, TResponse>(
-        string action,
-        TRequest request,
-        string inputPath,
-        string outputPath,
-        out TResponse? response,
-        out string error)
-    {
-        response = default;
-        error = "";
-
-        File.WriteAllText(inputPath, JsonSerializer.Serialize(request, JsonOptions));
-
-        string helperPath = ResolveHelperPath();
-        if (helperPath.Length == 0)
-        {
-            error = "PyMuPDF layer helper was not found.";
-            return false;
-        }
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = "python",
-            UseShellExecute = false,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            CreateNoWindow = true,
-        };
-        psi.ArgumentList.Add(helperPath);
-        psi.ArgumentList.Add(action);
-        psi.ArgumentList.Add(inputPath);
-        psi.ArgumentList.Add(outputPath);
-
-        using var process = Process.Start(psi);
-        if (process == null)
-        {
-            error = "Could not start python.";
-            return false;
-        }
-
-        string stdout = process.StandardOutput.ReadToEnd();
-        string stderr = process.StandardError.ReadToEnd();
-        if (!process.WaitForExit(30000))
-        {
-            try { process.Kill(entireProcessTree: true); } catch { }
-            error = $"PyMuPDF {action} timed out.";
-            return false;
-        }
-
-        if (!File.Exists(outputPath))
-        {
-            error = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-            return false;
-        }
-
-        response = JsonSerializer.Deserialize<TResponse>(File.ReadAllText(outputPath), JsonOptions);
-        return true;
-    }
-
-    private static string ResolveHelperPath()
-    {
-        string[] candidates =
-        [
-            Path.Combine(AppContext.BaseDirectory, "Tools", "pdf_layers_helper.py"),
-            Path.Combine(AppContext.BaseDirectory, "pdf_layers_helper.py"),
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Tools", "pdf_layers_helper.py"),
-        ];
-
-        foreach (string candidate in candidates)
-        {
-            string full = Path.GetFullPath(candidate);
-            if (File.Exists(full))
-                return full;
-        }
-
-        return "";
-    }
-
-    private sealed class RenderRequest
-    {
-        public string Pdf { get; set; } = "";
-        public int Page { get; set; }
-        public double Scale { get; set; }
-        public string Image { get; set; } = "";
-        public Dictionary<string, bool> Layers { get; set; } = [];
-        public List<int> Highlight { get; set; } = [];
-        public List<LayerDto>? VisibleLayers { get; set; }
-    }
-
-    private sealed class LayerListRequest
-    {
-        public string Pdf { get; set; } = "";
-        public int Page { get; set; }
-    }
-
-    private sealed class LayerTraceRequest
-    {
-        public string Pdf { get; set; } = "";
-        public int Page { get; set; }
-        public int Layer { get; set; }
-        public string LayerName { get; set; } = "";
-        public string Mode { get; set; } = "";
-        public float? PointX { get; set; }
-        public float? PointY { get; set; }
-        public int MaxMeasurements { get; set; } = 48;
-        public List<LayerDto>? VisibleLayers { get; set; }
-    }
-
-    private sealed class LayerProbeRequest
-    {
-        public string Pdf { get; set; } = "";
-        public int Page { get; set; }
-        public float PointX { get; set; }
-        public float PointY { get; set; }
-        public float Tolerance { get; set; } = 24;
-        public int MaxCandidates { get; set; } = 12;
-        public List<LayerDto>? VisibleLayers { get; set; }
-    }
-
-    private sealed class RenderResponse
-    {
-        public bool Ok { get; set; }
-        public string Error { get; set; } = "";
-        public float WidthPt { get; set; }
-        public float HeightPt { get; set; }
-        public string Image { get; set; } = "";
-        public List<LayerDto> Layers { get; set; } = [];
-    }
-
-    private sealed class LayerListResponse
-    {
-        public bool Ok { get; set; }
-        public string Error { get; set; } = "";
-        public List<LayerDto> Layers { get; set; } = [];
-    }
-
-    private sealed class LayerTraceResponse
-    {
-        public bool Ok { get; set; }
-        public string Error { get; set; } = "";
-        public int Layer { get; set; }
-        public string LayerName { get; set; } = "";
-        public string Mode { get; set; } = "";
-        public List<LayerTraceMeasurementDto> Measurements { get; set; } = [];
-    }
-
-    private sealed class LayerProbeResponse
-    {
-        public bool Ok { get; set; }
-        public string Error { get; set; } = "";
-        public List<LayerProbeCandidateDto> Candidates { get; set; } = [];
-    }
-
-    private sealed class LayerTraceMeasurementDto
-    {
-        public string MType { get; set; } = "";
-        public string Name { get; set; } = "";
-        public string Notes { get; set; } = "";
-        public List<PointDto> Points { get; set; } = [];
-    }
-
-    private sealed class PointDto
-    {
-        public float X { get; set; }
-        public float Y { get; set; }
-    }
-
-    private sealed class LayerProbeCandidateDto
-    {
-        public int Layer { get; set; }
-        public string LayerName { get; set; } = "";
-        public float Distance { get; set; }
-        public RectDto Bounds { get; set; } = new();
-    }
-
-    private sealed class RectDto
-    {
-        public float X0 { get; set; }
-        public float Y0 { get; set; }
-        public float X1 { get; set; }
-        public float Y1 { get; set; }
-    }
-
-    private sealed class WorkerRequest<TRequest>
-    {
-        public string Id { get; set; } = "";
-        public string Action { get; set; } = "";
-        public TRequest? Request { get; set; }
-    }
-
-    private sealed class WorkerResponse<TResponse>
-    {
-        public string Id { get; set; } = "";
-        public TResponse? Response { get; set; }
-    }
-
-    private sealed class LayerDto
-    {
-        public int Xref { get; set; }
-        public string Name { get; set; } = "";
-        public bool On { get; set; }
-
-        public static LayerDto FromInfo(PdfLayerInfo info) => new()
-        {
-            Xref = info.Number,
-            Name = info.Name,
-            On = info.IsOn,
-        };
-    }
-
-    private static string LayerTraceModeKey(PdfLayerTraceMode mode) => mode switch
-    {
-        PdfLayerTraceMode.Edge => "edge",
-        PdfLayerTraceMode.Point => "point",
-        PdfLayerTraceMode.AllEdges => "all_edges",
-        _ => "full",
-    };
+            bool ok = TryProbeLayers(pdfPath, pageIndex, point, cachedLayers, out PdfLayerProbeResult result, out string error);
+            return (ok, result, error);
+        });
 }

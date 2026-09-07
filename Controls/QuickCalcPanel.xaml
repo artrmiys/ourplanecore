@@ -1,0 +1,100 @@
+<UserControl x:Class="OurPlanCore.Controls.QuickCalcPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="272">
+    <Border Background="{DynamicResource PanelBackgroundBrush}"
+            BorderBrush="{DynamicResource ControlBorderBrush}"
+            BorderThickness="1,0,1,0">
+        <DockPanel>
+            <Border DockPanel.Dock="Top"
+                    Background="{DynamicResource PanelBackgroundBrush}"
+                    BorderBrush="{DynamicResource ControlBorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="10,6">
+                <DockPanel LastChildFill="True">
+                    <Button x:Name="BtnClose"
+                            DockPanel.Dock="Right"
+                            Click="BtnClose_Click"
+                            Width="20" Height="20" MinWidth="20"
+                            Padding="0"
+                            ToolTip="Hide the calculator panel">
+                        <Path Data="{DynamicResource IconClose}"
+                              Stretch="Uniform" Width="9" Height="9"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.35"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Button>
+                    <TextBlock Text="Calculator"
+                               FontWeight="SemiBold" FontSize="12"
+                               Foreground="{DynamicResource ControlForegroundBrush}"
+                               VerticalAlignment="Center"/>
+                </DockPanel>
+            </Border>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="10,8,10,12">
+                    <!-- Simple calculator: usually collapsed -->
+                    <Expander x:Name="SimpleCalcExpander"
+                              Header="Simple calculator"
+                              IsExpanded="False"
+                              FontSize="11.5"
+                              Foreground="{DynamicResource ControlForegroundBrush}">
+                        <StackPanel Margin="0,6,0,4">
+                            <TextBox x:Name="CalcDisplay"
+                                     Text="0"
+                                     IsReadOnly="True"
+                                     FontSize="17"
+                                     FontWeight="SemiBold"
+                                     TextAlignment="Right"
+                                     Padding="6,4"
+                                     Margin="0,0,0,6"/>
+                            <UniformGrid Columns="4" Rows="5">
+                                <UniformGrid.Resources>
+                                    <!-- BasedOn keeps the app-wide themed button chrome; a bare
+                                         local style would fall back to default white buttons. -->
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                        <Setter Property="Margin" Value="1.5"/>
+                                        <Setter Property="Padding" Value="0,6"/>
+                                        <Setter Property="FontSize" Value="13"/>
+                                        <Setter Property="MinWidth" Value="0"/>
+                                    </Style>
+                                </UniformGrid.Resources>
+                                <Button Content="C"  Tag="C"  Click="CalcButton_Click"/>
+                                <Button Content="⌫" Tag="B"  Click="CalcButton_Click"/>
+                                <Button Content="±"  Tag="N"  Click="CalcButton_Click"/>
+                                <Button Content="÷"  Tag="/"  Click="CalcButton_Click"/>
+                                <Button Content="7"  Tag="7"  Click="CalcButton_Click"/>
+                                <Button Content="8"  Tag="8"  Click="CalcButton_Click"/>
+                                <Button Content="9"  Tag="9"  Click="CalcButton_Click"/>
+                                <Button Content="×"  Tag="*"  Click="CalcButton_Click"/>
+                                <Button Content="4"  Tag="4"  Click="CalcButton_Click"/>
+                                <Button Content="5"  Tag="5"  Click="CalcButton_Click"/>
+                                <Button Content="6"  Tag="6"  Click="CalcButton_Click"/>
+                                <Button Content="−"  Tag="-"  Click="CalcButton_Click"/>
+                                <Button Content="1"  Tag="1"  Click="CalcButton_Click"/>
+                                <Button Content="2"  Tag="2"  Click="CalcButton_Click"/>
+                                <Button Content="3"  Tag="3"  Click="CalcButton_Click"/>
+                                <Button Content="+"  Tag="+"  Click="CalcButton_Click"/>
+                                <Button Content="0"  Tag="0"  Click="CalcButton_Click"/>
+                                <Button Content="."  Tag="."  Click="CalcButton_Click"/>
+                                <Button Content="="  Tag="="  Click="CalcButton_Click"/>
+                                <Button Content=""   Visibility="Hidden"/>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Expander>
+
+                    <Border Height="1"
+                            Background="{DynamicResource ControlBorderBrush}"
+                            Margin="0,10,0,8"/>
+
+                    <TextBlock Text="Feet + inches + fraction"
+                               FontWeight="SemiBold" FontSize="11.5"
+                               Foreground="{DynamicResource ControlForegroundBrush}"
+                               Margin="0,0,0,4"/>
+                    <!-- Three independent ft-in-/12 groups; built in code-behind -->
+                    <StackPanel x:Name="FeetGroupsHost"/>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

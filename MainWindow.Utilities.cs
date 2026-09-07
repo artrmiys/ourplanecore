@@ -7,7 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Microsoft.Win32;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -28,10 +28,12 @@ public partial class MainWindow
                 _ => 0,
             };
             ApplyViewportBackground(_settings.ViewportBackground, persist: false);
+            ApplyPageBackground(_settings.PageBackground, persist: false);
             ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
             ApplyDisplaySettingsToViewport();
             ApplySheetOverlaySettings();
             ApplySidePanelWidths();
+            ApplyExcelMacroStripFraction();
             if (string.Equals(TxtScaleRatio.Text, "100", StringComparison.OrdinalIgnoreCase))
                 TxtScaleRatio.Text = "1/8\" = 1'0\"";
             TxtScaleRatio.ToolTip = "Imperial sheet scale, e.g. 1/8\" = 1'0\". Ratio values like 1:96 are also accepted.";
@@ -44,7 +46,9 @@ public partial class MainWindow
 
     private void TryOpenLastJobFromSettings()
     {
-        if (string.IsNullOrWhiteSpace(_settings.LastJobPath) || !Directory.Exists(_settings.LastJobPath))
+        if (string.IsNullOrWhiteSpace(_settings.LastJobPath) ||
+            (!Directory.Exists(_settings.LastJobPath) &&
+             !OurPlanPackageFormat.HasPackageExtension(_settings.LastJobPath)))
         {
             ShowStartupJobPickerIfUseful();
             return;
@@ -52,11 +56,24 @@ public partial class MainWindow
 
         try
         {
-            OpenJob(_settings.LastJobPath, initialPageFolder: _settings.LastPageFolder);
-            TxtStatus.Text = $"Loaded last job: {_currentJob?.Name}. Select a page to render it.";
+            if (!OpenProjectPathSafely(_settings.LastJobPath, initialPageFolder: _settings.LastPageFolder))
+            {
+                ShowStartupJobPickerIfUseful();
+                return;
+            }
+            if (_currentPackageSession?.IsRecoverySession != true)
+                TxtStatus.Text = $"Loaded last job: {_currentJob?.Name}. Select a page to render it.";
         }
         catch (Exception ex)
         {
+            AppLog.Error(ex, "Last job open failed.");
+            if (_currentJob != null)
+            {
+                RefreshJobHeaderLabels();
+                TxtStatus.Text = $"Last job opened with warning: {ex.Message}";
+                return;
+            }
+
             TxtStatus.Text = $"Last job could not be opened: {ex.Message}";
             ShowStartupJobPickerIfUseful();
         }
@@ -64,26 +81,50 @@ public partial class MainWindow
 
     private void SaveCurrentPageScale()
     {
-        if (_currentPage == null)
+        if (_currentPage == null || !IsCurrentJobWritable)
             return;
 
         _currentPage.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
         ApplyScaleToCurrentPageMeasurements(_viewport.ScaleMetersPerPt);
-        OurPlaneCoreJobStore.SavePageScale(_currentPage.FolderPath, _viewport.ScaleMetersPerPt);
+        OurPlanCoreJobStore.SavePageScale(_currentPage.FolderPath, _viewport.ScaleMetersPerPt);
+        RefreshDetachedPageScale(_currentPage.FolderPath, _viewport.ScaleMetersPerPt);
     }
 
     private void ApplyViewportBackground(string color, bool persist)
     {
-        string cleanColor = string.IsNullOrWhiteSpace(color) ? "#FFFFFF" : color;
+        string cleanColor = ViewportBackgroundPolicy.NormalizeColor(color);
+        var backgroundBrush = new SolidColorBrush(ParseWpfColor(cleanColor, Colors.White));
         _viewport.ViewBackgroundColor = cleanColor;
-        ViewportHost.Background = new SolidColorBrush(ParseWpfColor(cleanColor, Colors.White));
+        ViewportHost.Background = backgroundBrush;
+        ViewportSurfaceHost.Background = backgroundBrush;
         _viewport.InvalidateVisual();
+        _settings.ViewportBackground = cleanColor;
+        foreach (DetachedSheetWindow window in _detachedSheetWindows)
+        {
+            window.Viewport.ViewBackgroundColor = cleanColor;
+            window.Viewport.InvalidateVisual();
+        }
 
         if (persist)
         {
-            _settings.ViewportBackground = cleanColor;
             SaveAppSettings();
         }
+    }
+
+    private void ApplyPageBackground(string color, bool persist)
+    {
+        string cleanColor = ViewportBackgroundPolicy.NormalizeColor(color);
+        _viewport.PageBackgroundColor = cleanColor;
+        _settings.PageBackground = cleanColor;
+        _viewport.InvalidateVisual();
+        foreach (DetachedSheetWindow window in _detachedSheetWindows)
+        {
+            window.Viewport.PageBackgroundColor = cleanColor;
+            window.Viewport.InvalidateVisual();
+        }
+
+        if (persist)
+            SaveAppSettings();
     }
 
     private void ApplyTheme(bool dark, bool persist)
@@ -100,56 +141,89 @@ public partial class MainWindow
             _isApplyingSettings = wasApplying;
         }
 
-        Color window = dark ? Color.FromRgb(30, 32, 35) : Color.FromRgb(240, 240, 240);
-        Color toolbar = dark ? Color.FromRgb(43, 45, 49) : Color.FromRgb(240, 240, 240);
-        Color panel = dark ? Color.FromRgb(37, 39, 42) : Color.FromRgb(245, 245, 245);
-        Color status = dark ? Color.FromRgb(43, 45, 49) : Color.FromRgb(232, 232, 232);
-        Color tree = dark ? Color.FromRgb(31, 33, 36) : Colors.White;
-        Color splitter = dark ? Color.FromRgb(68, 72, 78) : Color.FromRgb(204, 204, 204);
-        Brush foreground = new SolidColorBrush(dark ? Color.FromRgb(230, 230, 230) : Color.FromRgb(30, 30, 30));
+        // Colors below follow docs/BLUEBEAM_DESIGN_SYSTEM.md §4 role tokens
+        // (light / dark pairs). Keep this method the single source of runtime
+        // color; App.xaml only holds startup fallbacks.
+        // OurCore design code (blue + sage) on a NEUTRAL dark base (user wants
+        // the dark theme black/charcoal, not navy). Surfaces are neutral grey
+        // (#161616..#262626); the blue #4EA1FF and sage #8FB89A appear ONLY as
+        // accents (selected/active) and the brand underline — never as a fill.
+        Color window   = dark ? Color.FromRgb(22, 22, 22)    : Color.FromRgb(250, 250, 250); // base
+        Color toolbar  = dark ? Color.FromRgb(32, 32, 32)    : Color.FromRgb(221, 227, 234); // ribbon
+        Color panel    = dark ? Color.FromRgb(28, 28, 28)    : Color.FromRgb(236, 239, 243); // surface-alt
+        Color status   = dark ? Color.FromRgb(32, 32, 32)    : Color.FromRgb(221, 227, 234); // ribbon
+        Color tree     = dark ? Color.FromRgb(38, 38, 38)    : Colors.White;                 // elevated (row)
+        Color splitter = dark ? Color.FromRgb(56, 56, 56)    : Color.FromRgb(200, 204, 210); // border
+        Brush foreground = new SolidColorBrush(dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40)); // txt
+        // Selected row = the same solid tint the Pages/Takeoffs trees use. Active
+        // and inactive are identical so list selection never fades when the list
+        // loses focus (matches the always-solid tree highlight the user wants).
+        Color rowSelection = dark ? Color.FromRgb(62, 78, 102) : Color.FromRgb(191, 212, 236);
+        Color rowSelectionInactive = rowSelection;
         UpdateAppBrush("WindowBackgroundBrush", window);
         UpdateAppBrush("PanelBackgroundBrush", panel);
         UpdateAppBrush("SurfaceBackgroundBrush", tree);
         UpdateAppBrush("SplitterBrush", splitter);
-        UpdateAppBrush("SecondaryForegroundBrush", dark ? Color.FromRgb(176, 179, 184) : Color.FromRgb(102, 102, 102));
-        UpdateAppBrush("ScrollBarTrackBrush", dark ? Color.FromRgb(45, 47, 52)  : Color.FromRgb(220, 220, 220));
-        UpdateAppBrush("ScrollBarThumbBrush", dark ? Color.FromRgb(90, 93, 100) : Color.FromRgb(160, 160, 160));
-        UpdateAppBrush("ControlForegroundBrush", dark ? Color.FromRgb(238, 238, 238) : Color.FromRgb(32, 32, 32));
-        UpdateAppBrush("ControlBackgroundBrush", dark ? Color.FromRgb(58, 61, 66) : Color.FromRgb(248, 248, 248));
-        UpdateAppBrush("ControlBorderBrush", dark ? Color.FromRgb(118, 122, 130) : Color.FromRgb(160, 160, 160));
-        UpdateAppBrush("ControlHoverBackgroundBrush", dark ? Color.FromRgb(72, 76, 82) : Color.FromRgb(232, 232, 232));
-        UpdateAppBrush("ControlPressedBackgroundBrush", dark ? Color.FromRgb(86, 91, 98) : Color.FromRgb(208, 208, 208));
-        UpdateAppBrush("ControlActiveBackgroundBrush", dark ? Color.FromRgb(37, 99, 160) : Color.FromRgb(204, 229, 255));
-        UpdateAppBrush("ControlActiveForegroundBrush", dark ? Colors.White : Color.FromRgb(17, 17, 17));
-        UpdateAppBrush(SystemColors.HighlightBrushKey, dark ? Color.FromRgb(37, 99, 160) : Color.FromRgb(204, 229, 255));
-        UpdateAppBrush(SystemColors.HighlightTextBrushKey, dark ? Colors.White : Color.FromRgb(17, 17, 17));
-        UpdateAppBrush(SystemColors.InactiveSelectionHighlightBrushKey, dark ? Color.FromRgb(50, 72, 96) : Color.FromRgb(204, 229, 255));
-        UpdateAppBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, dark ? Colors.White : Color.FromRgb(17, 17, 17));
-        UpdateAppBrush("AccentBrush", dark ? Color.FromRgb(90, 160, 235) : Color.FromRgb(37, 99, 166));
-        UpdateAppBrush("AccentHoverBrush", dark ? Color.FromRgb(112, 178, 245) : Color.FromRgb(31, 85, 145));
-        UpdateAppBrush("AccentPressedBrush", dark ? Color.FromRgb(70, 135, 210) : Color.FromRgb(24, 68, 111));
+        UpdateAppBrush("SecondaryForegroundBrush", dark ? Color.FromRgb(160, 160, 160) : Color.FromRgb(85, 91, 98)); // txt-2
+        UpdateAppBrush("ScrollBarTrackBrush", dark ? Color.FromRgb(42, 42, 42)  : Color.FromRgb(229, 231, 235)); // border-soft
+        UpdateAppBrush("ScrollBarThumbBrush", dark ? Color.FromRgb(112, 112, 112) : Color.FromRgb(138, 144, 153)); // txt-3
+        UpdateAppBrush("ControlForegroundBrush", dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40)); // txt
+        UpdateAppBrush("ControlBackgroundBrush", dark ? Color.FromRgb(38, 38, 38) : Color.FromRgb(245, 246, 248)); // row
+        UpdateAppBrush("ControlBorderBrush", dark ? Color.FromRgb(64, 64, 64) : Color.FromRgb(156, 163, 172)); // border-strong
+        UpdateAppBrush("ControlHoverBackgroundBrush", dark ? Color.FromRgb(44, 44, 44) : Color.FromRgb(232, 236, 241)); // row-hi
+        UpdateAppBrush("ControlPressedBackgroundBrush", dark ? Color.FromRgb(54, 54, 54) : Color.FromRgb(221, 227, 234));
+        UpdateAppBrush("ControlActiveBackgroundBrush", dark ? Color.FromRgb(36, 67, 100) : Color.FromRgb(220, 233, 245)); // info-soft (selected)
+        UpdateAppBrush("ControlActiveForegroundBrush", dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40)); // txt
+        UpdateAppBrush("RowSelectionBrush", rowSelection);
+        UpdateAppBrush(SystemColors.HighlightBrushKey, rowSelection);
+        UpdateAppBrush(SystemColors.HighlightTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.InactiveSelectionHighlightBrushKey, rowSelectionInactive);
+        UpdateAppBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.MenuBrushKey, dark ? tree : Colors.White);
+        UpdateAppBrush(SystemColors.MenuTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.WindowBrushKey, dark ? tree : Colors.White);
+        UpdateAppBrush(SystemColors.WindowTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.ControlBrushKey, dark ? Color.FromRgb(38, 38, 38) : Color.FromRgb(245, 246, 248));
+        UpdateAppBrush(SystemColors.ControlTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.GrayTextBrushKey, dark ? Color.FromRgb(112, 112, 112) : Color.FromRgb(138, 144, 153)); // txt-3
+        UpdateAppBrush(SystemColors.InfoBrushKey, dark ? Color.FromRgb(38, 38, 38) : Color.FromRgb(245, 246, 248));
+        UpdateAppBrush(SystemColors.InfoTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush("AccentBrush", dark ? Color.FromRgb(78, 161, 255) : Color.FromRgb(31, 111, 178)); // info (selected)
+        UpdateAppBrush("AccentHoverBrush", dark ? Color.FromRgb(111, 180, 255) : Color.FromRgb(26, 94, 151));
+        UpdateAppBrush("AccentPressedBrush", dark ? Color.FromRgb(61, 138, 232) : Color.FromRgb(21, 78, 128));
         UpdateAppBrush("AccentForegroundBrush", Colors.White);
-        UpdateAppBrush("ToolbarBandBrush", dark ? Color.FromRgb(45, 48, 54) : Color.FromRgb(236, 239, 243));
-        UpdateAppBrush("ManagerHeaderBrush", dark ? Color.FromRgb(50, 56, 66) : Color.FromRgb(232, 238, 246));
-        UpdateAppBrush("SubtleButtonBackgroundBrush", dark ? Color.FromRgb(50, 53, 58) : Color.FromRgb(243, 244, 246));
-        UpdateAppBrush("DataGridAltRowBrush", dark ? Color.FromRgb(34, 37, 42) : Color.FromRgb(247, 249, 252));
-        UpdateAppBrush("CommitBrush", dark ? Color.FromRgb(70, 150, 82) : Color.FromRgb(46, 125, 50));
-        UpdateAppBrush("CommitHoverBrush", dark ? Color.FromRgb(84, 168, 96) : Color.FromRgb(39, 109, 44));
-        UpdateAppBrush("CommitPressedBrush", dark ? Color.FromRgb(52, 122, 63) : Color.FromRgb(29, 84, 33));
+        // Sage brand signal — used for the active sub-tab underline + applied badge.
+        UpdateAppBrush("BrandAccentBrush", dark ? Color.FromRgb(143, 184, 154) : Color.FromRgb(106, 142, 116)); // sage
+        UpdateAppBrush("ToolbarBandBrush", dark ? Color.FromRgb(32, 32, 32) : Color.FromRgb(221, 227, 234)); // ribbon
+        UpdateAppBrush("ManagerHeaderBrush", dark ? Color.FromRgb(40, 40, 40) : Color.FromRgb(230, 234, 240));
+        UpdateAppBrush("SubtleButtonBackgroundBrush", dark ? Color.FromRgb(40, 40, 40) : Color.FromRgb(240, 242, 245));
+        UpdateAppBrush("DataGridAltRowBrush", dark ? Color.FromRgb(30, 30, 30) : Color.FromRgb(247, 249, 252)); // zebra
+        UpdateAppBrush("CommitBrush", dark ? Color.FromRgb(77, 204, 139) : Color.FromRgb(30, 126, 52)); // success (ok)
+        UpdateAppBrush("CommitHoverBrush", dark ? Color.FromRgb(102, 214, 160) : Color.FromRgb(26, 110, 45));
+        UpdateAppBrush("CommitPressedBrush", dark ? Color.FromRgb(60, 180, 120) : Color.FromRgb(21, 90, 36));
 
-        // Tree row state — theme-aware (paired light/dark variants)
-        UpdateAppBrush("RowOnPageBrush",        dark ? Color.FromRgb(34, 64, 46)   : Color.FromRgb(214, 245, 222));
-        UpdateAppBrush("RowActiveBrush",        dark ? Color.FromRgb(82, 64, 24)   : Color.FromRgb(255, 236, 190));
-        UpdateAppBrush("RowMultiSelectBrush",   dark ? Color.FromRgb(38, 70, 110)  : Color.FromRgb(205, 226, 255));
-        UpdateAppBrush("RowDropOkBrush",        dark ? Color.FromRgb(40, 86, 58)   : Color.FromRgb(204, 245, 218));
-        UpdateAppBrush("RowDropBadBrush",       dark ? Color.FromRgb(110, 48, 48)  : Color.FromRgb(255, 214, 214));
-        UpdateAppBrush("RowFlagForegroundBrush",dark ? Colors.White                : Color.FromRgb(17, 17, 17));
-        UpdateAppBrush("RowActiveAccentBrush",  dark ? Color.FromRgb(120, 170, 255): Color.FromRgb(31, 82, 166));
+        // Report Builder row kinds — keep the Excel-style semantic tint but make
+        // dark theme readable (light values unchanged so light theme is identical).
+        UpdateAppBrush("ReportHeaderRowBrush",      dark ? Color.FromRgb(42, 51, 64)  : Color.FromRgb(233, 238, 247)); // blue
+        UpdateAppBrush("ReportTableHeaderRowBrush", dark ? Color.FromRgb(42, 55, 39)  : Color.FromRgb(217, 234, 211)); // green
+        UpdateAppBrush("ReportSectionRowBrush",     dark ? Color.FromRgb(58, 46, 34)  : Color.FromRgb(244, 177, 131)); // orange
+        UpdateAppBrush("ReportInputRowBrush",       dark ? Color.FromRgb(51, 47, 31)  : Color.FromRgb(255, 242, 204)); // yellow
+
+        // Tree row state — theme-aware (paired light/dark variants).
+        // Semantic hues kept (amber=active, green=on-page, etc.); the active
+        // takeoff stripe is bound to the sage brand signal (OurCore "чуть шире").
+        UpdateAppBrush("RowOnPageBrush",        MuteRowHighlight(dark ? Color.FromRgb(34, 64, 46)   : Color.FromRgb(214, 245, 222), tree));
+        UpdateAppBrush("RowActiveBrush",        MuteTreeCrossHighlight(dark ? Color.FromRgb(82, 64, 24)   : Color.FromRgb(255, 236, 190), tree));
+        UpdateAppBrush("RowMultiSelectBrush",   MuteTreeCrossHighlight(dark ? Color.FromRgb(36, 67, 100)   : Color.FromRgb(220, 233, 245), tree));
+        UpdateAppBrush("RowDropOkBrush",        MuteRowHighlight(dark ? Color.FromRgb(40, 86, 58)   : Color.FromRgb(204, 245, 218), tree));
+        UpdateAppBrush("RowDropBadBrush",       MuteRowHighlight(dark ? Color.FromRgb(110, 48, 48)  : Color.FromRgb(255, 214, 214), tree));
+        UpdateAppBrush("RowFlagForegroundBrush",dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush("RowActiveAccentBrush",  MuteRowHighlight(dark ? Color.FromRgb(143, 184, 154) : Color.FromRgb(106, 142, 116), tree)); // sage
         SetupToolButtonContent();
 
         Background = new SolidColorBrush(window);
         RootDock.Background = new SolidColorBrush(window);
-        MainToolBar.Background = new SolidColorBrush(toolbar);
+        BottomToolStrip.Background = new SolidColorBrush(toolbar);
         MainStatusBar.Background = new SolidColorBrush(status);
         PagesPanel.Background = new SolidColorBrush(panel);
         TakeoffsPanel.Background = new SolidColorBrush(panel);
@@ -158,7 +232,7 @@ public partial class MainWindow
         PagesTree.Foreground = foreground;
         TakeoffsTree.Foreground = foreground;
         TxtStatus.Foreground = foreground;
-        TxtScaleInfo.Foreground = new SolidColorBrush(dark ? Color.FromRgb(138, 180, 248) : Color.FromRgb(0, 85, 204));
+        TxtScaleInfo.Foreground = new SolidColorBrush(dark ? Color.FromRgb(78, 161, 255) : Color.FromRgb(31, 111, 178)); // info
         ObservationsListView.Background  = new SolidColorBrush(tree);
         ObservationsListView.Foreground  = foreground;
         if (_estimateList != null)
@@ -184,6 +258,7 @@ public partial class MainWindow
         InboxPanel.Background           = new SolidColorBrush(tree);
         InboxHeaderBorder.Background    = new SolidColorBrush(toolbar);
         InboxSplitter.Background        = new SolidColorBrush(splitter);
+        ApplyThreeDViewportTheme(dark);
         UpdateRecordButton();
 
         if (persist)
@@ -203,12 +278,42 @@ public partial class MainWindow
         Application.Current.Resources[key] = new SolidColorBrush(color);
     }
 
+    // Opens a button's attached ContextMenu on left-click, so a plain Button can
+    // act as a compact dropdown (used to declutter the Pages/Takeoffs toolbars).
+    private void DropdownButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button b && b.ContextMenu is ContextMenu menu)
+        {
+            ApplyModuleAvailabilityToMenu(menu);
+            menu.PlacementTarget = b;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
+        }
+    }
+
+    private static Color MuteRowHighlight(Color color, Color surface) =>
+        BlendColor(color, surface, 0.25);
+
+    private static Color MuteTreeCrossHighlight(Color color, Color surface) =>
+        BlendColor(color, surface, 0.45);
+
+    private static Color BlendColor(Color color, Color target, double targetAmount)
+    {
+        targetAmount = Math.Clamp(targetAmount, 0.0, 1.0);
+        double sourceAmount = 1.0 - targetAmount;
+        return Color.FromRgb(
+            (byte)Math.Round(color.R * sourceAmount + target.R * targetAmount),
+            (byte)Math.Round(color.G * sourceAmount + target.G * targetAmount),
+            (byte)Math.Round(color.B * sourceAmount + target.B * targetAmount));
+    }
+
     private void SaveAppSettings()
     {
         if (_isApplyingSettings)
             return;
 
         AppSettingsStore.Save(_settings);
+        QueuePdfOutputPreview();
     }
 
     private void ApplySidePanelWidths()
@@ -300,6 +405,7 @@ public partial class MainWindow
         TxtScaleInfo.Text = string.IsNullOrWhiteSpace(scaleText) ? "" : "applied";
         if (!string.IsNullOrWhiteSpace(scaleText))
             TxtScaleRatio.Text = scaleText;
+        UpdateStatusBarSegments();
     }
 
     private string? ShowInputDialog(string prompt, string initial, string title)

@@ -13,7 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -21,24 +21,30 @@ public partial class MainWindow
 
     private void BtnToggleInbox_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "AI Inbox"))
+            return;
+
         if (_inboxExpanded)
         {
             _inboxExpandedHeight = InboxRow.ActualHeight > 30 ? InboxRow.ActualHeight : _inboxExpandedHeight;
             InboxRow.Height        = new GridLength(30);
             InboxSplitterRow.Height = new GridLength(0);
-            TxtInboxToggle.Text    = "+";
+            InboxToggleRotate.Angle = 180; // chevron up = expand the bottom-docked inbox
         }
         else
         {
             InboxRow.Height        = new GridLength(_inboxExpandedHeight);
             InboxSplitterRow.Height = new GridLength(4);
-            TxtInboxToggle.Text    = "-";
+            InboxToggleRotate.Angle = 0; // chevron down = collapse the inbox
         }
         _inboxExpanded = !_inboxExpanded;
     }
 
     private void BtnInboxMore_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "AI Inbox actions"))
+            return;
+
         if (sender is not UIElement target)
             return;
 
@@ -54,8 +60,6 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem("Create Marker Set", _currentJob != null, () => BtnCreateMarkerSet_Click(sender, new RoutedEventArgs())));
         menu.Items.Add(MakeMenuItem("Manage Marker Sets...", CanManageMarkerSets(), () => BtnManageMarkerSets_Click(sender, new RoutedEventArgs())));
         menu.Items.Add(MakeMenuItem("Export Marker Context", _currentJob != null, () => BtnExportMarkers_Click(sender, new RoutedEventArgs())));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Build 3D Draft", _currentJob != null, () => BtnBuildMassingDraft_Click(sender, new RoutedEventArgs())));
 
         menu.IsOpen = true;
     }
@@ -64,7 +68,7 @@ public partial class MainWindow
     {
         ObservationsListView.Items.Clear();
 
-        if (_currentJob == null)
+        if (!IsModuleEnabled(ModuleId.Ai) || _currentJob == null)
         {
             TxtInboxCount.Text    = "0";
             InboxBadge.Visibility = Visibility.Collapsed;
@@ -185,6 +189,9 @@ public partial class MainWindow
         menu.Opened += (_, _) =>
         {
             menu.Items.Clear();
+            if (!IsModuleEnabled(ModuleId.Ai))
+                return;
+
             ObservationDisplayItem? selected = SelectedObservationDisplayItem();
             if (selected == null)
             {
@@ -237,14 +244,12 @@ public partial class MainWindow
 
     private void ObservationsListView_KeyDown(object sender, KeyEventArgs e)
     {
+        if (!IsModuleEnabled(ModuleId.Ai))
+            return;
+
         if (e.Key == Key.Enter)
         {
             OpenSelectedInboxObservation();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.F5)
-        {
-            LoadObservationsInbox();
             e.Handled = true;
         }
     }
@@ -254,28 +259,49 @@ public partial class MainWindow
 
     private void OpenSelectedInboxObservation()
     {
+        if (!RequireModule(ModuleId.Ai, "Open AI Inbox entry"))
+            return;
+
         if (SelectedObservationDisplayItem() is { } selected)
             ShowObservationDetailsDialog(selected.Observation);
     }
 
     private async void BtnRunAi_Click(object sender, RoutedEventArgs e)
     {
-        await RunSelectedOrNextAiRequestAsync();
+        if (!RequireModule(ModuleId.Ai, "Run AI request"))
+            return;
+
+        await RunAsyncUiHandler(
+            RunSelectedOrNextAiRequestAsync,
+            "AI request failed.",
+            "AI Inbox");
     }
 
     private async void BtnRunNewBookmarks_Click(object sender, RoutedEventArgs e)
     {
-        await RunNewCropBookmarksAsync();
+        if (!RequireModule(ModuleId.Ai, "Run AI crop bookmarks"))
+            return;
+
+        await RunAsyncUiHandler(
+            RunNewCropBookmarksAsync,
+            "AI bookmark run failed.",
+            "AI Inbox");
     }
 
     private async void BtnRetryFailedBookmarks_Click(object sender, RoutedEventArgs e)
     {
-        await RetryFailedCropBookmarksAsync();
+        if (!RequireModule(ModuleId.Ai, "Retry AI crop bookmarks"))
+            return;
+
+        await RunAsyncUiHandler(
+            RetryFailedCropBookmarksAsync,
+            "AI bookmark retry failed.",
+            "AI Inbox");
     }
 
     private bool CanBookmarkObservationCrop(ObservationDisplayItem item)
     {
-        if (_currentJob == null || !CanOpenObservationCrop(item))
+        if (!IsModuleEnabled(ModuleId.Ai) || _currentJob == null || !CanOpenObservationCrop(item))
             return false;
 
         return SmartContextStore.FindCropBookmarkByObservation(_currentJob, item.Observation.Id) == null;
@@ -283,6 +309,9 @@ public partial class MainWindow
 
     private void BookmarkObservationCrop(ObservationDisplayItem item)
     {
+        if (!RequireModule(ModuleId.Ai, "Bookmark crop for AI"))
+            return;
+
         if (_currentJob == null)
             return;
 
@@ -337,11 +366,17 @@ public partial class MainWindow
 
     private async Task RunCropBookmarksAsync(string statusFilter, string emptyMessage, string operationLabel)
     {
+        if (!RequireModule(ModuleId.Ai, "Run AI crop bookmarks"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before running crop bookmarks.";
             return;
         }
+        OurPlanCoreJob runJob = _currentJob;
+        if (!EnsureExpectedJobWritable(runJob, "run AI crop bookmarks"))
+            return;
 
         if (_isRunningAiRequest)
         {
@@ -356,7 +391,7 @@ public partial class MainWindow
             return;
         }
 
-        var bookmarks = SmartContextStore.LoadCropBookmarks(_currentJob)
+        var bookmarks = SmartContextStore.LoadCropBookmarks(runJob)
             .Where(bookmark => string.Equals(bookmark.Status, statusFilter, StringComparison.OrdinalIgnoreCase))
             .OrderBy(bookmark => bookmark.CreatedAtUtc)
             .ToList();
@@ -372,24 +407,37 @@ public partial class MainWindow
         int skippedCandidates = 0;
         foreach (SmartAiCropBookmark bookmark in bookmarks)
         {
-            if (!CropBookmarkFileExists(bookmark))
+            if (!IsModuleEnabled(ModuleId.Ai))
+                break;
+            if (!EnsureExpectedJobWritable(runJob, "continue AI crop bookmarks"))
+                return;
+
+            if (!CropBookmarkFileExists(runJob, bookmark))
             {
                 bookmark.Status = "failed";
                 bookmark.ResultSummary = "Crop file is missing.";
                 bookmark.ProcessedAtUtc = DateTime.UtcNow.ToString("O");
-                SmartContextStore.SaveCropBookmark(_currentJob, bookmark);
+                if (!EnsureExpectedJobWritable(runJob, "save an AI crop bookmark result"))
+                    return;
+                SmartContextStore.SaveCropBookmark(runJob, bookmark);
                 failed++;
                 continue;
             }
 
-            SmartAiRequest request = EnsureCropBookmarkRequest(bookmark);
+            if (!EnsureExpectedJobWritable(runJob, "create an AI crop bookmark request"))
+                return;
+            SmartAiRequest request = EnsureCropBookmarkRequest(runJob, bookmark);
             bookmark.RequestId = request.Id;
             bookmark.Status = "running";
-            SmartContextStore.SaveCropBookmark(_currentJob, bookmark);
+            if (!EnsureExpectedJobWritable(runJob, "save an AI crop bookmark state"))
+                return;
+            SmartContextStore.SaveCropBookmark(runJob, bookmark);
 
             await RunAiRequestAsync(request);
+            if (!EnsureExpectedJobWritable(runJob, "continue AI crop bookmarks after the AI response"))
+                return;
 
-            SmartAiResponse? response = SmartContextStore.LoadAiResponse(_currentJob, request.Id);
+            SmartAiResponse? response = SmartContextStore.LoadAiResponse(runJob, request.Id);
             if (response != null && string.Equals(response.Status, "done", StringComparison.OrdinalIgnoreCase))
             {
                 bookmark.Status = "done";
@@ -405,18 +453,35 @@ public partial class MainWindow
                 failed++;
             }
 
-            if (SmartContextStore.LoadAiActionDraft(_currentJob, request.Id) is { } draft)
+            if (SmartContextStore.LoadAiActionDraft(runJob, request.Id) is { } draft)
             {
                 bookmark.ActionDraftId = draft.Id;
                 int skipped = 0;
                 if (string.Equals(bookmark.Status, "done", StringComparison.OrdinalIgnoreCase))
-                    generated += CreateCropBookmarksFromAiCandidates(bookmark, draft, out skipped);
+                {
+                    if (!EnsureExpectedJobWritable(runJob, "create AI candidate crop bookmarks"))
+                        return;
+                    generated += CreateCropBookmarksFromAiCandidates(runJob, bookmark, draft, out skipped);
+                }
                 skippedCandidates += skipped;
             }
             bookmark.ProcessedAtUtc = DateTime.UtcNow.ToString("O");
-            SmartContextStore.SaveCropBookmark(_currentJob, bookmark);
+            if (!EnsureExpectedJobWritable(runJob, "save an AI crop bookmark result"))
+                return;
+            SmartContextStore.SaveCropBookmark(runJob, bookmark);
+
+            if (!IsModuleEnabled(ModuleId.Ai))
+                break;
         }
 
+        if (!IsModuleEnabled(ModuleId.Ai))
+        {
+            TxtStatus.Text = "AI bookmark batch cancelled because the AI module was disabled.";
+            return;
+        }
+
+        if (!EnsureExpectedJobWritable(runJob, "finish AI crop bookmarks"))
+            return;
         LoadObservationsInbox();
         string generatedSummary = generated > 0 || skippedCandidates > 0
             ? $", {generated} auto-new, {skippedCandidates} candidates skipped"
@@ -425,12 +490,13 @@ public partial class MainWindow
     }
 
     private int CreateCropBookmarksFromAiCandidates(
+        OurPlanCoreJob runJob,
         SmartAiCropBookmark sourceBookmark,
         SmartAiActionDraft draft,
         out int skipped)
     {
         skipped = 0;
-        if (_currentJob == null || draft.Actions.Count == 0)
+        if (draft.Actions.Count == 0)
             return 0;
 
         if (sourceBookmark.CandidateDepth >= MaxAutoCropBookmarkDepth)
@@ -440,28 +506,28 @@ public partial class MainWindow
         }
 
         int created = 0;
-        var existingBookmarks = SmartContextStore.LoadCropBookmarks(_currentJob).ToList();
+        var existingBookmarks = SmartContextStore.LoadCropBookmarks(runJob).ToList();
         for (int i = 0; i < draft.Actions.Count; i++)
         {
             SmartAiAction action = draft.Actions[i];
             List<SKPoint> points = ActionPoints(action);
             if (points.Count == 0 ||
                 !TryActionPointCenter(points, out SKPoint center) ||
-                !TryResolveActionCandidatePage(action, draft, sourceBookmark, out PageInfo? page) ||
+                !TryResolveActionCandidatePage(runJob, action, draft, sourceBookmark, out PageInfo? page) ||
                 page == null)
             {
                 skipped++;
                 continue;
             }
 
-            string candidateKey = CropBookmarkCandidateKey(page, center);
-            if (HasNearbyCropBookmarkDuplicate(existingBookmarks, page, center, candidateKey))
+            string candidateKey = CropBookmarkCandidateKey(runJob, page, center);
+            if (HasNearbyCropBookmarkDuplicate(runJob, existingBookmarks, page, center, candidateKey))
             {
                 skipped++;
                 continue;
             }
 
-            if (!TrySaveActionCandidateCrop(page, points, action, i, out string cropPath, out SKRect cropRect, out string error))
+            if (!TrySaveActionCandidateCrop(runJob, page, points, action, i, out string cropPath, out SKRect cropRect, out string error))
             {
                 skipped++;
                 continue;
@@ -473,7 +539,7 @@ public partial class MainWindow
                 SourceActionDraftId = draft.Id,
                 SourceActionIndex = i,
                 Page = page.Name,
-                PageFolder = Path.GetRelativePath(_currentJob.RootPath, page.FolderPath),
+                PageFolder = Path.GetRelativePath(runJob.RootPath, page.FolderPath),
                 Type = AutoCropBookmarkType(action),
                 CropPath = cropPath,
                 Prompt = BuildAutoCropBookmarkPrompt(sourceBookmark, draft, action, i, cropRect),
@@ -486,7 +552,7 @@ public partial class MainWindow
                 ResultSummary = "Auto-created from AI action candidate.",
             };
 
-            SmartContextStore.SaveCropBookmark(_currentJob, bookmark);
+            SmartContextStore.SaveCropBookmark(runJob, bookmark);
             existingBookmarks.Add(bookmark);
             created++;
         }
@@ -495,6 +561,7 @@ public partial class MainWindow
     }
 
     private bool TryResolveActionCandidatePage(
+        OurPlanCoreJob runJob,
         SmartAiAction action,
         SmartAiActionDraft draft,
         SmartAiCropBookmark sourceBookmark,
@@ -502,21 +569,20 @@ public partial class MainWindow
     {
         page = FindPageByName(action.Page) ??
                FindPageByName(draft.Page) ??
-               ResolveBookmarkPage(sourceBookmark);
+               ResolveBookmarkPage(runJob, sourceBookmark);
         return page != null;
     }
 
-    private string CropBookmarkCandidateKey(PageInfo page, SKPoint center)
+    private static string CropBookmarkCandidateKey(OurPlanCoreJob runJob, PageInfo page, SKPoint center)
     {
-        string pageKey = _currentJob == null
-            ? page.Name
-            : Path.GetRelativePath(_currentJob.RootPath, page.FolderPath);
+        string pageKey = Path.GetRelativePath(runJob.RootPath, page.FolderPath);
         int bucketX = (int)Math.Round(center.X / AutoCropBookmarkDuplicateTolerancePt);
         int bucketY = (int)Math.Round(center.Y / AutoCropBookmarkDuplicateTolerancePt);
         return $"{pageKey}|{bucketX}|{bucketY}";
     }
 
     private bool HasNearbyCropBookmarkDuplicate(
+        OurPlanCoreJob runJob,
         IReadOnlyList<SmartAiCropBookmark> bookmarks,
         PageInfo page,
         SKPoint center,
@@ -524,7 +590,7 @@ public partial class MainWindow
     {
         foreach (SmartAiCropBookmark bookmark in bookmarks)
         {
-            if (!CropBookmarkBelongsToPage(bookmark, page))
+            if (!CropBookmarkBelongsToPage(runJob, bookmark, page))
                 continue;
 
             if (!string.IsNullOrWhiteSpace(candidateKey) &&
@@ -533,7 +599,7 @@ public partial class MainWindow
                 return true;
             }
 
-            if (!TryGetCropBookmarkCenter(bookmark, out SKPoint existingCenter))
+            if (!TryGetCropBookmarkCenter(runJob, bookmark, out SKPoint existingCenter))
                 continue;
 
             float dx = existingCenter.X - center.X;
@@ -545,13 +611,16 @@ public partial class MainWindow
         return false;
     }
 
-    private bool CropBookmarkBelongsToPage(SmartAiCropBookmark bookmark, PageInfo page)
+    private static bool CropBookmarkBelongsToPage(
+        OurPlanCoreJob runJob,
+        SmartAiCropBookmark bookmark,
+        PageInfo page)
     {
-        if (_currentJob != null && !string.IsNullOrWhiteSpace(bookmark.PageFolder))
+        if (!string.IsNullOrWhiteSpace(bookmark.PageFolder))
         {
             string bookmarkFolder = Path.IsPathFullyQualified(bookmark.PageFolder)
                 ? bookmark.PageFolder
-                : Path.Combine(_currentJob.RootPath, bookmark.PageFolder);
+                : Path.Combine(runJob.RootPath, bookmark.PageFolder);
             if (string.Equals(NormalizePath(bookmarkFolder), NormalizePath(page.FolderPath), StringComparison.OrdinalIgnoreCase))
                 return true;
         }
@@ -560,15 +629,17 @@ public partial class MainWindow
                string.Equals(bookmark.Page, page.Name, StringComparison.OrdinalIgnoreCase);
     }
 
-    private bool TryGetCropBookmarkCenter(SmartAiCropBookmark bookmark, out SKPoint center)
+    private static bool TryGetCropBookmarkCenter(
+        OurPlanCoreJob runJob,
+        SmartAiCropBookmark bookmark,
+        out SKPoint center)
     {
         center = default;
         if (TryActionPointCenter(bookmark.CandidatePoints.Select(point => new SKPoint(point.X, point.Y)).ToList(), out center))
             return true;
 
-        if (_currentJob != null &&
-            !string.IsNullOrWhiteSpace(bookmark.SourceMarkerId) &&
-            SmartContextStore.LoadAiMarker(_currentJob, bookmark.SourceMarkerId) is { } marker)
+        if (!string.IsNullOrWhiteSpace(bookmark.SourceMarkerId) &&
+            SmartContextStore.LoadAiMarker(runJob, bookmark.SourceMarkerId) is { } marker)
         {
             center = new SKPoint(marker.PdfPoint.X, marker.PdfPoint.Y);
             return true;
@@ -578,6 +649,7 @@ public partial class MainWindow
     }
 
     private bool TrySaveActionCandidateCrop(
+        OurPlanCoreJob runJob,
         PageInfo page,
         IReadOnlyList<SKPoint> points,
         SmartAiAction action,
@@ -592,6 +664,7 @@ public partial class MainWindow
 
         SKRect requested = CandidateCropRect(points);
         return TrySavePageCrop(
+            runJob,
             page,
             requested,
             "candidate",
@@ -602,6 +675,7 @@ public partial class MainWindow
     }
 
     private bool TrySavePageCrop(
+        OurPlanCoreJob cropJob,
         PageInfo page,
         SKRect requested,
         string type,
@@ -614,9 +688,9 @@ public partial class MainWindow
         cropPdfRect = SKRect.Empty;
         error = "";
 
-        if (_currentJob == null)
+        if (!IsExpectedJobWritable(cropJob))
         {
-            error = "No current job.";
+            error = "The originating job changed or is now read-only.";
             return false;
         }
 
@@ -669,18 +743,27 @@ public partial class MainWindow
 
         string fileName =
             $"{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_{SafeFileNamePart(type)}_{SafeFileNamePart(page.Name)}_{SafeFileNamePart(tag)}.png";
-        string cropPath = Path.Combine(_currentJob.AIContextRoot, "crops", fileName);
-        Directory.CreateDirectory(Path.GetDirectoryName(cropPath) ?? _currentJob.AIContextRoot);
-        using SKData data = crop.Encode(SKEncodedImageFormat.Png, 95);
-        using FileStream stream = File.Create(cropPath);
-        data.SaveTo(stream);
+        string cropPath = Path.Combine(cropJob.AIContextRoot, "crops", fileName);
+        try
+        {
+            JobWriteAccess.Demand(cropPath, "save an AI crop");
+            Directory.CreateDirectory(Path.GetDirectoryName(cropPath) ?? cropJob.AIContextRoot);
+            using SKData data = crop.Encode(SKEncodedImageFormat.Png, 95);
+            using FileStream stream = File.Create(cropPath);
+            data.SaveTo(stream);
+        }
+        catch (Exception ex) when (ex is JobWriteDeniedException or IOException or UnauthorizedAccessException)
+        {
+            error = ex.Message;
+            return false;
+        }
 
         cropPdfRect = new SKRect(
             srcLeft / scaleX,
             srcTop / scaleY,
             srcRight / scaleX,
             srcBottom / scaleY);
-        relativePath = Path.GetRelativePath(_currentJob.AIContextRoot, cropPath);
+        relativePath = Path.GetRelativePath(cropJob.AIContextRoot, cropPath);
         return true;
     }
 
@@ -756,18 +839,15 @@ public partial class MainWindow
         return sb.ToString();
     }
 
-    private SmartAiRequest EnsureCropBookmarkRequest(SmartAiCropBookmark bookmark)
+    private SmartAiRequest EnsureCropBookmarkRequest(OurPlanCoreJob runJob, SmartAiCropBookmark bookmark)
     {
-        if (_currentJob == null)
-            throw new InvalidOperationException("Open a job before running crop bookmarks.");
-
         if (!string.IsNullOrWhiteSpace(bookmark.RequestId) &&
-            SmartContextStore.LoadAiRequest(_currentJob, bookmark.RequestId) is { } existing)
+            SmartContextStore.LoadAiRequest(runJob, bookmark.RequestId) is { } existing)
         {
             return existing;
         }
 
-        PageInfo? page = ResolveBookmarkPage(bookmark);
+        PageInfo? page = ResolveBookmarkPage(runJob, bookmark);
         string details =
             "Crop bookmark AI request.\n\n" +
             "Bookmark:\n" +
@@ -779,13 +859,13 @@ public partial class MainWindow
             bookmark.Prompt;
 
         SmartObservation observation = SmartContextStore.AddObservation(
-            _currentJob,
+            runJob,
             page,
             "crop_bookmark_request",
             details);
 
         return SmartContextStore.AddAiRequest(
-            _currentJob,
+            runJob,
             page,
             observation,
             "crop_bookmark_request",
@@ -794,17 +874,14 @@ public partial class MainWindow
             "");
     }
 
-    private PageInfo? ResolveBookmarkPage(SmartAiCropBookmark bookmark)
+    private PageInfo? ResolveBookmarkPage(OurPlanCoreJob runJob, SmartAiCropBookmark bookmark)
     {
-        if (_currentJob == null)
-            return null;
-
         if (!string.IsNullOrWhiteSpace(bookmark.PageFolder))
         {
             string folder = Path.IsPathFullyQualified(bookmark.PageFolder)
                 ? bookmark.PageFolder
-                : Path.GetFullPath(Path.Combine(_currentJob.RootPath, bookmark.PageFolder));
-            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folder);
+                : Path.GetFullPath(Path.Combine(runJob.RootPath, bookmark.PageFolder));
+            PageInfo? page = OurPlanCoreJobStore.TryReadPage(folder);
             if (page != null)
                 return page;
         }
@@ -812,14 +889,14 @@ public partial class MainWindow
         return FindPageByName(bookmark.Page);
     }
 
-    private bool CropBookmarkFileExists(SmartAiCropBookmark bookmark)
+    private static bool CropBookmarkFileExists(OurPlanCoreJob runJob, SmartAiCropBookmark bookmark)
     {
-        if (_currentJob == null || string.IsNullOrWhiteSpace(bookmark.CropPath))
+        if (string.IsNullOrWhiteSpace(bookmark.CropPath))
             return false;
 
         string path = Path.IsPathFullyQualified(bookmark.CropPath)
             ? bookmark.CropPath
-            : Path.GetFullPath(Path.Combine(_currentJob.AIContextRoot, bookmark.CropPath));
+            : Path.GetFullPath(Path.Combine(runJob.AIContextRoot, bookmark.CropPath));
         return File.Exists(path);
     }
 
@@ -871,16 +948,25 @@ public partial class MainWindow
 
     private void BtnCreateMarkerSet_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Create AI marker set"))
+            return;
+
         CreateMarkerSetFromCurrentFilter();
     }
 
     private void BtnManageMarkerSets_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Manage AI marker sets"))
+            return;
+
         ManageMarkerSets();
     }
 
     private void BtnExportMarkers_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Export AI marker context"))
+            return;
+
         ExportMarkersContext(openAfterExport: true);
     }
 }

@@ -5,13 +5,15 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -19,34 +21,105 @@ public partial class MainWindow
 
     private void OnScaleChanged(double scale)
     {
+        if (IsCurrentJobReadOnly)
+        {
+            UpdateScaleUi(scale);
+            UpdateStatusBarSegments();
+            TxtStatus.Text = "Read-only: sheet scale was not changed.";
+            return;
+        }
+
         if (_currentPage != null)
             _currentPage.ScaleMetersPerPt = scale;
-        ApplyScaleToCurrentPageMeasurements(scale);
+        // Only takeoffs with measurements on the current page can change
+        // quantity when this page's scale changes — ApplyScale... already
+        // returns exactly those. Refresh just their rows instead of rebuilding
+        // every takeoff header/section in the tree.
+        IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(scale);
         SaveCurrentPageScale();
         UpdateScaleUi(scale);
-        RefreshPagesTakeoffIndicators();
-        RefreshAllTotals();
+        UpdateStatusBarSegments();
+        RefreshFloatingPageSetup(_currentPage?.FolderPath);
+        foreach (TakeoffItem item in scaledItems)
+            RefreshTreeItem(item);
+        using (UsePageMeasurementLookup())
+        {
+            RefreshPageTakeoffIndicatorsForFolder(_currentPage?.FolderPath);
+            ApplyTakeoffPageHighlights();
+            RefreshSheetLegend();
+        }
+        UpdateTotalDisplay();
     }
 
-    private void ApplyScaleToCurrentPageMeasurements(double scale)
+    private IReadOnlyList<TakeoffItem> ApplyScaleToCurrentPageMeasurements(double scale)
     {
         if (_currentPage == null || scale <= 0)
-            return;
+            return [];
 
-        foreach (var measurement in _takeoffItems.SelectMany(i => i.Measurements))
-        {
-            if (IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
-                measurement.ScaleMetersPerPt = scale;
-        }
+        return ApplyScaleToPageMeasurements(_currentPage.FolderPath, scale);
     }
 
-    private void OnToolChanged(string tool) => SetTool(tool);
+    private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements(string pageFolder, double scale)
+        => ApplyScaleToPageMeasurements(pageFolder, scale, allowClear: false);
+
+    private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements(
+        string pageFolder,
+        double scale,
+        bool allowClear)
+    {
+        if (string.IsNullOrWhiteSpace(pageFolder) || scale < 0 || (!allowClear && scale <= 0))
+            return [];
+
+        var changedItems = new HashSet<TakeoffItem>();
+        foreach (TakeoffItem item in _takeoffItems)
+        foreach (Measurement measurement in item.Measurements)
+        {
+            if (IsSamePageFolder(measurement.PageFolder, pageFolder))
+            {
+                if (Math.Abs(measurement.ScaleMetersPerPt - scale) > 0.0000001)
+                    changedItems.Add(item);
+                measurement.ScaleMetersPerPt = scale;
+            }
+        }
+
+        return changedItems.ToList();
+    }
+
+    private void OnToolChanged(string tool) => SetTool(tool, forceNewTakeoff: IsRecordTool(tool));
+
+    private void OnViewportTakeoffRenameRequested(Measurement? measurement)
+    {
+        if (!EnsureCurrentJobWritable("rename a takeoff"))
+            return;
+
+        if (measurement == null)
+        {
+            TxtStatus.Text = "Select a measurement before pressing F2.";
+            return;
+        }
+
+        if (FindTakeoffItemForMeasurement(measurement) is not { } item)
+        {
+            TxtStatus.Text = "Selected measurement is not linked to a takeoff.";
+            return;
+        }
+
+        if (FindTakeoffTreeItem(item) is not { } tvi)
+        {
+            TxtStatus.Text = $"Takeoff is not visible in the tree: {item.Name}.";
+            return;
+        }
+
+        tvi.IsSelected = true;
+        tvi.BringIntoView();
+        RenameItem(tvi, item);
+    }
 
     private void OnViewportContextRequested(ViewportContextRequest request)
     {
         if (_currentJob == null || _currentPage == null)
         {
-            TxtStatus.Text = "Open a job and page before using AI Assist.";
+            TxtStatus.Text = "Open a job and page before using the canvas context menu.";
             return;
         }
 
@@ -59,37 +132,112 @@ public partial class MainWindow
         string point = $"PDF {request.PdfX:F0}, {request.PdfY:F0}";
         menu.Items.Add(new MenuItem
         {
-            Header = request.Measurement == null
-                ? $"AI Assist - {_currentPage.Name} @ {point}"
-                : $"Measurement AI - {request.Measurement.MType} @ {point}",
+            Header = ViewportContextMenuTitle(request, point),
             IsEnabled = false,
         });
         menu.Items.Add(new Separator());
 
-        AddSheetOverlayMenuItems(menu);
-        menu.Items.Add(new Separator());
+        if (IsCurrentJobReadOnly)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = "Read-only job: view and copy only",
+                IsEnabled = false,
+            });
+            AddMeasurementClipboardMenuItems(menu, request);
+            if (request.Annotation != null && IsModuleEnabled(ModuleId.Annotations))
+            {
+                menu.Items.Add(new Separator());
+                AddAnnotationEditMenuItems(menu, request);
+            }
+            menu.IsOpen = true;
+            return;
+        }
+
+        if (IsModuleEnabled(ModuleId.SheetOverlay) && request.OverlayHit != ViewportOverlayHitKind.None)
+        {
+            AddSheetOverlayMenuItems(menu);
+            menu.Items.Add(new Separator());
+        }
+
+        if (IsModuleEnabled(ModuleId.SheetOverlay) && AddCurrentSheetOverlayAdjustmentMenuItems(menu))
+            menu.Items.Add(new Separator());
+
+        if (IsModuleEnabled(ModuleId.ThreeD))
+        {
+            AddViewportThreeDMenuItems(menu, request);
+            menu.Items.Add(new Separator());
+        }
 
         AddMeasurementClipboardMenuItems(menu, request);
-        menu.Items.Add(new Separator());
 
-        if (request.Measurement == null)
+        // AI actions are numerous; keep them in one "AI Assist ▸" submenu so the
+        // canvas right-click stays scannable instead of a ~12-item flat dump.
+        if (request.Measurement != null)
         {
-            AddPdfAiMenuItems(menu, request);
-        }
-        else
-        {
-            AddMeasurementEditMenuItems(menu, request);
             menu.Items.Add(new Separator());
-            AddMeasurementAiMenuItems(menu, request);
+            AddMeasurementEditMenuItems(menu, request);
+        }
+        else if (request.Annotation != null && IsModuleEnabled(ModuleId.Annotations))
+        {
+            menu.Items.Add(new Separator());
+            AddAnnotationEditMenuItems(menu, request);
         }
 
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Open Project Context", true, OpenProjectContextMarkdown));
+        if (IsModuleEnabled(ModuleId.Ai))
+        {
+            menu.Items.Add(new Separator());
+            var aiMenu = new MenuItem { Header = "AI Assist" };
+            if (request.Measurement != null)
+                AddMeasurementAiMenuItems(aiMenu, request);
+            else
+                AddPdfAiMenuItems(aiMenu, request);
+            menu.Items.Add(aiMenu);
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MakeMenuItem("Open Project Context", true, OpenProjectContextMarkdown));
+        }
         menu.IsOpen = true;
     }
 
+    private async void OnAiCropNoteSelectionCompleted(ViewportAiCropSelectionRequest selection)
+    {
+        if (!EnsureCurrentJobWritable("create an AI crop note"))
+            return;
+
+        if (!RequireModule(ModuleId.Ai, "AI crop note"))
+            return;
+
+        var request = new ViewportContextRequest(
+            0,
+            0,
+            selection.AnchorPdf.X,
+            selection.AnchorPdf.Y,
+            selection.PageFolder,
+            null);
+        await ReadAiCropIntoNoteAsync(request, selection.CropRect);
+    }
+
+    private string ViewportContextMenuTitle(ViewportContextRequest request, string point) =>
+        request.OverlayHit switch
+        {
+            ViewportOverlayHitKind.SheetLegend => $"Sheet Legend @ {point}",
+            ViewportOverlayHitKind.SheetHeader => $"Scale / Sheet Size Label @ {point}",
+            _ => request.Measurement != null
+                ? $"Measurement{(IsModuleEnabled(ModuleId.Ai) ? " AI" : "")} - {request.Measurement.MType} @ {point}"
+                : request.Annotation != null
+                    ? $"Markup - {MarkupTitle(request.Annotation)} @ {point}"
+                    : $"{(IsModuleEnabled(ModuleId.Ai) ? "AI Assist" : "Sheet")} - {_currentPage?.Name ?? "Sheet"} @ {point}",
+        };
+
     private void SaveViewportObservation(ViewportContextRequest request, string type, string title, string initialText)
     {
+        if (!EnsureCurrentJobWritable("save an AI observation"))
+            return;
+
+        if (!RequireModule(ModuleId.Ai, title))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -131,6 +279,12 @@ public partial class MainWindow
 
     private void SaveAiCropObservation(ViewportContextRequest request)
     {
+        if (!EnsureCurrentJobWritable("save an AI crop"))
+            return;
+
+        if (!RequireModule(ModuleId.Ai, "Save AI crop"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -153,8 +307,235 @@ public partial class MainWindow
         LoadObservationsInbox();
     }
 
+    private async Task ReadAiCropIntoNoteAsync(ViewportContextRequest request, SKRect? selectedCropRect = null)
+    {
+        if (!EnsureCurrentJobWritable("create an AI crop note"))
+            return;
+
+        if (!RequireModule(ModuleId.Ai, "AI crop note"))
+            return;
+
+        if (_currentJob == null || _currentPage == null)
+            return;
+
+        OurPlanCoreJob runJob = _currentJob;
+        PageInfo runPage = _currentPage;
+
+        if (_isRunningAiRequest)
+        {
+            TxtStatus.Text = "AI request is already running.";
+            return;
+        }
+
+        if (!TrySaveAiCrop(request, "quick_crop_note", out string cropPath, out SKRect cropRect, out string error, selectedCropRect))
+        {
+            TxtStatus.Text = $"AI crop note skipped: {error}";
+            MessageBox.Show(
+                $"Cannot save AI crop:\n{error}",
+                "AI Crop Note",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        string measurementSummary = request.Measurement != null
+            ? FormatMeasurementSummary(request.Measurement)
+            : "";
+        string prompt = BuildQuickCropNoteUserPrompt(request, cropRect);
+        string details =
+            "AI crop note requested." + Environment.NewLine + Environment.NewLine +
+            "Context:" + Environment.NewLine +
+            $"- Page: {_currentPage.Name}" + Environment.NewLine +
+            $"- PDF point: {request.PdfX:F1}, {request.PdfY:F1}" + Environment.NewLine +
+            $"- AI crop: {cropPath}" + Environment.NewLine +
+            $"- PDF crop: {FormatPdfRect(cropRect)}" + Environment.NewLine;
+        if (!string.IsNullOrWhiteSpace(measurementSummary))
+            details += $"- Measurement: {measurementSummary}" + Environment.NewLine;
+
+        SmartObservation observation = SmartContextStore.AddObservation(
+            runJob,
+            runPage,
+            "quick_crop_note_request",
+            details);
+        SmartAiRequest aiRequest = SmartContextStore.AddAiRequest(
+            runJob,
+            runPage,
+            observation,
+            "quick_crop_note_request",
+            prompt,
+            cropPath,
+            measurementSummary);
+
+        string apiKey = ReadOpenAiApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            TxtStatus.Text = $"Queued AI crop note {aiRequest.Id}; set OPENAI_API_KEY to run it.";
+            LoadObservationsInbox();
+            return;
+        }
+
+        var runCts = new CancellationTokenSource();
+        _activeAiRequestCts = runCts;
+        _isRunningAiRequest = true;
+        try
+        {
+            aiRequest.Status = "running";
+            SmartContextStore.SaveAiRequest(runJob, aiRequest);
+            TxtStatus.Text = $"Reading crop into note with {OpenAiRequestRunner.QuickCropNoteModel}...";
+            LoadObservationsInbox();
+
+            SmartAiRunResult result;
+            using (ShowBusyOverlay("AI reading crop into note..."))
+            {
+                await WaitForBusyOverlayRenderAsync();
+                result = await OpenAiRequestRunner.RunAsync(
+                    runJob,
+                    aiRequest,
+                    apiKey,
+                    OpenAiRequestRunner.QuickCropNoteModel,
+                    runCts.Token);
+            }
+
+            runCts.Token.ThrowIfCancellationRequested();
+            JobWriteAccess.Demand(runJob.RootPath, "save an AI crop note response");
+
+            if (!result.Success)
+            {
+                SmartContextStore.SaveAiResponse(
+                    runJob,
+                    aiRequest,
+                    "failed",
+                    "",
+                    result.Error,
+                    "openai",
+                    result.Model,
+                    result.ProviderResponseId,
+                    result.RawResponsePath);
+                TxtStatus.Text = $"AI crop note failed: {result.Error}";
+                return;
+            }
+
+            SmartContextStore.SaveAiResponse(
+                runJob,
+                aiRequest,
+                "done",
+                result.OutputText,
+                "",
+                "openai",
+                result.Model,
+                result.ProviderResponseId,
+                result.RawResponsePath);
+
+            string noteText = CleanQuickCropNoteText(result.OutputText);
+            SKPoint noteOrigin = AiCropNoteOrigin(request, cropRect);
+            int lineCount = noteText.Replace("\r\n", "\n").Split('\n').Length;
+            float height = Math.Clamp(120f + lineCount * 17f, 170f, 360f);
+            if (!ReferenceEquals(_currentJob, runJob) || !IsCurrentJobWritable)
+                return;
+            _viewport.AddNoteAnnotationAt(noteOrigin, noteText, "#F9A825", 380f, height);
+            TxtStatus.Text = $"AI crop note added on {runPage.Name}.";
+        }
+        catch (OperationCanceledException) when (runCts.IsCancellationRequested)
+        {
+            if (JobWriteAccess.GetMode(runJob.RootPath) == JobAccessMode.Writable)
+            {
+                SmartContextStore.SaveAiResponse(
+                    runJob,
+                    aiRequest,
+                    "cancelled",
+                    "",
+                    "AI crop note cancelled before completion.",
+                    "openai",
+                    OpenAiRequestRunner.QuickCropNoteModel,
+                    "",
+                    "");
+            }
+            TxtStatus.Text = IsCurrentJobWritable
+                ? $"AI crop note {aiRequest.Id} cancelled."
+                : $"AI crop note {aiRequest.Id} cancelled because the job became read-only.";
+        }
+        catch (JobWriteDeniedException ex)
+        {
+            TxtStatus.Text = $"AI crop note {aiRequest.Id} stopped because write access was lost.";
+            AppLog.Warn(ex, TxtStatus.Text);
+        }
+        catch (Exception ex)
+        {
+            if (JobWriteAccess.GetMode(runJob.RootPath) == JobAccessMode.Writable)
+            {
+                SmartContextStore.SaveAiResponse(
+                    runJob,
+                    aiRequest,
+                    "failed",
+                    "",
+                    ex.Message,
+                    "openai",
+                    OpenAiRequestRunner.QuickCropNoteModel,
+                    "",
+                    "");
+            }
+            TxtStatus.Text = $"AI crop note failed: {ex.Message}";
+        }
+        finally
+        {
+            if (ReferenceEquals(_activeAiRequestCts, runCts))
+                _activeAiRequestCts = null;
+            runCts.Dispose();
+            _isRunningAiRequest = false;
+            LoadObservationsInbox();
+        }
+    }
+
+    private string BuildQuickCropNoteUserPrompt(ViewportContextRequest request, SKRect cropRect)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Create a sheet note from this crop.");
+        sb.AppendLine($"Page: {_currentPage?.Name ?? ""}");
+        sb.AppendLine($"Clicked PDF point: {request.PdfX:F1}, {request.PdfY:F1}");
+        sb.AppendLine($"Crop: {FormatPdfRect(cropRect)}");
+        sb.AppendLine("Keep tables/schedules in table form and keep callout text line breaks.");
+        if (request.Measurement != null)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Clicked measurement:");
+            sb.AppendLine(FormatMeasurementSummary(request.Measurement));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string CleanQuickCropNoteText(string outputText)
+    {
+        string clean = (outputText ?? "").Trim();
+        if (clean.StartsWith("```", StringComparison.Ordinal))
+        {
+            int firstLineEnd = clean.IndexOf('\n');
+            int fenceEnd = clean.LastIndexOf("```", StringComparison.Ordinal);
+            if (firstLineEnd >= 0 && fenceEnd > firstLineEnd)
+                clean = clean[(firstLineEnd + 1)..fenceEnd].Trim();
+        }
+
+        if (clean.Length > 3000)
+            clean = clean[..3000].TrimEnd() + "...";
+
+        return string.IsNullOrWhiteSpace(clean) ? "[unreadable]" : clean;
+    }
+
+    private static SKPoint AiCropNoteOrigin(ViewportContextRequest request, SKRect cropRect)
+    {
+        float x = cropRect.Right > cropRect.Left ? cropRect.Right + 8f : request.PdfX + 8f;
+        float y = cropRect.Top < cropRect.Bottom ? cropRect.Top : request.PdfY + 8f;
+        return new SKPoint(x, y);
+    }
+
     private void SaveAiMarker(ViewportContextRequest request)
     {
+        if (!EnsureCurrentJobWritable("save an AI marker"))
+            return;
+
+        if (!RequireModule(ModuleId.Ai, "Save AI marker"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -361,6 +742,13 @@ public partial class MainWindow
 
     private void RefreshAiMarkersOverlay()
     {
+        if (!IsModuleEnabled(ModuleId.Ai))
+        {
+            _viewport.ClearAiMarkers();
+            _viewport.ClearAiActionDraftPreview();
+            return;
+        }
+
         if (_currentJob == null || _currentPage == null)
         {
             _viewport.ClearAiMarkers();
@@ -381,7 +769,7 @@ public partial class MainWindow
         }
     }
 
-    private static bool MarkerBelongsToPage(SmartAiMarker marker, PageInfo page, OurPlaneCoreJob job)
+    private static bool MarkerBelongsToPage(SmartAiMarker marker, PageInfo page, OurPlanCoreJob job)
     {
         if (string.Equals(marker.Page, page.Name, StringComparison.OrdinalIgnoreCase))
             return true;
@@ -433,11 +821,18 @@ public partial class MainWindow
         string type,
         out string relativePath,
         out SKRect cropRect,
-        out string error)
+        out string error,
+        SKRect? selectedCropRect = null)
     {
         relativePath = "";
         cropRect = SKRect.Empty;
         error = "";
+
+        if (!IsModuleEnabled(ModuleId.Ai))
+        {
+            error = "The AI module is disabled in Settings.";
+            return false;
+        }
 
         if (_currentJob == null || _currentPage == null)
         {
@@ -452,7 +847,9 @@ public partial class MainWindow
             $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{SafeFileNamePart(type)}_{SafeFileNamePart(_currentPage.Name)}_{x}_{y}.png";
         string cropPath = Path.Combine(cropsRoot, fileName);
 
-        bool saved = request.Measurement == null
+        bool saved = selectedCropRect.HasValue
+            ? _viewport.TrySaveCropRect(selectedCropRect.Value, cropPath, out cropRect, out error)
+            : request.Measurement == null
             ? _viewport.TrySaveContextCrop(request.PdfX, request.PdfY, 240f, cropPath, out cropRect, out error)
             : _viewport.TrySaveMeasurementCrop(request.Measurement, 96f, cropPath, out cropRect, out error);
 
@@ -513,6 +910,12 @@ public partial class MainWindow
 
     private void SuggestTakeoffItemFromContext(ViewportContextRequest request)
     {
+        if (!EnsureCurrentJobWritable("create a takeoff suggestion"))
+            return;
+
+        if (!RequireModule(ModuleId.Ai, "Suggest takeoff item"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -555,6 +958,9 @@ public partial class MainWindow
 
     private void OpenProjectContextMarkdown()
     {
+        if (!RequireModule(ModuleId.Ai, "Open AI project context"))
+            return;
+
         if (_currentJob == null)
             return;
 

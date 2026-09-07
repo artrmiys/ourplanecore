@@ -1,0 +1,230 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using OurPlanCore.Controls;
+
+namespace OurPlanCore;
+
+public partial class MainWindow
+{
+    private BeamAnnotationConfig _beamAnnotationConfig = BeamAnnotationConfig.BuildDefault();
+    private CheckBox? _beamAnnotationKeepLineBox;
+    private ColorSwatchPicker? _beamAnnotationColorPicker;
+    private TextBox? _beamDimensionOffsetBox;
+    private TextBlock? _beamAnnotationStatus;
+    private bool _beamAnnotationBinding;
+
+    private void AppendBeamAnnotationSettings(StackPanel root)
+    {
+        root.Children.Add(Header("Beam annotation line"));
+        root.Children.Add(new TextBlock
+        {
+            Text = "The Beam tool always keeps its blue dimension. This optional companion is a simple annotation line along the same two measured points.",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12,
+            Margin = new Thickness(0, 0, 0, 6),
+            Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
+        });
+
+        _beamAnnotationKeepLineBox = new CheckBox
+        {
+            Content = "Add annotation line for every new Beam",
+            Margin = new Thickness(0, 0, 0, 6),
+            FontSize = 12,
+        };
+        _beamAnnotationKeepLineBox.Checked += (_, _) => SetBeamAnnotationColorPickerEnabled(true);
+        _beamAnnotationKeepLineBox.Unchecked += (_, _) => SetBeamAnnotationColorPickerEnabled(false);
+        root.Children.Add(_beamAnnotationKeepLineBox);
+
+        var colorRow = HBar();
+        colorRow.Children.Add(new TextBlock
+        {
+            Text = "Line color:",
+            Width = 130,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 12,
+        });
+        _beamAnnotationColorPicker = new ColorSwatchPicker(BeamAnnotationConfig.BuildDefault().LineColor);
+        _beamAnnotationColorPicker.SelectedColorChanged += _ => RefreshBeamAnnotationColorStatus();
+        colorRow.Children.Add(_beamAnnotationColorPicker);
+        root.Children.Add(colorRow);
+
+        var offsetRow = HBar();
+        offsetRow.Children.Add(new TextBlock
+        {
+            Text = "Dimension offset (px):", Width = 150, VerticalAlignment = VerticalAlignment.Center,
+        });
+        _beamDimensionOffsetBox = new TextBox
+        {
+            Width = 70,
+            ToolTip = "Offset the dimension opposite the Count when keeping a Beam line. 0 restores overlapping lines. Range: 0-200 pixels at creation zoom.",
+        };
+        offsetRow.Children.Add(_beamDimensionOffsetBox);
+        root.Children.Add(offsetRow);
+
+        _beamAnnotationStatus = StatusLine();
+        root.Children.Add(_beamAnnotationStatus);
+
+        var actions = HBar();
+        actions.Children.Add(MgrButton("Apply now", (_, _) => ApplyBeamAnnotationDraft(), primary: true));
+        actions.Children.Add(MgrButton("Reset", (_, _) =>
+        {
+            SetBeamAnnotationEditor(BeamAnnotationConfig.BuildDefault());
+            SetBeamAnnotationStatus("Built-in default loaded: off, red. Click Apply or save it.");
+        }));
+        actions.Children.Add(MgrButton("Save global default", (_, _) => SaveGlobalBeamAnnotationDraft()));
+        actions.Children.Add(MgrButton("Save as this job", (_, _) => SaveJobBeamAnnotationDraft()));
+        actions.Children.Add(MgrButton("Clear job override", (_, _) => ClearJobBeamAnnotationDraft()));
+        root.Children.Add(actions);
+
+        BindBeamAnnotationSettings();
+    }
+
+    private void BindBeamAnnotationSettings()
+    {
+        if (_beamAnnotationKeepLineBox == null || _beamAnnotationColorPicker == null)
+            return;
+
+        SetBeamAnnotationEditor(_beamAnnotationConfig);
+        string source = _currentJob != null &&
+                        SettingsPresetStore.LoadJobBeamAnnotationOverride(_currentJob) != null
+            ? "job override"
+            : SettingsPresetStore.LoadGlobalBeamAnnotation() != null
+                ? "global default"
+                : "built-in default";
+        SetBeamAnnotationStatus($"Effective source: {source}. Blue Beam dimension remains enabled.");
+    }
+
+    private void SetBeamAnnotationEditor(BeamAnnotationConfig config)
+    {
+        if (_beamAnnotationKeepLineBox == null || _beamAnnotationColorPicker == null)
+            return;
+
+        _beamAnnotationBinding = true;
+        try
+        {
+            _beamAnnotationKeepLineBox.IsChecked = config.KeepLineAnnotation;
+            _beamAnnotationColorPicker.SetSelectedColor(config.LineColor);
+            _beamAnnotationColorPicker.IsEnabled = config.KeepLineAnnotation;
+            if (_beamDimensionOffsetBox != null)
+                _beamDimensionOffsetBox.Text = config.DimensionOffsetPx.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        finally
+        {
+            _beamAnnotationBinding = false;
+        }
+    }
+
+    private bool TryReadBeamAnnotationEditor(out BeamAnnotationConfig config)
+    {
+        config = BeamAnnotationConfig.BuildDefault();
+        if (_beamAnnotationBinding ||
+            _beamAnnotationKeepLineBox == null ||
+            _beamAnnotationColorPicker == null)
+        {
+            return false;
+        }
+
+        if (!double.TryParse(_beamDimensionOffsetBox?.Text.Replace(',', '.'),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+                out double offset) || !double.IsFinite(offset) || offset < 0 || offset > 200)
+        {
+            SetBeamAnnotationStatus("Dimension offset must be between 0 and 200 px.");
+            return false;
+        }
+
+        config = new BeamAnnotationConfig
+        {
+            KeepLineAnnotation = _beamAnnotationKeepLineBox.IsChecked == true,
+            LineColor = _beamAnnotationColorPicker.SelectedColor,
+            DimensionOffsetPx = offset,
+        };
+        return true;
+    }
+
+    private void ApplyBeamAnnotationDraft()
+    {
+        if (!TryReadBeamAnnotationEditor(out BeamAnnotationConfig config))
+            return;
+
+        _beamAnnotationConfig = config.Clone();
+        BeamAnnotationConfigProvider.Install(_beamAnnotationConfig);
+        SetBeamAnnotationStatus(
+            $"Applied now: line {(_beamAnnotationConfig.KeepLineAnnotation ? "on" : "off")}, {AnnotationColorPalette.DisplayName(_beamAnnotationConfig.LineColor)}.");
+        TxtStatus.Text = "Beam annotation default applied for this app session.";
+    }
+
+    private void SaveGlobalBeamAnnotationDraft()
+    {
+        if (!TryReadBeamAnnotationEditor(out BeamAnnotationConfig config))
+            return;
+
+        SettingsPresetStore.SaveGlobalBeamAnnotation(config);
+        _beamAnnotationConfig = config.Clone();
+        BeamAnnotationConfigProvider.Install(_beamAnnotationConfig);
+        SetBeamAnnotationStatus("Saved and applied as the global Beam default.");
+        TxtStatus.Text = "Beam annotation global default saved.";
+    }
+
+    private void SaveJobBeamAnnotationDraft()
+    {
+        if (_currentJob == null)
+        {
+            SetBeamAnnotationStatus("Open a job before saving a job override.");
+            return;
+        }
+        if (!EnsureCurrentJobWritable("save the Beam annotation job override") ||
+            !TryReadBeamAnnotationEditor(out BeamAnnotationConfig config))
+        {
+            return;
+        }
+
+        SettingsPresetStore.SaveJobBeamAnnotationOverride(_currentJob, config);
+        _beamAnnotationConfig = config.Clone();
+        BeamAnnotationConfigProvider.Install(_beamAnnotationConfig);
+        SetBeamAnnotationStatus("Saved and applied as this job's Beam override.");
+        TxtStatus.Text = "Beam annotation job override saved.";
+    }
+
+    private void ClearJobBeamAnnotationDraft()
+    {
+        if (_currentJob == null)
+        {
+            SetBeamAnnotationStatus("Open a job before clearing a job override.");
+            return;
+        }
+        if (!EnsureCurrentJobWritable("clear the Beam annotation job override"))
+            return;
+
+        if (!SettingsPresetStore.ClearJobBeamAnnotationOverride(_currentJob))
+        {
+            SetBeamAnnotationStatus("The job override could not be cleared.");
+            return;
+        }
+
+        _beamAnnotationConfig = SettingsPresetStore.ResolveBeamAnnotation(_currentJob).Clone();
+        BeamAnnotationConfigProvider.Install(_beamAnnotationConfig);
+        BindBeamAnnotationSettings();
+        TxtStatus.Text = "Beam annotation job override cleared.";
+    }
+
+    private void SetBeamAnnotationStatus(string text)
+    {
+        if (_beamAnnotationStatus != null)
+            _beamAnnotationStatus.Text = text;
+    }
+
+    private void SetBeamAnnotationColorPickerEnabled(bool enabled)
+    {
+        if (!_beamAnnotationBinding && _beamAnnotationColorPicker != null)
+            _beamAnnotationColorPicker.IsEnabled = enabled;
+    }
+
+    private void RefreshBeamAnnotationColorStatus()
+    {
+        if (_beamAnnotationBinding || _beamAnnotationColorPicker == null)
+            return;
+
+        SetBeamAnnotationStatus($"Selected line color: {AnnotationColorPalette.DisplayName(_beamAnnotationColorPicker.SelectedColor)}.");
+    }
+}
