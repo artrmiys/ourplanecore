@@ -291,7 +291,7 @@ public partial class MainWindow
             return false;
         }
         if (IsCurrentJobWritable)
-            return true;
+            return WaitForAutomaticPackageCheckpointBeforeEdit(operation);
 
         string message = _currentJob == null
             ? $"Open a job before you {operation}."

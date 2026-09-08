@@ -7,7 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using OurPlanCore;
 
-internal static class TreeSortUiHarness
+internal static partial class TreeSortUiHarness
 {
     public static int Run(string[] args)
     {
@@ -26,7 +26,7 @@ internal static class TreeSortUiHarness
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        if (!thread.Join(TimeSpan.FromMinutes(2))) Environment.Exit(2);
+        if (!thread.Join(TimeSpan.FromMinutes(4))) Environment.Exit(2);
         return result;
     }
 
@@ -40,6 +40,7 @@ internal static class TreeSortUiHarness
         app.MainWindow = main;
         int result = 2;
         var checks = new List<object>();
+        using var modalWatch = new ModalWatch();
         main.Dispatcher.BeginInvoke(async () =>
         {
             try
@@ -78,6 +79,8 @@ internal static class TreeSortUiHarness
                 checks.Add(new { Operation = "Move back through UI command", Milliseconds = timer.ElapsedMilliseconds });
                 Check(before.SequenceEqual(Signature(main)), "Move preserved measurement IDs and page links");
                 Check(Directory.Exists(source), "Original item restored");
+                await VerifyAutosaveCollisions(main, checks, modalWatch);
+                Check(modalWatch.Titles.Count == 0, "No modal dialogs during tree commands: " + string.Join(", ", modalWatch.Titles));
                 checks.Add(new { Takeoffs = Field<List<TakeoffItem>>(main, "_takeoffItems").Count, Measurements = before.Length });
                 result = 0;
             }
@@ -111,7 +114,16 @@ internal static class TreeSortUiHarness
     private static string[] Signature(MainWindow main) => Field<List<TakeoffItem>>(main, "_takeoffItems")
         .SelectMany(item => item.Measurements).Select(m => JsonSerializer.Serialize(m.Snapshot())).OrderBy(s => s, StringComparer.Ordinal).ToArray();
     private static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
-    private static object? Call(object target, string name, params object?[] args) => target.GetType()
-        .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
+    private static object? Call(object target, string name, params object?[] args)
+    {
+        MethodInfo[] matches = target.GetType().GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
+            .Where(method => method.Name == name && method.GetParameters().Length == args.Length)
+            .Where(method => method.GetParameters().Select((parameter, index) => args[index] == null
+                ? !parameter.ParameterType.IsValueType || Nullable.GetUnderlyingType(parameter.ParameterType) != null
+                : parameter.ParameterType.IsInstanceOfType(args[index])).All(compatible => compatible))
+            .ToArray();
+        Check(matches.Length == 1, $"Expected one compatible overload for {name}({args.Length} arguments), found {matches.Length}");
+        return matches[0].Invoke(target, args);
+    }
     private static void Check(bool condition, string label) { if (!condition) throw new InvalidOperationException(label); }
 }

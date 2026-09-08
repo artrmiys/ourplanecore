@@ -12,9 +12,9 @@
     <Product>OurPlanCore</Product>
     <Company>OurPlanCore</Company>
     <Description>OurPlanCore construction takeoff application</Description>
-    <Version>2.2.8</Version>
-    <AssemblyVersion>2.2.8.0</AssemblyVersion>
-    <FileVersion>2.2.8.0</FileVersion>
+    <Version>2.2.9</Version>
+    <AssemblyVersion>2.2.9.0</AssemblyVersion>
+    <FileVersion>2.2.9.0</FileVersion>
     <AssemblyName>ourplancore</AssemblyName>
     <ApplicationIcon>Assets\ourplancore.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>

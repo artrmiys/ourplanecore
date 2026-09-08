@@ -141,6 +141,8 @@ public partial class MainWindow
     {
         if (!EnsureCurrentJobWritable("rename a page or folder"))
             return;
+        if (_currentJob is not { } originJob)
+            return;
 
         if (IsRootPagesNode(item)) return;
         string? path = GetPagesNodePath(item);
@@ -149,6 +151,9 @@ public partial class MainWindow
         string currentName = OurPlanCoreJobStore.DisplayName(path);
         string? name = ShowInputDialog("New name:", currentName, item.Tag is PageInfo ? "Rename Page" : "Rename Folder");
         if (string.IsNullOrWhiteSpace(name) || name == currentName) return;
+        if (!EnsureExpectedJobWritable(originJob, "rename a page or folder") ||
+            !EnsureCurrentJobWritable("rename a page or folder"))
+            return;
 
         try
         {

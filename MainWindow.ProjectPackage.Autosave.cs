@@ -335,6 +335,54 @@ public partial class MainWindow
         session.AvailableRecoverySessions = [];
     }
 
+    private bool WaitForAutomaticPackageCheckpointBeforeEdit(string operation)
+    {
+        // A nested dispatcher callback must not start another edit while the
+        // original command is waiting for the package writer to release its gate.
+        if (_packageAutosaveWaitActive)
+            return false;
+        if (_packageAutosaveTask is not { IsCompleted: false })
+            return true;
+
+        OurPlanCoreJob? expectedJob = _currentJob;
+        OurPlanPackageSession? expectedSession = _currentPackageSession;
+        if (expectedJob == null || expectedSession == null)
+            return false;
+
+        TxtStatus.Text = $"Finishing automatic save before {operation}...";
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            SupersedeAutomaticPackageCheckpoint();
+        }
+        finally
+        {
+            // Supersede cancels the timer, including retries scheduled by the
+            // save itself. Retain pending recovery even if this edit is a no-op.
+            if (ReferenceEquals(expectedSession, _currentPackageSession) &&
+                expectedSession.HasUnpackagedChanges)
+            {
+                QueueAutomaticPackageCheckpoint(expectedSession);
+            }
+        }
+
+        // Waiting pumps the dispatcher. A close, project switch, lease loss or
+        // failed data read may have invalidated the command's original target.
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished ||
+            _closingPackageCheckpoint != null ||
+            !ReferenceEquals(expectedSession, _currentPackageSession) ||
+            !IsExpectedJobWritable(expectedJob) ||
+            DataFileReader.IsProtected(expectedJob.RootPath) ||
+            JobOperationJournal.IsBusyForCaller(expectedJob.RootPath))
+        {
+            PostStatusWarning($"Could not {operation}: project access changed while saving.");
+            return false;
+        }
+
+        AppLog.Info($"Automatically resumed '{operation}' after package save; waited={watch.ElapsedMilliseconds}ms.");
+        return true;
+    }
+
     private void SupersedeAutomaticPackageCheckpoint()
     {
         Interlocked.Increment(ref _packageAutosaveScheduleEpoch);

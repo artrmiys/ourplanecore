@@ -13,9 +13,14 @@ public partial class MainWindow
     {
         if (!EnsureCurrentJobWritable("rename a takeoff item"))
             return;
+        if (_currentJob is not { } originJob)
+            return;
 
         string? name = ShowInputDialog("New name:", item.Name, "Rename Item");
         if (name == null || name == item.Name) return;
+        if (!EnsureExpectedJobWritable(originJob, "rename a takeoff item") ||
+            !EnsureCurrentJobWritable("rename a takeoff item"))
+            return;
         try
         {
             if (!string.IsNullOrWhiteSpace(item.FolderPath) && Directory.Exists(item.FolderPath))
@@ -95,7 +100,7 @@ public partial class MainWindow
         if (!EnsureCurrentJobWritable("edit takeoff folder properties"))
             return;
 
-        if (_currentJob == null || !Directory.Exists(folder.FolderPath))
+        if (_currentJob is not { } originJob || !Directory.Exists(folder.FolderPath))
             return;
 
         TakeoffFolderProperties properties = TakeoffFolderPropertiesStore.Load(folder.FolderPath);
@@ -107,6 +112,9 @@ public partial class MainWindow
             Owner = this,
         };
         if (dialog.ShowDialog() != true)
+            return;
+        if (!EnsureExpectedJobWritable(originJob, "edit takeoff folder properties") ||
+            !EnsureCurrentJobWritable("edit takeoff folder properties"))
             return;
 
         try
@@ -167,9 +175,14 @@ public partial class MainWindow
     {
         if (!EnsureCurrentJobWritable("rename a takeoff folder"))
             return;
+        if (_currentJob is not { } originJob)
+            return;
 
         string? name = ShowInputDialog("New name:", "Rename Folder", folder.Name);
         if (name == null || name == folder.Name) return;
+        if (!EnsureExpectedJobWritable(originJob, "rename a takeoff folder") ||
+            !EnsureCurrentJobWritable("rename a takeoff folder"))
+            return;
 
         try
         {
